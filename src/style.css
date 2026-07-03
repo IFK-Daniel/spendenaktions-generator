@@ -505,6 +505,10 @@ button#email-send-btn:disabled {
     gap: 32px;
   }
 
+  .hero-main {
+    flex-basis: auto;
+  }
+
   .paypal-hint {
     flex-basis: auto;
     width: 100%;

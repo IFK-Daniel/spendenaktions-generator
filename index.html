@@ -97,7 +97,20 @@
           </div>
 
           <div class="result-group">
-            <h3 class="result-group-title">GiroCode</h3>
+            <h3 class="result-group-title">
+              GiroCode
+              <button
+                type="button"
+                class="info-toggle"
+                id="girocode-info-btn"
+                aria-expanded="false"
+                aria-controls="girocode-info"
+              ><span class="info-toggle-icon">ⓘ</span> Was ist ein GiroCode?</button>
+            </h3>
+            <p class="info-popover" id="girocode-info" hidden>
+              Ein GiroCode ist ein QR-Code für die Banking-App. Beim Scannen werden Empfänger,
+              IBAN und Verwendungszweck automatisch vorausgefüllt.
+            </p>
             <div class="result-group-grid">
               <div class="result-block">
                 <h4>Schwarz</h4>
@@ -121,7 +134,7 @@
             <div class="email-block-inner">
               <h2>QR-Codes per E-Mail erhalten</h2>
               <label class="field-label" for="email-input">
-                E-Mail-Adresse (optional)
+                E-Mail-Adresse für den Versand
               </label>
               <input
                 type="email"

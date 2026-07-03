@@ -300,3 +300,14 @@ async function handleSendEmail() {
 
 generateBtn.addEventListener("click", handleGenerate);
 emailSendBtn.addEventListener("click", handleSendEmail);
+
+const girocodeInfoBtn = document.getElementById("girocode-info-btn");
+const girocodeInfoPopover = document.getElementById("girocode-info");
+
+if (girocodeInfoBtn && girocodeInfoPopover) {
+  girocodeInfoBtn.addEventListener("click", () => {
+    const isHidden = girocodeInfoPopover.hidden;
+    girocodeInfoPopover.hidden = !isHidden;
+    girocodeInfoBtn.setAttribute("aria-expanded", String(isHidden));
+  });
+}

@@ -74,6 +74,12 @@ body {
   letter-spacing: 0.2px;
 }
 
+.header-account-value a[x-apple-data-detectors],
+.contact-item a[x-apple-data-detectors] {
+  color: inherit !important;
+  text-decoration: inherit !important;
+}
+
 .back-link {
   display: inline-block;
   margin-top: 8px;
@@ -300,6 +306,8 @@ button#generate-btn:hover {
   color: var(--text-muted);
   background: none;
   border: none;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
   cursor: pointer;
 }
 
@@ -310,8 +318,8 @@ button#generate-btn:hover {
 .info-toggle:hover,
 .info-toggle:focus-visible {
   color: var(--text);
+  text-decoration: none;
   outline: none;
-  text-decoration: underline;
 }
 
 .info-popover {
@@ -494,7 +502,7 @@ button#email-send-btn:disabled {
 @media (max-width: 800px) {
   .hero {
     flex-direction: column;
-    gap: 24px;
+    gap: 12px;
   }
 
   .paypal-hint {
@@ -528,6 +536,7 @@ button#email-send-btn:disabled {
 
   .back-link {
     order: -1;
+    align-self: flex-end;
     margin-top: 0;
   }
 

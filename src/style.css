@@ -502,7 +502,7 @@ button#email-send-btn:disabled {
 @media (max-width: 800px) {
   .hero {
     flex-direction: column;
-    gap: 12px;
+    gap: 32px;
   }
 
   .paypal-hint {

@@ -19,6 +19,15 @@ const girocodeDownloadSchwarz = document.getElementById("girocode-download-schwa
 const girocodeCanvasGruen = document.getElementById("girocode-qr-gruen");
 const girocodeDownloadGruen = document.getElementById("girocode-download-gruen");
 
+const emailInput = document.getElementById("email-input");
+const infoCheckbox = document.getElementById("info-checkbox");
+const emailSendBtn = document.getElementById("email-send-btn");
+const emailStatus = document.getElementById("email-status");
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+let generatedState = null;
+
 const GIROCODE_DATA = {
   empfaenger: "Stiftung It s for Kids",
   iban: "DE48300800000228228800",
@@ -86,6 +95,18 @@ function showError(message) {
 function clearError() {
   errorMessage.hidden = true;
   errorMessage.textContent = "";
+}
+
+function showEmailStatus(message, type) {
+  emailStatus.textContent = message;
+  emailStatus.className = `email-status ${type}`;
+  emailStatus.hidden = false;
+}
+
+function clearEmailStatus() {
+  emailStatus.hidden = true;
+  emailStatus.textContent = "";
+  emailStatus.className = "email-status";
 }
 
 function loadImage(src) {
@@ -201,10 +222,81 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_GRUEN
     );
+    generatedState = {
+      campaignTitle: campaignTitle || "Kampagne",
+      paypalLink,
+      pngs: {
+        paypalSchwarz: paypalCanvasSchwarz.toDataURL("image/png"),
+        paypalGruen: paypalCanvasGruen.toDataURL("image/png"),
+        girocodeSchwarz: girocodeCanvasSchwarz.toDataURL("image/png"),
+        girocodeGruen: girocodeCanvasGruen.toDataURL("image/png"),
+      },
+      filenames: {
+        paypalSchwarz: `${slug}-paypal-schwarz.png`,
+        paypalGruen: `${slug}-paypal-gruen.png`,
+        girocodeSchwarz: `${slug}-girocode-schwarz.png`,
+        girocodeGruen: `${slug}-girocode-gruen.png`,
+      },
+    };
+    clearEmailStatus();
+
     results.hidden = false;
   } catch (err) {
+    generatedState = null;
     showError("Beim Erstellen der QR-Codes ist ein Fehler aufgetreten.");
   }
 }
 
+async function handleSendEmail() {
+  clearEmailStatus();
+
+  if (!generatedState) {
+    showEmailStatus("Bitte zuerst QR-Codes erstellen.", "error");
+    return;
+  }
+
+  const email = emailInput.value.trim();
+  if (!email || !EMAIL_REGEX.test(email)) {
+    showEmailStatus("Bitte eine gültige E-Mail-Adresse eingeben.", "error");
+    return;
+  }
+
+  const { campaignTitle, paypalLink, pngs, filenames } = generatedState;
+
+  emailSendBtn.disabled = true;
+  showEmailStatus("QR-Codes werden gesendet …", "success");
+
+  try {
+    const response = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        campaignTitle,
+        paypalLink,
+        infoOptIn: infoCheckbox.checked,
+        attachments: [
+          { filename: filenames.paypalSchwarz, content: pngs.paypalSchwarz },
+          { filename: filenames.paypalGruen, content: pngs.paypalGruen },
+          { filename: filenames.girocodeSchwarz, content: pngs.girocodeSchwarz },
+          { filename: filenames.girocodeGruen, content: pngs.girocodeGruen },
+        ],
+      }),
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.ok) {
+      showEmailStatus("QR-Codes wurden per E-Mail versendet.", "success");
+    } else {
+      showEmailStatus(result.error || "Versand fehlgeschlagen.", "error");
+    }
+  } catch (err) {
+    showEmailStatus("Versand fehlgeschlagen. Bitte später erneut versuchen.", "error");
+  } finally {
+    emailSendBtn.disabled = false;
+  }
+}
+
 generateBtn.addEventListener("click", handleGenerate);
+emailSendBtn.addEventListener("click", handleSendEmail);

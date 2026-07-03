@@ -75,11 +75,32 @@
               PNG herunterladen
             </a>
           </div>
+
+          <div class="email-block" id="email-block">
+            <h2>QR-Codes per E-Mail erhalten</h2>
+            <label class="field-label" for="email-input">
+              E-Mail-Adresse (optional)
+            </label>
+            <input
+              type="email"
+              id="email-input"
+              placeholder="z. B. name@beispiel.de"
+            />
+
+            <label class="checkbox-label" for="info-checkbox">
+              <input type="checkbox" id="info-checkbox" />
+              It's for Kids über meine Aktion informieren
+            </label>
+
+            <div class="email-status" id="email-status" hidden></div>
+
+            <button id="email-send-btn" type="button">QR-Codes per E-Mail senden</button>
+          </div>
         </section>
       </main>
 
       <footer class="footer">
-        <p>Alles läuft lokal im Browser. Keine Speicherung, keine Datenbank, kein Login.</p>
+        <p>Die QR-Codes werden lokal im Browser erzeugt. Nur wenn Sie den E-Mail-Versand nutzen, werden Ihre E-Mail-Adresse und die erzeugten Dateien einmalig zum Versand übermittelt. Es erfolgt keine Speicherung in dieser Anwendung.</p>
       </footer>
     </div>
 

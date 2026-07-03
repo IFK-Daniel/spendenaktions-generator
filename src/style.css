@@ -195,6 +195,84 @@ button#generate-btn:hover {
   color: var(--text-muted);
 }
 
+.email-block {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 24px;
+}
+
+#email-input {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#email-input:focus {
+  outline: none;
+  border-color: var(--ifk-blue);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.email-status {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.email-status.success {
+  background: #eafaf1;
+  color: #1e7e42;
+}
+
+.email-status.error {
+  background: #fdecea;
+  color: var(--error);
+}
+
+button#email-send-btn {
+  margin-top: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--ifk-blue);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+button#email-send-btn:hover {
+  background: var(--ifk-blue-dark);
+}
+
+button#email-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .footer {
   margin-top: 32px;
   text-align: center;

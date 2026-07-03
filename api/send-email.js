@@ -1,0 +1,85 @@
+import nodemailer from "nodemailer";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function stripDataUrlPrefix(value) {
+  const commaIndex = value.indexOf(",");
+  if (value.startsWith("data:") && commaIndex !== -1) {
+    return value.slice(commaIndex + 1);
+  }
+  return value;
+}
+
+function buildTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const { email, campaignTitle, paypalLink, infoOptIn, attachments } = req.body || {};
+
+  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email)) {
+    res.status(400).json({ ok: false, error: "Ungültige E-Mail-Adresse." });
+    return;
+  }
+
+  if (!Array.isArray(attachments) || attachments.length !== 4) {
+    res.status(400).json({ ok: false, error: "Anhänge fehlen oder unvollständig." });
+    return;
+  }
+
+  let mailAttachments;
+  try {
+    mailAttachments = attachments.map((att) => ({
+      filename: att.filename,
+      content: Buffer.from(stripDataUrlPrefix(att.content), "base64"),
+    }));
+  } catch {
+    res.status(400).json({ ok: false, error: "Anhänge konnten nicht verarbeitet werden." });
+    return;
+  }
+
+  const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER;
+  const transporter = buildTransporter();
+  const title = typeof campaignTitle === "string" && campaignTitle.trim() ? campaignTitle.trim() : "Kampagne";
+
+  try {
+    await transporter.sendMail({
+      from: fromAddress,
+      to: email,
+      subject: `Deine QR-Codes – ${title}`,
+      text: "Im Anhang findest du die erzeugten QR-Codes (PayPal Schwarz, PayPal IFK-Grün, GiroCode Schwarz, GiroCode IFK-Grün).",
+      attachments: mailAttachments,
+    });
+
+    if (infoOptIn === true && process.env.INFO_RECIPIENT) {
+      await transporter.sendMail({
+        from: fromAddress,
+        to: process.env.INFO_RECIPIENT,
+        subject: `Neue Spendenaktion: ${title}`,
+        text: [
+          `Kampagnenname: ${title}`,
+          `PayPal-Link: ${typeof paypalLink === "string" ? paypalLink : "-"}`,
+          `Empfänger-E-Mail: ${email}`,
+        ].join("\n"),
+      });
+    }
+
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[send-email] Versand fehlgeschlagen:", err instanceof Error ? err.name : "unknown error");
+    res.status(500).json({ ok: false, error: "Versand fehlgeschlagen. Bitte später erneut versuchen." });
+  }
+}

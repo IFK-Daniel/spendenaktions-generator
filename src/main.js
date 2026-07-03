@@ -152,14 +152,14 @@ async function handleGenerate() {
 
   const rawText = input.value.trim();
   if (!rawText) {
-    showError("Bitte einen PayPal-Link oder Share-Text einfügen.");
+    showError("Bitte füge einen PayPal-Link oder Share-Text ein.");
     return;
   }
 
   const paypalLink = extractPaypalLink(rawText);
   if (!paypalLink) {
     showError(
-      "Kein gültiger PayPal-Link gefunden. Bitte einen Link wie z. B. https://www.paypal.com/donate/... einfügen."
+      "Kein gültiger PayPal-Link gefunden. Bitte füge einen Link wie z. B. https://www.paypal.com/donate/... ein."
     );
     return;
   }
@@ -172,7 +172,7 @@ async function handleGenerate() {
     manualTitleField.hidden = false;
     const manualTitle = manualTitleInput.value.trim();
     if (!manualTitle) {
-      showError("Bitte einen Kampagnennamen / Verwendungszweck angeben.");
+      showError("Bitte gib einen Kampagnennamen / Verwendungszweck an.");
       return;
     }
   } else {
@@ -251,13 +251,13 @@ async function handleSendEmail() {
   clearEmailStatus();
 
   if (!generatedState) {
-    showEmailStatus("Bitte zuerst QR-Codes erstellen.", "error");
+    showEmailStatus("Bitte erstelle zuerst QR-Codes.", "error");
     return;
   }
 
   const email = emailInput.value.trim();
   if (!email || !EMAIL_REGEX.test(email)) {
-    showEmailStatus("Bitte eine gültige E-Mail-Adresse eingeben.", "error");
+    showEmailStatus("Bitte gib eine gültige E-Mail-Adresse ein.", "error");
     return;
   }
 
@@ -292,7 +292,7 @@ async function handleSendEmail() {
       showEmailStatus(result.error || "Versand fehlgeschlagen.", "error");
     }
   } catch (err) {
-    showEmailStatus("Versand fehlgeschlagen. Bitte später erneut versuchen.", "error");
+    showEmailStatus("Versand fehlgeschlagen. Bitte versuche es später erneut.", "error");
   } finally {
     emailSendBtn.disabled = false;
   }

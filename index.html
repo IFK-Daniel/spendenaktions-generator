@@ -3,18 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IFK Spendenaktions-Generator</title>
+    <title>Materialien für Deine Spendenaktion zugunsten von It's for Kids</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div class="page">
       <header class="header">
-        <div class="logo-placeholder" aria-hidden="true">IFK</div>
-        <div class="header-text">
-          <h1>Spendenaktions-Generator</h1>
-          <p>Stiftung It's for Kids</p>
+        <div class="header-brand">
+          <a href="https://www.its-for-kids.de" target="_blank" rel="noopener noreferrer">
+            <img class="header-logo" src="/ifk-logo-full.png" alt="Stiftung It's for Kids" />
+          </a>
+          <div class="header-account">
+            <span class="header-account-label">Spendenkonto IBAN:</span>
+            <span class="header-account-value">DE48 3008 0000 0228 2288 00</span>
+          </div>
         </div>
+        <a class="back-link" href="https://www.its-for-kids.de" target="_blank" rel="noopener noreferrer">
+          ← Zur Stiftung It's for Kids
+        </a>
       </header>
+
+      <div class="hero">
+        <div class="hero-main">
+          <h1>Materialien für Deine Spendenaktion zugunsten von It's for Kids</h1>
+          <p class="intro">
+            Erstelle in wenigen Sekunden passende QR-Codes und Materialien für Deine Spendenaktion.
+          </p>
+
+          <p class="contact-line">
+            Fragen? Unser Team hilft Dir gerne weiter.<br />
+            <span class="contact-item">Telefon: 02103 986670</span>
+            <span class="contact-item"><a href="mailto:info@its-for-kids.de">info@its-for-kids.de</a></span>
+          </p>
+        </div>
+
+        <aside class="paypal-hint">
+          <h2>So kommst Du an Deinen PayPal-Link</h2>
+          <p>
+            Die ausführliche Schritt-für-Schritt-Anleitung ergänzen wir hier noch. Wenn Du bereits
+            einen PayPal-Teilen-Link hast, kannst Du ihn direkt unten einfügen.
+          </p>
+          <p>Für intern erstellte PayPal-Links kannst Du den Link ebenfalls direkt verwenden.</p>
+        </aside>
+      </div>
 
       <main class="card">
         <label class="field-label" for="paypal-input">
@@ -44,63 +75,75 @@
         <section class="results" id="results" hidden>
           <h2 class="campaign-title" id="campaign-title"></h2>
 
-          <div class="result-block">
-            <h2>PayPal QR Schwarz</h2>
-            <canvas id="paypal-qr-schwarz"></canvas>
-            <a id="paypal-download-schwarz" class="download-link" download="paypal-qr-code-schwarz.png">
-              PNG herunterladen
-            </a>
+          <div class="result-group">
+            <h3 class="result-group-title">PayPal QR-Code</h3>
+            <div class="result-group-grid">
+              <div class="result-block">
+                <h4>Schwarz</h4>
+                <canvas id="paypal-qr-schwarz"></canvas>
+                <a id="paypal-download-schwarz" class="download-link" download="paypal-qr-code-schwarz.png">
+                  PNG herunterladen
+                </a>
+              </div>
+
+              <div class="result-block">
+                <h4>IFK-Grün</h4>
+                <canvas id="paypal-qr-gruen"></canvas>
+                <a id="paypal-download-gruen" class="download-link" download="paypal-qr-code-gruen.png">
+                  PNG herunterladen
+                </a>
+              </div>
+            </div>
           </div>
 
-          <div class="result-block">
-            <h2>PayPal QR IFK-Grün</h2>
-            <canvas id="paypal-qr-gruen"></canvas>
-            <a id="paypal-download-gruen" class="download-link" download="paypal-qr-code-gruen.png">
-              PNG herunterladen
-            </a>
-          </div>
+          <div class="result-group">
+            <h3 class="result-group-title">GiroCode</h3>
+            <div class="result-group-grid">
+              <div class="result-block">
+                <h4>Schwarz</h4>
+                <canvas id="girocode-qr-schwarz"></canvas>
+                <a id="girocode-download-schwarz" class="download-link" download="girocode-schwarz.png">
+                  PNG herunterladen
+                </a>
+              </div>
 
-          <div class="result-block">
-            <h2>GiroCode Schwarz</h2>
-            <canvas id="girocode-qr-schwarz"></canvas>
-            <a id="girocode-download-schwarz" class="download-link" download="girocode-schwarz.png">
-              PNG herunterladen
-            </a>
-          </div>
-
-          <div class="result-block">
-            <h2>GiroCode IFK-Grün</h2>
-            <canvas id="girocode-qr-gruen"></canvas>
-            <a id="girocode-download-gruen" class="download-link" download="girocode-gruen.png">
-              PNG herunterladen
-            </a>
+              <div class="result-block">
+                <h4>IFK-Grün</h4>
+                <canvas id="girocode-qr-gruen"></canvas>
+                <a id="girocode-download-gruen" class="download-link" download="girocode-gruen.png">
+                  PNG herunterladen
+                </a>
+              </div>
+            </div>
           </div>
 
           <div class="email-block" id="email-block">
-            <h2>QR-Codes per E-Mail erhalten</h2>
-            <label class="field-label" for="email-input">
-              E-Mail-Adresse (optional)
-            </label>
-            <input
-              type="email"
-              id="email-input"
-              placeholder="z. B. name@beispiel.de"
-            />
+            <div class="email-block-inner">
+              <h2>QR-Codes per E-Mail erhalten</h2>
+              <label class="field-label" for="email-input">
+                E-Mail-Adresse (optional)
+              </label>
+              <input
+                type="email"
+                id="email-input"
+                placeholder="z. B. name@beispiel.de"
+              />
 
-            <label class="checkbox-label" for="info-checkbox">
-              <input type="checkbox" id="info-checkbox" />
-              It's for Kids über meine Aktion informieren
-            </label>
+              <label class="checkbox-label" for="info-checkbox">
+                <input type="checkbox" id="info-checkbox" />
+                It's for Kids über meine Aktion informieren
+              </label>
 
-            <div class="email-status" id="email-status" hidden></div>
+              <div class="email-status" id="email-status" hidden></div>
 
-            <button id="email-send-btn" type="button">QR-Codes per E-Mail senden</button>
+              <button id="email-send-btn" type="button">QR-Codes per E-Mail senden</button>
+            </div>
           </div>
         </section>
       </main>
 
       <footer class="footer">
-        <p>Die QR-Codes werden lokal im Browser erzeugt. Nur wenn Sie den E-Mail-Versand nutzen, werden Ihre E-Mail-Adresse und die erzeugten Dateien einmalig zum Versand übermittelt. Es erfolgt keine Speicherung in dieser Anwendung.</p>
+        <p>Die QR-Codes und Materialien werden lokal in Deinem Browser erzeugt. Nur wenn Du den E-Mail-Versand nutzt, werden Deine E-Mail-Adresse und die erzeugten Dateien einmalig zum Versand verarbeitet. Es erfolgt keine Speicherung innerhalb dieser Anwendung.</p>
       </footer>
     </div>
 

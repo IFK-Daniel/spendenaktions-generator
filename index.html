@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IFK Spendenaktions-Generator</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="logo-placeholder" aria-hidden="true">IFK</div>
+        <div class="header-text">
+          <h1>Spendenaktions-Generator</h1>
+          <p>Stiftung It's for Kids</p>
+        </div>
+      </header>
+
+      <main class="card">
+        <label class="field-label" for="paypal-input">
+          PayPal-Link oder Share-Text einfügen
+        </label>
+        <textarea
+          id="paypal-input"
+          rows="6"
+          placeholder="z. B. https://www.paypal.com/pools/c/9qAkNv1Rre oder den kompletten geteilten Text aus der PayPal-App"
+        ></textarea>
+
+        <div class="manual-title-field" id="manual-title-field" hidden>
+          <label class="field-label" for="manual-title-input">
+            Kampagnenname / Verwendungszweck
+          </label>
+          <input
+            type="text"
+            id="manual-title-input"
+            placeholder="z. B. Geburtstag Max Mustermann"
+          />
+        </div>
+
+        <div class="error-message" id="error-message" hidden></div>
+
+        <button id="generate-btn" type="button">QR-Codes erstellen</button>
+
+        <section class="results" id="results" hidden>
+          <h2 class="campaign-title" id="campaign-title"></h2>
+
+          <div class="result-block">
+            <h2>PayPal QR Schwarz</h2>
+            <canvas id="paypal-qr-schwarz"></canvas>
+            <a id="paypal-download-schwarz" class="download-link" download="paypal-qr-code-schwarz.png">
+              PNG herunterladen
+            </a>
+          </div>
+
+          <div class="result-block">
+            <h2>PayPal QR IFK-Grün</h2>
+            <canvas id="paypal-qr-gruen"></canvas>
+            <a id="paypal-download-gruen" class="download-link" download="paypal-qr-code-gruen.png">
+              PNG herunterladen
+            </a>
+          </div>
+
+          <div class="result-block">
+            <h2>GiroCode Schwarz</h2>
+            <canvas id="girocode-qr-schwarz"></canvas>
+            <a id="girocode-download-schwarz" class="download-link" download="girocode-schwarz.png">
+              PNG herunterladen
+            </a>
+          </div>
+
+          <div class="result-block">
+            <h2>GiroCode IFK-Grün</h2>
+            <canvas id="girocode-qr-gruen"></canvas>
+            <a id="girocode-download-gruen" class="download-link" download="girocode-gruen.png">
+              PNG herunterladen
+            </a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>Alles läuft lokal im Browser. Keine Speicherung, keine Datenbank, kein Login.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

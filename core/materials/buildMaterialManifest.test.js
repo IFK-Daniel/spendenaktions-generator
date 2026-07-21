@@ -165,3 +165,110 @@ test("ungültiger gender-Wert wirft einen Fehler", () => {
     /ungültiger Wert für 'gender'/
   );
 });
+
+test("email, phone, photoUrl, federalState und region werden getrimmt in person übernommen", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+    email: "  max@example.com  ",
+    phone: "  +49 170 1234567  ",
+    photoUrl: "  https://example.com/foto.jpg  ",
+    federalState: "  Bayern  ",
+    region: "  München  ",
+  });
+
+  assert.equal(manifest.person.email, "max@example.com");
+  assert.equal(manifest.person.phone, "+49 170 1234567");
+  assert.equal(manifest.person.photoUrl, "https://example.com/foto.jpg");
+  assert.equal(manifest.person.federalState, "Bayern");
+  assert.equal(manifest.person.region, "München");
+});
+
+test("ohne Angabe von email/phone/photoUrl/federalState/region enthält person diese Felder nicht", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+  });
+
+  assert.deepEqual(Object.keys(manifest.person).sort(), ["firstName", "ifkId", "lastName"]);
+});
+
+test("ungültige email wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        email: "keine-email",
+      }),
+    /ungültiger Wert für 'email'/
+  );
+});
+
+test("leere oder nur aus Leerzeichen bestehende phone wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        phone: "   ",
+      }),
+    /'phone' darf nicht leer sein/
+  );
+});
+
+test("photoUrl ohne http\\/https-Protokoll wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        photoUrl: "ftp://example.com/foto.jpg",
+      }),
+    /ungültiger Wert für 'photoUrl'/
+  );
+});
+
+test("photoUrl als Freitext ohne URL-Struktur wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        photoUrl: "kein-link",
+      }),
+    /ungültiger Wert für 'photoUrl'/
+  );
+});
+
+test("leeres federalState wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        federalState: "   ",
+      }),
+    /'federalState' darf nicht leer sein/
+  );
+});
+
+test("leere region wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        region: "   ",
+      }),
+    /'region' darf nicht leer sein/
+  );
+});

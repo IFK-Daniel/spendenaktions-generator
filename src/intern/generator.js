@@ -1,10 +1,12 @@
 import logoUrl from "../../Medien/IFK Logo nur Zähne.png";
 import { generateIfkId } from "../../core/id/generateIfkId.js";
 import { validateIfkId } from "../../core/id/validateIfkId.js";
+import { isValidEmail } from "../../core/mail/validateEmail.js";
 import { buildMaterialManifest } from "../../core/materials/buildMaterialManifest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
+import { isHttpUrl } from "../../core/text/isHttpUrl.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
@@ -19,6 +21,11 @@ export function initGenerator() {
   const lastNameInput = document.getElementById("last-name-input");
   const ifkIdInput = document.getElementById("ifk-id-input");
   const ifkIdGenerateBtn = document.getElementById("ifk-id-generate-btn");
+  const emailInput = document.getElementById("email-input");
+  const phoneInput = document.getElementById("phone-input");
+  const photoUrlInput = document.getElementById("photo-url-input");
+  const federalStateInput = document.getElementById("federal-state-input");
+  const regionInput = document.getElementById("region-input");
   const paypalInput = document.getElementById("paypal-input");
   const generateBtn = document.getElementById("generate-btn");
   const errorMessage = document.getElementById("error-message");
@@ -99,6 +106,36 @@ export function initGenerator() {
     }
     ifkIdInput.value = ifkIdCheck.normalized;
 
+    const email = emailInput.value.trim();
+    if (!isValidEmail(email)) {
+      showError("Bitte eine gültige E-Mail-Adresse eintragen.");
+      return;
+    }
+
+    const phone = phoneInput.value.trim();
+    if (!phone) {
+      showError("Bitte eine Telefonnummer eintragen.");
+      return;
+    }
+
+    const photoUrl = photoUrlInput.value.trim();
+    if (!isHttpUrl(photoUrl)) {
+      showError("Bitte einen gültigen Foto-Link (http/https) eintragen.");
+      return;
+    }
+
+    const federalState = federalStateInput.value.trim();
+    if (!federalState) {
+      showError("Bitte ein Bundesland eintragen.");
+      return;
+    }
+
+    const region = regionInput.value.trim();
+    if (!region) {
+      showError("Bitte eine Region eintragen.");
+      return;
+    }
+
     const materialKeys = selectedMaterialKeys();
     if (materialKeys.length === 0) {
       showError("Bitte mindestens ein Material auswählen.");
@@ -122,6 +159,11 @@ export function initGenerator() {
       lastName,
       ifkId: ifkIdCheck.normalized,
       gender: genderInput.value,
+      email,
+      phone,
+      photoUrl,
+      federalState,
+      region,
       materials: materialKeys,
     });
 

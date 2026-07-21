@@ -467,14 +467,39 @@ bewusst **nicht** im sichtbaren Dateinamen, wird aber (normalisiert) im
 Rückgabeobjekt mitgeführt. Unbekannte Materialtypen führen zu einem
 Fehler.
 
-#### `buildMaterialManifest({ firstName, lastName, ifkId, materials })`
+#### `buildMaterialManifest({ firstName, lastName, ifkId, gender, email, phone, photoUrl, federalState, region, materials })`
 
 Baut aus Materialauswahl und Dateinamen ein vollständiges, rein
 fachliches Manifest: `{ version: 1, person: { firstName, lastName,
-ifkId }, materials: [{ key, label, category, format, extension,
-filename }, ...] }`. Enthält ausschließlich die Beschreibung der zu
-erzeugenden Materialien — **keine** Dateiinhalte, Blob-Daten, URLs,
-Mail- oder ZIP-Daten. Nutzt intern `buildMaterialFilenames()`.
+ifkId, gender?, email?, phone?, photoUrl?, federalState?, region? },
+materials: [{ key, label, category, format, extension, filename }, ...]
+}`. Enthält ausschließlich die Beschreibung der zu erzeugenden
+Materialien und der erfassten Personen-Stammdaten — **keine**
+Dateiinhalte, Blob-Daten, Ergebnis-/Download-URLs, Mail- oder
+ZIP-Daten. Nutzt intern `buildMaterialFilenames()`.
+
+`gender`, `email`, `phone`, `photoUrl`, `federalState` und `region`
+sind optionale Parameter: Werden sie angegeben, werden sie getrimmt,
+geprüft und unverändert in `person` übernommen; ohne Angabe fehlt das
+jeweilige Feld in `person` (kein Default) — dasselbe Muster wie bei
+`gender`. Die Erzwingung der Pflichtfeld-Eigenschaft (siehe Abschnitt
+7) erfolgt bewusst in der aufrufenden UI (`src/intern/generator.js`),
+nicht im Core, damit bestehende Aufrufe mit ausschließlich
+`firstName`/`lastName`/`ifkId` unverändert funktionieren.
+
+- `email` — muss ein gültiges E-Mail-Format haben (geprüft über
+  `core/mail/validateEmail.js`, keine zweite Regex).
+- `phone` — muss nach dem Trimmen nicht-leer sein; keine strenge
+  internationale Formatprüfung.
+- `photoUrl` — muss eine gültige HTTP-/HTTPS-URL sein (geprüft über
+  `core/text/isHttpUrl.js`). Es wird in diesem Schritt **keine** Datei
+  abgerufen oder verarbeitet — ausschließlich die URL selbst wird
+  erfasst.
+- `federalState`, `region` — Freitext, muss nach dem Trimmen
+  nicht-leer sein.
+
+Ungültige Werte werfen jeweils einen sprechenden Fehler (siehe
+`buildMaterialManifest.test.js`).
 
 **Datenfluss**: Materialauswahl (`buildMaterialList`) → Dateinamen
 (`buildMaterialFilenames`) → Manifest (`buildMaterialManifest`) →
@@ -591,7 +616,9 @@ Umbau desselben.
 intern/
 └── index.html         # eigener HTML-Einstiegspunkt, analog zu index.html
 src/intern/
-├── main.js             # DOM-Wiring für die interne Oberfläche
+├── main.js             # dünner Einstiegspunkt, verdrahtet auth.js und generator.js
+├── auth.js              # Login-/Logout-Wiring (siehe Abschnitt 8)
+├── generator.js          # DOM-Wiring für den Materialgenerator
 └── style.css           # ergänzt src/style.css um interne Layout-Klassen
 ```
 
@@ -601,10 +628,22 @@ getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
 `dist/index.html` bzw. `dist/intern/index.html` erzeugt.
 
 **Funktionsumfang (Grundgerüst)**:
-- Eingabefelder für Vorname, Nachname und IFK-ID. Die IFK-ID wird beim
-  Laden der Seite und über einen "Neu generieren"-Button mit
-  `core/id/generateIfkId.js` vorbelegt, bleibt aber manuell editierbar
-  und wird vor der Erzeugung über `core/id/validateIfkId.js` geprüft.
+- Eingabefelder für Vorname, Nachname, Geschlecht und IFK-ID. Die
+  IFK-ID wird beim Laden der Seite und über einen
+  "Neu generieren"-Button mit `core/id/generateIfkId.js` vorbelegt,
+  bleibt aber manuell editierbar und wird vor der Erzeugung über
+  `core/id/validateIfkId.js` geprüft.
+- Zusätzliche Stammdaten-Pflichtfelder E-Mail-Adresse, Telefonnummer,
+  Foto-Link, Bundesland und Region, direkt im Personenbereich
+  integriert. Validierung vor der Manifest-Erzeugung in
+  `src/intern/generator.js`: E-Mail über `core/mail/validateEmail.js`,
+  Foto-Link über `core/text/isHttpUrl.js` (muss http/https sein),
+  Telefonnummer/Bundesland/Region müssen nach dem Trimmen nicht-leer
+  sein (keine strenge Formatprüfung für die Telefonnummer). Es wird in
+  diesem Schritt **weder** ein Mailversand **noch** ein Abruf der
+  Foto-Datei **noch** eine Flyer-Erzeugung ausgelöst — die Felder
+  werden ausschließlich erfasst, validiert und im Manifest
+  mitgeführt (siehe `buildMaterialManifest` in Abschnitt 6).
 - PayPal-Link/Share-Text-Eingabe, ausgewertet über die bestehende
   `core/text/extractPaypalLink.js` — keine zweite Parsing-Logik.
 - Materialauswahl als Checkboxen für alle sechs Materialtypen aus
@@ -612,8 +651,8 @@ getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
   bewusst deaktiviert (`disabled`) und mit dem Hinweis "wartet auf
   Grafikentwurf" versehen, da ihre Erzeugung noch nicht implementiert
   ist (siehe Abschnitt 6, Phase 4 in [roadmap.md](roadmap.md)).
-- Erzeugung: `src/intern/main.js` baut aus den Eingaben ein Manifest
-  über `buildMaterialManifest()` und ruft anschließend
+- Erzeugung: `src/intern/generator.js` baut aus den Eingaben ein
+  Manifest über `buildMaterialManifest()` und ruft anschließend
   `generateQrMaterials()` auf; GiroCode-Empfänger/IBAN/BIC nutzen dabei
   unverändert die Defaults aus `core/config/girocodeDefaults.js`. Die
   erzeugten PNGs werden je Material als Vorschaubild (`URL
@@ -630,9 +669,10 @@ Zugriffsschutz ist der in Abschnitt 8 beschriebene Login.
 
 **Abhängigkeiten**: `src/intern/generator.js` (Materialgenerator-Logik,
 DOM-Wiring) → `core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
-`core/materials/buildMaterialManifest.js`,
+`core/mail/validateEmail.js`, `core/materials/buildMaterialManifest.js`,
 `core/materials/generateQrMaterials.js`,
-`core/materials/materialTypes.js`, `core/text/extractPaypalLink.js`.
+`core/materials/materialTypes.js`, `core/text/extractPaypalLink.js`,
+`core/text/isHttpUrl.js`.
 `src/intern/auth.js` (Login/Logout-Wiring) → `core/auth/authSession.js`,
 `core/auth/requestLogin.js` (siehe Abschnitt 8). `src/intern/main.js`
 verdrahtet beide Module miteinander, ohne dass sie sich gegenseitig

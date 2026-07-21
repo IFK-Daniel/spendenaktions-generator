@@ -576,3 +576,62 @@ Keines der in Abschnitt 6 beschriebenen Module wird aktuell von
 `src/main.js` oder `api/send-email.js` importiert oder aufgerufen. Der
 bestehende QR-Code-Generator ist von diesem Ausbau vollständig
 unberührt.
+
+## 7. Interne Materialgenerator-Oberfläche (`intern/`)
+
+**Zweck**: Erste nutzbare Oberfläche für das interne Team, um die in
+Abschnitt 6 beschriebenen Core-Module (`core/id`, `core/materials`)
+tatsächlich zu bedienen — als eigenständige zweite Seite neben dem
+bestehenden öffentlichen QR-Code-Generator, nicht als Ersatz oder
+Umbau desselben.
+
+**Struktur**:
+
+```
+intern/
+└── index.html         # eigener HTML-Einstiegspunkt, analog zu index.html
+src/intern/
+├── main.js             # DOM-Wiring für die interne Oberfläche
+└── style.css           # ergänzt src/style.css um interne Layout-Klassen
+```
+
+`vite.config.js` registriert `index.html` und `intern/index.html` als
+getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
+`npm run build` beide Seiten unverändert nebeneinander nach
+`dist/index.html` bzw. `dist/intern/index.html` erzeugt.
+
+**Funktionsumfang (Grundgerüst)**:
+- Eingabefelder für Vorname, Nachname und IFK-ID. Die IFK-ID wird beim
+  Laden der Seite und über einen "Neu generieren"-Button mit
+  `core/id/generateIfkId.js` vorbelegt, bleibt aber manuell editierbar
+  und wird vor der Erzeugung über `core/id/validateIfkId.js` geprüft.
+- PayPal-Link/Share-Text-Eingabe, ausgewertet über die bestehende
+  `core/text/extractPaypalLink.js` — keine zweite Parsing-Logik.
+- Materialauswahl als Checkboxen für alle sechs Materialtypen aus
+  `core/materials/materialTypes.js`. Die beiden Flyer-Typen sind
+  bewusst deaktiviert (`disabled`) und mit dem Hinweis "wartet auf
+  Grafikentwurf" versehen, da ihre Erzeugung noch nicht implementiert
+  ist (siehe Abschnitt 6, Phase 4 in [roadmap.md](roadmap.md)).
+- Erzeugung: `src/intern/main.js` baut aus den Eingaben ein Manifest
+  über `buildMaterialManifest()` und ruft anschließend
+  `generateQrMaterials()` auf; GiroCode-Empfänger/IBAN/BIC nutzen dabei
+  unverändert die Defaults aus `core/config/girocodeDefaults.js`. Die
+  erzeugten PNGs werden je Material als Vorschaubild (`URL
+  .createObjectURL`) sowie als Einzeldownload mit dem Dateinamen aus
+  dem Manifest angezeigt.
+
+**Bewusst nicht Teil dieses Schritts**: ZIP-Paketierung
+(`core/zip/createZip.js` ist vorhanden, aber hier nicht eingebunden),
+Mailversand der erzeugten Materialien, Login/Authentifizierung. Die
+Seite ist aktuell ausschließlich über die (nicht verlinkte) URL
+`/intern/` erreichbar und mit `<meta name="robots" content="noindex,
+nofollow">` versehen — das ersetzt keinen Zugriffsschutz, sondern
+vermeidet lediglich versehentliche Auffindbarkeit über Suchmaschinen.
+
+**Abhängigkeiten**: `src/intern/main.js` →
+`core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
+`core/materials/buildMaterialManifest.js`,
+`core/materials/generateQrMaterials.js`,
+`core/materials/materialTypes.js`, `core/text/extractPaypalLink.js`.
+Keine Abhängigkeit zu `src/main.js` oder umgekehrt — beide Seiten
+teilen sich ausschließlich `core/`.

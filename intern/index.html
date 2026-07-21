@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="format-detection" content="telephone=no, address=no, email=no, date=no" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>IFK Materialgenerator — Intern</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/intern/style.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="header-brand">
+          <img class="header-logo" src="/ifk-logo-full.png" alt="Stiftung It's for Kids" />
+          <div class="header-account">
+            <span class="header-account-label">Interner Bereich</span>
+            <span class="header-account-value">Materialgenerator</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="hero">
+        <div class="hero-main">
+          <h1>Materialgenerator</h1>
+          <p class="intro">
+            Personendaten und PayPal-Link eintragen, Materialien auswählen und erzeugen.
+          </p>
+          <p class="intern-notice">
+            Noch ohne Login — nur für den internen Gebrauch. Flyer-PDFs folgen, sobald der
+            Grafikentwurf vorliegt.
+          </p>
+        </div>
+      </div>
+
+      <main class="card">
+        <div class="person-fields">
+          <div class="person-field">
+            <label class="field-label" for="first-name-input">Vorname</label>
+            <input type="text" id="first-name-input" placeholder="z. B. Max" />
+          </div>
+          <div class="person-field">
+            <label class="field-label" for="last-name-input">Nachname</label>
+            <input type="text" id="last-name-input" placeholder="z. B. Mustermann" />
+          </div>
+          <div class="person-field">
+            <label class="field-label" for="ifk-id-input">IFK-ID</label>
+            <div class="ifk-id-row">
+              <input type="text" id="ifk-id-input" placeholder="z. B. IFK7QX" maxlength="6" />
+              <button type="button" id="ifk-id-generate-btn">Neu generieren</button>
+            </div>
+          </div>
+        </div>
+
+        <label class="field-label" for="paypal-input">
+          PayPal-Link oder Share-Text einfügen
+        </label>
+        <textarea
+          id="paypal-input"
+          rows="4"
+          placeholder="z. B. https://www.paypal.com/pools/c/9qAkNv1Rre oder den kompletten geteilten Text aus der PayPal-App"
+        ></textarea>
+
+        <fieldset class="material-fieldset">
+          <legend class="field-label">Materialien auswählen</legend>
+          <div class="material-list">
+            <label class="material-item material-item-disabled">
+              <input type="checkbox" data-material-key="FLYER_DRUCKEREI" disabled />
+              Flyer Druckerei
+              <span class="material-item-hint">wartet auf Grafikentwurf</span>
+            </label>
+            <label class="material-item material-item-disabled">
+              <input type="checkbox" data-material-key="FLYER_HOME" disabled />
+              Flyer Home
+              <span class="material-item-hint">wartet auf Grafikentwurf</span>
+            </label>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="QR_PAYPAL_GREEN" checked />
+              PayPal QR grün
+            </label>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="QR_PAYPAL_BLACK" checked />
+              PayPal QR schwarz
+            </label>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="QR_GIRO_GREEN" checked />
+              GiroCode grün
+            </label>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="QR_GIRO_BLACK" checked />
+              GiroCode schwarz
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="error-message" id="error-message" hidden></div>
+
+        <button id="generate-btn" type="button">Materialien erstellen</button>
+
+        <section class="results" id="results" hidden>
+          <h2 class="campaign-title" id="result-person-name"></h2>
+
+          <div class="result-group-grid" id="result-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/intern/main.js"></script>
+  </body>
+</html>

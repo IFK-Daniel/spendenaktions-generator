@@ -71,10 +71,21 @@ nutzt, um weitere Spendenaktions-Materialien zu erzeugen.
   QR-/GiroCode-/Branding-Logik, vollständig getestet.
 - **Flyer Druckerei** — offen. **Flyer Home** — offen. (bewusst nicht
   Teil dieses Schritts, siehe Phase 4)
+- **Interne Oberfläche** (`intern/index.html`, `src/intern/`) —
+  **Grundgerüst abgeschlossen.** Eigene Seite (analog zum bestehenden
+  öffentlichen Generator, per Vite-Multi-Page-Build unter `/intern/`)
+  mit Eingabefeldern für Vorname/Nachname/IFK-ID (inkl.
+  Generieren-Button über `core/id/generateIfkId.js`), Materialauswahl
+  (Checkboxen für die sechs Materialtypen; die beiden Flyer-Checkboxen
+  sind bewusst deaktiviert, da PDF-Erzeugung noch aussteht) und
+  Erzeugung der ausgewählten QR-Materialien über
+  `buildMaterialManifest()`/`generateQrMaterials()` mit Live-Vorschau
+  und Einzeldownload. Bewusst noch nicht Teil dieses Schritts: ZIP-
+  Paketierung, Mailversand, Login/Authentifizierung.
 
-Noch offen (nicht Teil dieses Schritts): eigenständige App/Oberfläche,
-Erzeugung der beiden Flyer-PDFs, ZIP-Paketierung und Mailversand der
-erzeugten Materialien, Login/Authentifizierung.
+Noch offen (nicht Teil dieses Schritts): Erzeugung der beiden
+Flyer-PDFs, ZIP-Paketierung und Mailversand der erzeugten Materialien,
+Login/Authentifizierung für die interne Oberfläche.
 
 ## Phase 4 — Grafikintegration
 

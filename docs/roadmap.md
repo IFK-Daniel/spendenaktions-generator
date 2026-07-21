@@ -60,10 +60,21 @@ nutzt, um weitere Spendenaktions-Materialien zu erzeugen.
   **abgeschlossen.** Baut aus Materialauswahl und Dateinamen ein rein
   fachliches Manifest (keine Dateiinhalte, keine Blob-/URL-/Mail-/
   ZIP-Daten), vollständig getestet.
+- **Erzeugung PayPal QR grün** — **abgeschlossen.**
+- **Erzeugung PayPal QR schwarz** — **abgeschlossen.**
+- **Erzeugung GiroCode grün** — **abgeschlossen.**
+- **Erzeugung GiroCode schwarz** — **abgeschlossen.**
+  Alle vier über `core/materials/generateQrMaterials.js` (nutzt
+  `generateMaterial.js`), auf Basis des bestehenden
+  `core/qr/generateQr.js`, `core/girocode/buildGirocodePayload.js` und
+  `core/branding/loadImage.js` — keine Duplikation der bestehenden
+  QR-/GiroCode-/Branding-Logik, vollständig getestet.
+- **Flyer Druckerei** — offen. **Flyer Home** — offen. (bewusst nicht
+  Teil dieses Schritts, siehe Phase 4)
 
 Noch offen (nicht Teil dieses Schritts): eigenständige App/Oberfläche,
-tatsächliche Erzeugung der Datei-Inhalte (PDF-Flyer, PNG-QR-Codes),
-ZIP-Paketierung und Mailversand der erzeugten Materialien.
+Erzeugung der beiden Flyer-PDFs, ZIP-Paketierung und Mailversand der
+erzeugten Materialien, Login/Authentifizierung.
 
 ## Phase 4 — Grafikintegration
 

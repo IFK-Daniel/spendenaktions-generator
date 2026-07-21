@@ -51,7 +51,11 @@ Spendenaktions-Generator/
 │       ├── buildMaterialFilenames.js # implementiert
 │       ├── buildMaterialFilenames.test.js
 │       ├── buildMaterialManifest.js  # implementiert
-│       └── buildMaterialManifest.test.js
+│       ├── buildMaterialManifest.test.js
+│       ├── generateMaterial.js       # implementiert (Einzeldatei-Erzeugung)
+│       ├── generateMaterial.test.js
+│       ├── generateQrMaterials.js    # implementiert (Orchestrierung PayPal/GiroCode)
+│       └── generateQrMaterials.test.js
 ├── api/
 │   └── send-email.js            # Serverless Function (Vercel), unverändert
 ├── src/
@@ -71,12 +75,14 @@ und das Layout bleiben unangetastet. `core/templates` und
 `core/integrations/humbee` sind weiterhin reine Struktur-Platzhalter:
 jede exportierte Funktion wirft aktuell `Error("... noch nicht
 implementiert")`. `core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
-`core/zip/createZip.js` sowie alle vier Module in `core/materials/` sind
-vollständig implementiert (siehe Abschnitt 6); `core/id/reserveIfkId.js`
-bleibt bewusst ein Platzhalter, da er eine noch nicht existierende
-Backend-/Datenbankanbindung voraussetzt. Keines dieser Module wird von
-der bestehenden App (`src/main.js`, `api/send-email.js`) aufgerufen oder
-in sie integriert.
+`core/zip/createZip.js` sowie alle sechs Module in `core/materials/`
+(inkl. `generateMaterial.js`/`generateQrMaterials.js` für die
+QR-Materialerzeugung) sind vollständig implementiert (siehe Abschnitt
+6); `core/id/reserveIfkId.js` bleibt bewusst ein Platzhalter, da er eine
+noch nicht existierende Backend-/Datenbankanbindung voraussetzt. Keines
+dieser Module wird von der bestehenden App (`src/main.js`,
+`api/send-email.js`) aufgerufen oder in sie integriert — der bestehende
+öffentliche QR-Code-Generator bleibt vollständig unverändert.
 
 ## 2. Core-Module im Detail
 
@@ -402,10 +408,15 @@ bestehende Integrationen zu berühren.
 **Zweck**: Fachliche Beschreibung, **welche individuellen Materialien**
 für eine Person (Vorname, Nachname, IFK-ID) erzeugt werden sollen, mit
 welchen Dateinamen, und in welcher Reihenfolge — als reine, DOM-freie
-Datenstruktur. Dieses Modul erzeugt selbst **keine** Datei-Inhalte (kein
-PDF, kein PNG); es beschreibt nur, was später von anderen Core-Modulen
-(z. B. `core/qr/generateQr.js` für die QR-Materialien) tatsächlich
-erzeugt werden soll. Alle vier Module sind **vollständig implementiert**.
+Datenstruktur (`materialTypes.js`, `buildMaterialList.js`,
+`buildMaterialFilenames.js`, `buildMaterialManifest.js`) — sowie,
+darauf aufbauend, die tatsächliche Erzeugung der vier individuellen
+QR-Materialien als PNG-Dateien (`generateMaterial.js`,
+`generateQrMaterials.js`). Die beiden Flyer-Typen (`FLYER_DRUCKEREI`,
+`FLYER_HOME`) werden weiterhin **nicht** erzeugt — dafür ist eine
+künftige PDF-/Grafikintegration vorgesehen (siehe
+[roadmap.md](roadmap.md), Phase 4). Alle sechs Module sind
+**vollständig implementiert**.
 
 **Klare Abgrenzung**: `core/materials` kennt ausschließlich die sechs
 unten aufgeführten individuellen Materialtypen. Logos, das Corporate
@@ -465,30 +476,99 @@ filename }, ...] }`. Enthält ausschließlich die Beschreibung der zu
 erzeugenden Materialien — **keine** Dateiinhalte, Blob-Daten, URLs,
 Mail- oder ZIP-Daten. Nutzt intern `buildMaterialFilenames()`.
 
-**Geplanter Datenfluss**: Materialauswahl (`buildMaterialList`) →
-Dateinamen (`buildMaterialFilenames`) → Manifest
-(`buildMaterialManifest`) → **spätere Erzeugung** der eigentlichen
-Datei-Inhalte (PDF-Flyer, PNG-QR-Codes über `core/qr/generateQr.js`)
-durch einen künftigen Materialgenerator, der auf diesem Manifest
-aufbaut. Diese Erzeugung selbst ist bewusst noch nicht Teil dieses
-Moduls.
+**Datenfluss**: Materialauswahl (`buildMaterialList`) → Dateinamen
+(`buildMaterialFilenames`) → Manifest (`buildMaterialManifest`) →
+**Erzeugung der QR-Materialien** (`generateQrMaterials`, für
+`FLYER_DRUCKEREI`/`FLYER_HOME` weiterhin nicht implementiert).
+
+#### `generateMaterial({ entry, content, moduleColor, logoImage, deps })`
+
+Erzeugt aus einem einzelnen, bereits aufgelösten Material-Eintrag
+(Dateiname stammt unverändert aus dem Manifest), einem QR-Inhalt
+(PayPal-Link oder GiroCode-Payload) und einer Modulfarbe genau eine
+Datei. Ruft dafür ausschließlich das bestehende
+`core/qr/generateQr.js` auf (keine eigene QR-Implementierung) und
+wandelt dessen PNG-DataURL-Rückgabewert in `{ content, size }` um
+(`Blob`, falls verfügbar, sonst `Uint8Array`). Wirft einen Fehler bei
+fehlendem Dateinamen oder leerem/unerwartetem Grafikinhalt.
+
+#### `generateQrMaterials({ manifest, paypalUrl, girocode, logo, deps })`
+
+Erzeugt aus einem Manifest die vier individuellen QR-Materialien
+(`QR_PAYPAL_GREEN`, `QR_PAYPAL_BLACK`, `QR_GIRO_GREEN`,
+`QR_GIRO_BLACK`) als PNG-Dateien und gibt sie als Array zurück, in der
+Reihenfolge des Manifests: `{ key, label, category, format, extension,
+filename, mimeType: "image/png", content, size }`. Flyer-Einträge im
+Manifest werden ignoriert (kein Fehler); enthält das Manifest
+ausschließlich Flyer, ist das Ergebnis ein leeres Array.
+
+Wiederverwendung bestehender Module, keine Duplikate:
+- **QR-Erzeugung inkl. Logo-Overlay**: `core/qr/generateQr.js` (über
+  `generateMaterial.js`) — dieselben QR-Abmessungen, dieselbe
+  Fehlerkorrektur und dasselbe Logo-Overlay wie im bestehenden
+  öffentlichen QR-Code-Generator, da exakt dieselbe Funktion
+  aufgerufen wird.
+- **GiroCode-Payload**: `core/girocode/buildGirocodePayload.js`, mit
+  Defaults aus `core/config/girocodeDefaults.js` für Empfänger/IBAN/BIC.
+  `betrag` wird unabhängig von der Eingabe immer auf `""` gesetzt,
+  `verwendungszweck` immer auf `"<IFK-ID> Spende"` (z. B.
+  `"IFK7QX Spende"`) — abweichende Werte im `girocode`-Parameter werden
+  ignoriert.
+- **PayPal-Link-Prüfung**: `core/text/extractPaypalLink.js` — keine
+  zweite, parallele Validierung.
+- **IFK-ID-Prüfung**: `core/id/validateIfkId.js`.
+- **Farben**: `core/config/colors.js` (`QR_COLOR_GRUEN` für
+  `QR_PAYPAL_GREEN`/`QR_GIRO_GREEN`, `QR_COLOR_SCHWARZ` für
+  `QR_PAYPAL_BLACK`/`QR_GIRO_BLACK`).
+- **Logo laden**: `core/branding/loadImage.js`, `logo` entspricht
+  dessen `src`-Parameter — kein zweites Logo-System.
+
+`paypalUrl` ist nur Pflicht, wenn mindestens ein PayPal-Material
+ausgewählt ist; `girocode` nur, wenn mindestens ein GiroCode-Material
+ausgewählt ist. Fehlerfälle: fehlendes/ungültiges Manifest, ungültige
+IFK-ID im Manifest, fehlender/ungültiger PayPal-Link (falls benötigt),
+fehlende GiroCode-Daten (falls benötigt), fehlendes/nicht ladbares
+Logo, unbekannter QR-Materialtyp, fehlender Dateiname im Manifest,
+leerer erzeugter Dateiinhalt.
+
+**Test- und Browserfähigkeit**: Die Produktionsfunktionen nutzen per
+Default reale Browser-APIs (`document.createElement("canvas")`,
+`core/branding/loadImage.js`, `core/qr/generateQr.js`) und sind damit im
+Browser unverändert lauffähig. Für Unit-Tests unter Node.js (ohne
+Canvas-/DOM-Umgebung) sind `generateQr`, `loadImage` und `createCanvas`
+über den optionalen `deps`-Parameter injizierbar — die Tests verwenden
+dafür kleine, kontrollierte Test-Doubles, ohne dass dafür eine neue
+Canvas-Bibliothek installiert oder die Produktionsfunktion verändert
+werden musste.
+
+**Keine UI-, Mail- oder ZIP-Abhängigkeit**: `generateQrMaterials` kennt
+weder DOM-Elemente/IDs noch `core/mail/*` noch `core/zip/*` — das
+Ergebnis-Array ist reine Rückgabedaten. Eine Bündelung zu einem Archiv
+oder ein Mailversand der erzeugten Dateien sind bewusst nicht Teil
+dieses Moduls.
 
 **Abhängigkeiten**: `buildMaterialFilenames.js` und
 `buildMaterialManifest.js` → `core/id/validateIfkId.js`.
 `buildMaterialFilenames.js` und `buildMaterialManifest.js` →
 `materialTypes.js`. `buildMaterialFilenames.js` →
 `buildMaterialList.js` (nur als Default, wenn `materials` nicht
-angegeben wird). Keine DOM-Abhängigkeit, keine Datenbank-, Mail- oder
-ZIP-Anbindung.
+angegeben wird). `generateMaterial.js` → `core/qr/generateQr.js`.
+`generateQrMaterials.js` → `generateMaterial.js`,
+`core/id/validateIfkId.js`, `core/text/extractPaypalLink.js`,
+`core/girocode/buildGirocodePayload.js`, `core/branding/loadImage.js`,
+`core/config/colors.js`, `core/config/girocodeDefaults.js`,
+`materialTypes.js`. Keine Datenbank-, Mail- oder ZIP-Anbindung.
 
 **Tests**: `materialTypes.test.js`, `buildMaterialList.test.js`,
-`buildMaterialFilenames.test.js`, `buildMaterialManifest.test.js`
-(Node.js eingebauter Test-Runner, ausführbar via `npm test`).
+`buildMaterialFilenames.test.js`, `buildMaterialManifest.test.js`,
+`generateMaterial.test.js`, `generateQrMaterials.test.js` (Node.js
+eingebauter Test-Runner, ausführbar via `npm test`).
 
 **Erweiterungsmöglichkeiten**: weitere Materialtypen (z. B. für WhatsApp-
 oder Social-Media-Formate) durch Ergänzung in `materialTypes.js`, ohne
 bestehende Typen zu verändern; konfigurierbare Dateinamensschemata;
-mehrsprachige Bezeichnungen (`label`).
+mehrsprachige Bezeichnungen (`label`); künftige Erzeugung der beiden
+Flyer-Typen (PDF, siehe Phase 4 in [roadmap.md](roadmap.md)).
 
 ### Verhältnis zur bestehenden App
 

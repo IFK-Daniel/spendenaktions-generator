@@ -40,9 +40,18 @@ Spendenaktions-Generator/
 │   │   └── createZip.test.js
 │   ├── templates/                # Platzhalter, siehe Abschnitt 6
 │   │   └── mailTemplates.js
-│   └── integrations/
-│       └── humbee/               # Platzhalter, siehe Abschnitt 6
-│           └── sendHumbeeMail.js
+│   ├── integrations/
+│   │   └── humbee/               # Platzhalter, siehe Abschnitt 6
+│   │       └── sendHumbeeMail.js
+│   └── materials/                # Materialgenerator-Core: siehe Abschnitt 6
+│       ├── materialTypes.js          # implementiert
+│       ├── materialTypes.test.js
+│       ├── buildMaterialList.js      # implementiert
+│       ├── buildMaterialList.test.js
+│       ├── buildMaterialFilenames.js # implementiert
+│       ├── buildMaterialFilenames.test.js
+│       ├── buildMaterialManifest.js  # implementiert
+│       └── buildMaterialManifest.test.js
 ├── api/
 │   └── send-email.js            # Serverless Function (Vercel), unverändert
 ├── src/
@@ -61,12 +70,13 @@ Diese Struktur ändert nichts an `index.html`, `src/style.css`, `Medien/`,
 und das Layout bleiben unangetastet. `core/templates` und
 `core/integrations/humbee` sind weiterhin reine Struktur-Platzhalter:
 jede exportierte Funktion wirft aktuell `Error("... noch nicht
-implementiert")`. `core/id/generateIfkId.js`, `core/id/validateIfkId.js`
-und `core/zip/createZip.js` sind vollständig implementiert (siehe
-Abschnitt 6); `core/id/reserveIfkId.js` bleibt bewusst ein Platzhalter,
-da er eine noch nicht existierende Backend-/Datenbankanbindung
-voraussetzt. Keines dieser Module wird von der bestehenden App
-(`src/main.js`, `api/send-email.js`) aufgerufen oder in sie integriert.
+implementiert")`. `core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
+`core/zip/createZip.js` sowie alle vier Module in `core/materials/` sind
+vollständig implementiert (siehe Abschnitt 6); `core/id/reserveIfkId.js`
+bleibt bewusst ein Platzhalter, da er eine noch nicht existierende
+Backend-/Datenbankanbindung voraussetzt. Keines dieser Module wird von
+der bestehenden App (`src/main.js`, `api/send-email.js`) aufgerufen oder
+in sie integriert.
 
 ## 2. Core-Module im Detail
 
@@ -386,6 +396,99 @@ ein noch zu definierender HTTP-Client.
 **Erweiterungsmöglichkeiten**: weitere Integrationen unter
 `core/integrations/<anbieter>/` nach demselben Muster ergänzen, ohne
 bestehende Integrationen zu berühren.
+
+### `core/materials/` — Materialgenerator-Core
+
+**Zweck**: Fachliche Beschreibung, **welche individuellen Materialien**
+für eine Person (Vorname, Nachname, IFK-ID) erzeugt werden sollen, mit
+welchen Dateinamen, und in welcher Reihenfolge — als reine, DOM-freie
+Datenstruktur. Dieses Modul erzeugt selbst **keine** Datei-Inhalte (kein
+PDF, kein PNG); es beschreibt nur, was später von anderen Core-Modulen
+(z. B. `core/qr/generateQr.js` für die QR-Materialien) tatsächlich
+erzeugt werden soll. Alle vier Module sind **vollständig implementiert**.
+
+**Klare Abgrenzung**: `core/materials` kennt ausschließlich die sechs
+unten aufgeführten individuellen Materialtypen. Logos, das Corporate
+Manual, Spendennachweise oder sonstige allgemeine Downloads sind
+bewusst **nicht** Teil dieser Definition — sie sind keine individuellen,
+personalisierten Materialien und werden von diesem Modul weder erzeugt
+noch in Dateinamen, Manifest oder eine spätere Paketierung
+(`core/zip`) aufgenommen.
+
+#### Die sechs Materialtypen (`materialTypes.js`)
+
+| Schlüssel | Bezeichnung | Kategorie | Format |
+|---|---|---|---|
+| `FLYER_DRUCKEREI` | Flyer Druckerei | `flyer` | `pdf` |
+| `FLYER_HOME` | Flyer Home | `flyer` | `pdf` |
+| `QR_PAYPAL_GREEN` | PayPal QR grün | `qr` | `png` |
+| `QR_PAYPAL_BLACK` | PayPal QR schwarz | `qr` | `png` |
+| `QR_GIRO_GREEN` | GiroCode grün | `qr` | `png` |
+| `QR_GIRO_BLACK` | GiroCode schwarz | `qr` | `png` |
+
+Die Reihenfolge in dieser Tabelle ist die feste, reproduzierbare
+Reihenfolge, die `buildMaterialList()` und `buildMaterialManifest()`
+verwenden. Jeder Materialtyp wird als `{ key, label, category, format,
+extension }` beschrieben. Die gesamte Definition (Array und einzelne
+Typ-Objekte) ist mit `Object.freeze` eingefroren, damit sie von außen
+nicht versehentlich verändert werden kann.
+
+#### `buildMaterialList(options)`
+
+Legt fest, welche der sechs Materialtypen ausgewählt werden. Ohne
+Optionen werden alle sechs in fester Reihenfolge zurückgegeben.
+Optional: `{ include }` (nur diese Typen) und/oder `{ exclude }` (diese
+Typen entfernen). Unbekannte Schlüssel in `include`/`exclude` führen zu
+einem Fehler. Reine Funktion ohne Seiteneffekte.
+
+#### `buildMaterialFilenames({ firstName, lastName, ifkId, materials })`
+
+Erzeugt für die ausgewählten Materialien (Standard: alle sechs, wie von
+`buildMaterialList()` geliefert) die Dateinamen nach dem Schema
+`IFK_<Vorname>_<Nachname>_<Materialsuffix>.<extension>` — z. B.
+`IFK_Max_Mustermann_Flyer_Druckerei.pdf`. Vor- und Nachname sind
+Pflicht und werden für den Dateinamen bereinigt (Leerzeichen →
+Unterstrich, führende/abschließende Leerzeichen entfernt, doppelte
+Unterstriche vermieden, problematische Dateisystemzeichen wie `/ \ : *
+? " < > |` entfernt; Umlaute bleiben erhalten). Die IFK-ID ist Pflicht
+und wird über `core/id/validateIfkId.js` geprüft — sie erscheint
+bewusst **nicht** im sichtbaren Dateinamen, wird aber (normalisiert) im
+Rückgabeobjekt mitgeführt. Unbekannte Materialtypen führen zu einem
+Fehler.
+
+#### `buildMaterialManifest({ firstName, lastName, ifkId, materials })`
+
+Baut aus Materialauswahl und Dateinamen ein vollständiges, rein
+fachliches Manifest: `{ version: 1, person: { firstName, lastName,
+ifkId }, materials: [{ key, label, category, format, extension,
+filename }, ...] }`. Enthält ausschließlich die Beschreibung der zu
+erzeugenden Materialien — **keine** Dateiinhalte, Blob-Daten, URLs,
+Mail- oder ZIP-Daten. Nutzt intern `buildMaterialFilenames()`.
+
+**Geplanter Datenfluss**: Materialauswahl (`buildMaterialList`) →
+Dateinamen (`buildMaterialFilenames`) → Manifest
+(`buildMaterialManifest`) → **spätere Erzeugung** der eigentlichen
+Datei-Inhalte (PDF-Flyer, PNG-QR-Codes über `core/qr/generateQr.js`)
+durch einen künftigen Materialgenerator, der auf diesem Manifest
+aufbaut. Diese Erzeugung selbst ist bewusst noch nicht Teil dieses
+Moduls.
+
+**Abhängigkeiten**: `buildMaterialFilenames.js` und
+`buildMaterialManifest.js` → `core/id/validateIfkId.js`.
+`buildMaterialFilenames.js` und `buildMaterialManifest.js` →
+`materialTypes.js`. `buildMaterialFilenames.js` →
+`buildMaterialList.js` (nur als Default, wenn `materials` nicht
+angegeben wird). Keine DOM-Abhängigkeit, keine Datenbank-, Mail- oder
+ZIP-Anbindung.
+
+**Tests**: `materialTypes.test.js`, `buildMaterialList.test.js`,
+`buildMaterialFilenames.test.js`, `buildMaterialManifest.test.js`
+(Node.js eingebauter Test-Runner, ausführbar via `npm test`).
+
+**Erweiterungsmöglichkeiten**: weitere Materialtypen (z. B. für WhatsApp-
+oder Social-Media-Formate) durch Ergänzung in `materialTypes.js`, ohne
+bestehende Typen zu verändern; konfigurierbare Dateinamensschemata;
+mehrsprachige Bezeichnungen (`label`).
 
 ### Verhältnis zur bestehenden App
 

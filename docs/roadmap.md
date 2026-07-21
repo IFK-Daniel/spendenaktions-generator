@@ -41,9 +41,29 @@ fachliche Implementierung erfolgt schrittweise pro Bereich.
 
 Aufbau einer neuen, eigenständigen App (analog zum bestehenden
 QR-Code-Generator), die die in Phase 1 und 2 geschaffenen Core-Module
-nutzt, um weitere Spendenaktions-Materialien zu erzeugen. Kein Bestandteil
-der aktuellen Umbauten — betrifft neue Oberflächen, neue Seiten und neue
-fachliche Logik.
+nutzt, um weitere Spendenaktions-Materialien zu erzeugen.
+
+- **Materialtypen-Core** (`core/materials/materialTypes.js`) —
+  **abgeschlossen.** Unveränderliche Definition der sechs individuellen
+  Materialtypen (Flyer Druckerei, Flyer Home, PayPal QR grün/schwarz,
+  GiroCode grün/schwarz) mit `{ key, label, category, format,
+  extension }`, vollständig getestet.
+- **Materialliste** (`core/materials/buildMaterialList.js`) —
+  **abgeschlossen.** Auswahl der zu erzeugenden Materialien per
+  `include`/`exclude`, feste reproduzierbare Reihenfolge, vollständig
+  getestet.
+- **Dateinamenslogik** (`core/materials/buildMaterialFilenames.js`) —
+  **abgeschlossen.** Erzeugt personalisierte Dateinamen inkl.
+  IFK-ID-Prüfung (`core/id/validateIfkId.js`) und Namensbereinigung,
+  vollständig getestet.
+- **Materialmanifest** (`core/materials/buildMaterialManifest.js`) —
+  **abgeschlossen.** Baut aus Materialauswahl und Dateinamen ein rein
+  fachliches Manifest (keine Dateiinhalte, keine Blob-/URL-/Mail-/
+  ZIP-Daten), vollständig getestet.
+
+Noch offen (nicht Teil dieses Schritts): eigenständige App/Oberfläche,
+tatsächliche Erzeugung der Datei-Inhalte (PDF-Flyer, PNG-QR-Codes),
+ZIP-Paketierung und Mailversand der erzeugten Materialien.
 
 ## Phase 4 — Grafikintegration
 

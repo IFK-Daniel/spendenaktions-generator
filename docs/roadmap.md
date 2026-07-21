@@ -26,8 +26,10 @@ fachliche Implementierung erfolgt schrittweise pro Bereich.
   vollständig implementiert und getestet; unabhängig von einer
   Datenbank. Die Reservierung (`reserveIfkId.js`) bleibt bewusst ein
   Platzhalter, bis ein Backend/eine Datenbank existiert.
-- **ZIP** (`core/zip/`) — Struktur angelegt, Implementierung offen.
-  Bündelung mehrerer generierter Dateien zu einem Download-Archiv.
+- **ZIP Core** (`core/zip/`) — **abgeschlossen.** `createZip.js` ist
+  vollständig implementiert und getestet (Bibliothek: JSZip), bündelt
+  beliebig viele Dateien inkl. verschachtelter Ordner zu einem Archiv.
+  Noch nicht in eine App integriert (kein Download, keine Mail-Anbindung).
 - **Mail-Templates** (`core/templates/`) — Struktur angelegt,
   Implementierung offen. Zentrale, wiederverwendbare Mail-Textbausteine
   für mehrere Generatoren.

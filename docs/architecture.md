@@ -35,8 +35,9 @@ Spendenaktions-Generator/
 │   │   ├── validateIfkId.js     # implementiert
 │   │   ├── validateIfkId.test.js
 │   │   └── reserveIfkId.js      # Platzhalter
-│   ├── zip/                     # Platzhalter, siehe Abschnitt 6
-│   │   └── createZip.js
+│   ├── zip/                     # ZIP-Erzeugung: siehe Abschnitt 6
+│   │   ├── createZip.js         # implementiert
+│   │   └── createZip.test.js
 │   ├── templates/                # Platzhalter, siehe Abschnitt 6
 │   │   └── mailTemplates.js
 │   └── integrations/
@@ -57,14 +58,15 @@ Spendenaktions-Generator/
 
 Diese Struktur ändert nichts an `index.html`, `src/style.css`, `Medien/`,
 `public/` oder an `api/send-email.js` — alle bestehenden DOM-IDs, Klassen
-und das Layout bleiben unangetastet. `core/zip`, `core/templates` und
+und das Layout bleiben unangetastet. `core/templates` und
 `core/integrations/humbee` sind weiterhin reine Struktur-Platzhalter:
 jede exportierte Funktion wirft aktuell `Error("... noch nicht
-implementiert")`. `core/id/generateIfkId.js` und `core/id/validateIfkId.js`
-sind vollständig implementiert (siehe Abschnitt 6); `core/id/reserveIfkId.js`
-bleibt bewusst ein Platzhalter, da er eine noch nicht existierende
-Backend-/Datenbankanbindung voraussetzt. Keines dieser Module wird von der
-bestehenden App (`src/main.js`, `api/send-email.js`) aufgerufen.
+implementiert")`. `core/id/generateIfkId.js`, `core/id/validateIfkId.js`
+und `core/zip/createZip.js` sind vollständig implementiert (siehe
+Abschnitt 6); `core/id/reserveIfkId.js` bleibt bewusst ein Platzhalter,
+da er eine noch nicht existierende Backend-/Datenbankanbindung
+voraussetzt. Keines dieser Module wird von der bestehenden App
+(`src/main.js`, `api/send-email.js`) aufgerufen oder in sie integriert.
 
 ## 2. Core-Module im Detail
 
@@ -253,27 +255,85 @@ ausführbar via `npm test`).
 
 ### `core/zip/` — ZIP-Erzeugung
 
-**Zweck**: Mehrere generierte Dateien (aktuell z. B. die vier PNGs des
-QR-Code-Generators, künftig auch Materialgenerator-Ausgaben) zu einem
-einzigen Archiv bündeln, damit Nutzer:innen nicht jede Datei einzeln
-herunterladen müssen.
+**Zweck**: Mehrere generierte Dateien (z. B. künftig die vier PNGs des
+QR-Code-Generators, oder Materialgenerator-Ausgaben) zu einem einzigen
+Archiv bündeln, damit Nutzer:innen nicht jede Datei einzeln
+herunterladen müssen. `createZip.js` ist **vollständig implementiert**
+und funktioniert unabhängig von einer konkreten App — sowohl im Browser
+als auch unter Node.js.
 
-- `createZip.js` — nimmt eine Liste von `{ filename, content }` entgegen
-  und liefert ein ZIP-Archiv zurück. **Spätere Verantwortlichkeit**:
-  reine Datenverarbeitung, kein Download-Mechanismus, kein DOM-Zugriff
-  (analog zu `core/qr/generateQr.js`, das ebenfalls nur Daten
-  zurückgibt statt Downloads auszulösen).
+**Verwendete Bibliothek**: [JSZip](https://stuk.github.io/jszip/) (neue
+Abhängigkeit, siehe `package.json`). JSZip läuft sowohl im Browser als
+auch unter Node.js, benötigt keine DOM-APIs und lässt sich unverändert
+über Vite bündeln.
+
+#### Öffentliche API
+
+```js
+const { filename, blob, size } = await createZip({
+  filename: "IFK_Starterpaket",
+  files: [
+    { filename: "Flyer.pdf", content: /* Blob | ArrayBuffer | Uint8Array | Data-URL-String | String */ },
+    { filename: "Logos/logo.svg", content: "<svg>...</svg>" },
+  ],
+});
+```
+
+- `filename` (Parameter) — Name des Archivs; wird unverändert im
+  Rückgabewert gespiegelt. Es wird **keine** Dateiendung angehängt und
+  **kein** Download ausgelöst — beides bleibt Aufgabe der aufrufenden
+  App.
+- `files` — Liste von `{ filename, content }`. Dateinamen werden
+  unverändert als Pfad im Archiv verwendet; enthält ein Dateiname einen
+  `/` (z. B. `"Logos/logo.svg"`), legt JSZip die entsprechende
+  Ordnerstruktur automatisch im Archiv an.
+
+**Unterstützte `content`-Datentypen**:
+  - `Blob` — wird über `blob.arrayBuffer()` gelesen.
+  - `ArrayBuffer` / `Uint8Array` — werden direkt übernommen.
+  - `string`, beginnend mit `"data:"` (Data-URL, z. B. wie von
+    `core/qr/generateQr.js` erzeugt, `data:<mime>;base64,<daten>`) —
+    der Base64-Anteil wird dekodiert und als Binärinhalt gespeichert.
+  - jeder andere `string` — wird unverändert als UTF-8-Textinhalt
+    gespeichert.
+
+  Reines Base64 **ohne** `data:`-Prefix wird bewusst nicht automatisch
+  erkannt, da ein solcher String nicht zuverlässig von normalem
+  Klartext unterschieden werden kann (z. B. wäre der Text `"Test"`
+  formal ebenfalls gültiges Base64) — eine Heuristik hier würde das
+  Risiko stiller Inhaltsbeschädigung bergen. Binärinhalte als Base64
+  müssen daher als Data-URL übergeben werden.
+
+**Rückgabeformat**: `{ filename: string, blob: Blob, size: number }`.
+`size` entspricht `blob.size` in Byte.
+
+**Fehlerfälle** (jeweils `Error` mit sprechender Meldung):
+  - `filename` fehlt oder ist ein leerer/nur-Leerzeichen-String.
+  - `files` fehlt, ist kein Array, oder ist ein leeres Array.
+  - ein Eintrag in `files` ist kein Objekt.
+  - ein Eintrag hat keinen gültigen (nicht-leeren String-)Dateinamen.
+  - ein Eintrag hat keinen Inhalt (`null`/`undefined`).
+  - der Inhalt eines Eintrags hat einen nicht unterstützten Datentyp
+    (z. B. Zahl, Boolean).
 
 **Geplanter Datenfluss**: App generiert Dateien (z. B. via
 `core/qr/generateQr.js`) → App übergibt sie an `createZip()` → Core
-liefert Archiv-Binärdaten zurück → App setzt daraus einen Download-Link
-oder hängt das Archiv an eine Mail (`core/mail/`) an.
+liefert `{ filename, blob, size }` zurück → App setzt daraus bei Bedarf
+einen Download-Link (`URL.createObjectURL(blob)`) oder hängt das Archiv
+an eine Mail (`core/mail/`) an. Diese Integration ist bewusst noch nicht
+umgesetzt — `createZip.js` wird aktuell von keiner App aufgerufen.
 
-**Abhängigkeiten**: benötigt künftig eine ZIP-Bibliothek als neue
-Projektabhängigkeit (noch nicht ausgewählt/installiert).
+**Abhängigkeiten**: `jszip` (npm-Paket). Keine DOM-Abhängigkeit, keine
+Abhängigkeit zu anderen `core/`-Modulen.
 
-**Erweiterungsmöglichkeiten**: Unterordner-Struktur im Archiv (z. B.
-getrennt nach PayPal/GiroCode), Komprimierungsgrad konfigurierbar.
+**Tests**: `core/zip/createZip.test.js` (Node.js eingebauter
+Test-Runner, ausführbar via `npm test`) — deckt Einzeldatei- und
+Mehrdatei-Archive, verschachtelte Pfade, Data-URL- und
+Binärdaten-Inhalte sowie alle oben genannten Fehlerfälle ab.
+
+**Erweiterungsmöglichkeiten**: Komprimierungsgrad konfigurierbar machen,
+Passwortschutz für Archive (falls von JSZip/einer Erweiterung
+unterstützt), Streaming für sehr große Archive.
 
 ### `core/templates/` — Mail-Vorlagen
 

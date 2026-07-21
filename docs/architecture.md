@@ -622,16 +622,120 @@ getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
 
 **Bewusst nicht Teil dieses Schritts**: ZIP-Paketierung
 (`core/zip/createZip.js` ist vorhanden, aber hier nicht eingebunden),
-Mailversand der erzeugten Materialien, Login/Authentifizierung. Die
-Seite ist aktuell ausschließlich über die (nicht verlinkte) URL
-`/intern/` erreichbar und mit `<meta name="robots" content="noindex,
-nofollow">` versehen — das ersetzt keinen Zugriffsschutz, sondern
-vermeidet lediglich versehentliche Auffindbarkeit über Suchmaschinen.
+Mailversand der erzeugten Materialien. Die Seite ist zusätzlich mit
+`<meta name="robots" content="noindex, nofollow">` versehen — das
+ersetzt keinen Zugriffsschutz, sondern vermeidet lediglich
+versehentliche Auffindbarkeit über Suchmaschinen; der eigentliche
+Zugriffsschutz ist der in Abschnitt 8 beschriebene Login.
 
-**Abhängigkeiten**: `src/intern/main.js` →
-`core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
+**Abhängigkeiten**: `src/intern/generator.js` (Materialgenerator-Logik,
+DOM-Wiring) → `core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
 `core/materials/buildMaterialManifest.js`,
 `core/materials/generateQrMaterials.js`,
 `core/materials/materialTypes.js`, `core/text/extractPaypalLink.js`.
-Keine Abhängigkeit zu `src/main.js` oder umgekehrt — beide Seiten
-teilen sich ausschließlich `core/`.
+`src/intern/auth.js` (Login/Logout-Wiring) → `core/auth/authSession.js`,
+`core/auth/requestLogin.js` (siehe Abschnitt 8). `src/intern/main.js`
+verdrahtet beide Module miteinander, ohne dass sie sich gegenseitig
+kennen. Keine Abhängigkeit zu `src/main.js` oder umgekehrt — beide
+Seiten teilen sich ausschließlich `core/`.
+
+## 8. Interner Login (`core/auth/`, `api/login.js`)
+
+**Zweck**: Der interne Materialgenerator (`/intern/`) soll nicht mehr
+ohne Anmeldung nutzbar sein. Unterstützt wird **genau ein**
+Administrator-Konto — bewusst **keine** Benutzerverwaltung, keine
+Rollen, keine Datenbank, keine Registrierung. Dieser Login ist von der
+Materialgenerator-Logik strikt getrennt (`src/intern/auth.js` vs.
+`src/intern/generator.js`).
+
+**Zugangsdaten**: ausschließlich über Umgebungsvariablen
+(`MATERIAL_ADMIN_USERNAME`, `MATERIAL_ADMIN_PASSWORD`), analog zu den
+bestehenden `SMTP_*`-Variablen in `api/send-email.js`. Keine
+Zugangsdaten im Quellcode oder im Frontend-Bundle.
+
+**Ablauf**:
+1. `src/intern/auth.js` prüft beim Laden von `/intern/` über
+   `core/auth/authSession.js`, ob `sessionStorage` bereits einen
+   gültigen Anmeldezustand enthält. Falls ja: Login-Bereich bleibt
+   verborgen, App-Bereich (`#app-content`) wird angezeigt, der
+   Materialgenerator wird initialisiert (`initGenerator()`).
+2. Falls nicht: Login-Formular (`#login-section`) wird angezeigt.
+   Eingegebene Zugangsdaten werden über
+   `core/auth/requestLogin.js` per `POST /api/login` an die
+   serverseitige Funktion `api/login.js` geschickt.
+3. `api/login.js` vergleicht die übergebenen Zugangsdaten mit
+   `process.env.MATERIAL_ADMIN_USERNAME`/`MATERIAL_ADMIN_PASSWORD` und
+   antwortet ausschließlich mit `{ ok: true }` oder `{ ok: false, error
+   }` — die Zugangsdaten selbst verlassen den Server nie.
+4. Bei Erfolg setzt der Client über `core/auth/authSession.js` einen
+   einfachen Anmeldezustand in `sessionStorage`
+   (`ifk_intern_authenticated = "true"`) und zeigt den App-Bereich an.
+   Bei einem Reload bleibt die Anmeldung dadurch erhalten (`sessionStorage`
+   übersteht Reloads, nicht aber das Schließen des Tabs/Browsers).
+5. Der Logout-Button (`#logout-btn`, im Header, nur sichtbar wenn
+   angemeldet) entfernt den `sessionStorage`-Eintrag und zeigt wieder
+   das Login-Formular.
+
+**Bewusst keine** JWTs, Cookies, externe Auth-Provider oder serverseitige
+Sessions — der Anmeldezustand ist rein clientseitig
+(`sessionStorage`) und wird bei jedem Seitenaufruf neu gegen keine
+weitere Quelle geprüft; einzig `api/login.js` prüft einmalig beim
+Login-Versuch gegen die Umgebungsvariablen.
+
+**Core-Module**:
+- `core/auth/authSession.js` — reine, DOM-freie Verwaltung des
+  Anmeldezustands. Nimmt ein Storage-Objekt (`{ getItem, setItem,
+  removeItem }`) als Parameter entgegen, statt selbst auf `window`
+  zuzugreifen, damit das Modul unter Node.js testbar bleibt
+  (`isAuthenticated`, `setAuthenticated`, `clearAuthenticated`).
+- `core/auth/requestLogin.js` — Client-Wrapper für
+  `POST /api/login`, analog zu `core/mail/sendGeneratedMaterials.js`.
+  Kein eigener Vergleich von Zugangsdaten, ausschließlich
+  Transport/Response-Auswertung.
+
+**`api/login.js`**: Serverless Function (wie `api/send-email.js`),
+liest `MATERIAL_ADMIN_USERNAME`/`MATERIAL_ADMIN_PASSWORD` aus
+`process.env`, vergleicht sie mit dem Request-Body und antwortet mit
+`200 { ok: true }` bzw. `401 { ok: false, error }`. Ohne konfigurierte
+Umgebungsvariablen antwortet der Endpunkt mit `500` statt Zugangsdaten
+zu erraten oder Defaults zu verwenden.
+
+**Frontend-Struktur** (`intern/index.html`, `src/intern/`):
+- `#login-section` — Login-Formular (Benutzername, Passwort, Fehlermeldung,
+  Anmelden-Button), initial sichtbar.
+- `#app-content` — bestehender Materialgenerator-Inhalt (Hero + Card),
+  initial mit `hidden` ausgeblendet, unverändert in Struktur und IDs.
+- `#logout-btn` — Button im Header, initial mit `hidden` ausgeblendet.
+- `src/intern/auth.js` — Login-/Logout-Wiring, kennt keine
+  Materialgenerator-DOM-Elemente außer den oben genannten Containern.
+- `src/intern/generator.js` — unveränderte Materialgenerator-Logik
+  (vormals der Inhalt von `src/intern/main.js`), als `initGenerator()`
+  exportiert.
+- `src/intern/main.js` — dünner Einstiegspunkt, verdrahtet `auth.js`
+  und `generator.js` miteinander (`initGenerator()` wird genau einmal
+  pro Seitenaufruf aufgerufen, auch bei mehrfachem Login/Logout
+  innerhalb derselben Seite).
+
+**Bekannte Einschränkung**: `POST /api/login` ist wie
+`POST /api/send-email` eine Vercel-Serverless-Function und im lokalen
+`npm run dev` (reiner Vite-Devserver) nicht erreichbar — Login lässt
+sich lokal nur gegen einen Vercel-Dev-Server oder nach einem Deploy
+testen. Dies ist keine neue Einschränkung, sondern entspricht dem
+bestehenden Verhalten von `api/send-email.js`.
+
+**Abhängigkeiten**: `src/intern/auth.js` → `core/auth/authSession.js`,
+`core/auth/requestLogin.js`. `core/auth/requestLogin.js` → Browser-
+`fetch`-API, ruft `POST /api/login` auf. `api/login.js` → keine
+externen Bibliotheken, ausschließlich `process.env`. Keine Abhängigkeit
+zu `core/materials/*`, `core/id/*` oder `core/mail/*`.
+
+**Tests**: `core/auth/authSession.test.js` (Node.js eingebauter
+Test-Runner, ausführbar via `npm test`) — deckt Setzen, Lesen und
+Löschen des Anmeldezustands sowie das Ignorieren fremder Werte im
+Speicher ab. `core/auth/requestLogin.js` ist analog zu
+`core/mail/sendGeneratedMaterials.js` bewusst ungetestet (reiner
+`fetch`-Wrapper ohne eigene Logik).
+
+**Erweiterungsmöglichkeiten**: mehrere Administrator-Konten, echte
+Benutzerverwaltung mit Rollen, serverseitige Sessions/JWT, Ablauf der
+Anmeldung nach Inaktivität — bewusst nicht Teil dieses Schritts.

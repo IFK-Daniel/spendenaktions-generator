@@ -19,22 +19,42 @@
             <span class="header-account-value">Materialgenerator</span>
           </div>
         </div>
+        <button id="logout-btn" type="button" class="logout-btn" hidden>Abmelden</button>
       </header>
 
-      <div class="hero">
-        <div class="hero-main">
-          <h1>Materialgenerator</h1>
-          <p class="intro">
-            Personendaten und PayPal-Link eintragen, Materialien auswählen und erzeugen.
-          </p>
-          <p class="intern-notice">
-            Noch ohne Login — nur für den internen Gebrauch. Flyer-PDFs folgen, sobald der
-            Grafikentwurf vorliegt.
-          </p>
-        </div>
-      </div>
+      <section class="card login-card" id="login-section">
+        <h1>Anmeldung</h1>
+        <p class="intro">Bitte mit dem internen Administrator-Konto anmelden.</p>
 
-      <main class="card">
+        <div class="person-field">
+          <label class="field-label" for="login-username-input">Benutzername</label>
+          <input type="text" id="login-username-input" autocomplete="username" />
+        </div>
+        <div class="person-field">
+          <label class="field-label" for="login-password-input">Passwort</label>
+          <input type="password" id="login-password-input" autocomplete="current-password" />
+        </div>
+
+        <div class="error-message" id="login-error-message" hidden></div>
+
+        <button id="login-btn" type="button">Anmelden</button>
+      </section>
+
+      <div id="app-content" hidden>
+        <div class="hero">
+          <div class="hero-main">
+            <h1>Materialgenerator</h1>
+            <p class="intro">
+              Personendaten und PayPal-Link eintragen, Materialien auswählen und erzeugen.
+            </p>
+            <p class="intern-notice">
+              Nur für den internen Gebrauch. Flyer-PDFs folgen, sobald der Grafikentwurf
+              vorliegt.
+            </p>
+          </div>
+        </div>
+
+        <main class="card">
         <div class="person-fields">
           <div class="person-field">
             <label class="field-label" for="first-name-input">Vorname</label>
@@ -117,6 +137,7 @@
           <div class="result-group-grid" id="result-grid"></div>
         </section>
       </main>
+      </div>
     </div>
 
     <script type="module" src="/src/intern/main.js"></script>

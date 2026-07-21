@@ -4,6 +4,83 @@
   color: var(--text-muted);
 }
 
+.logout-btn {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ifk-green-dark);
+  background: none;
+  border: 1px solid var(--ifk-green);
+  border-radius: 9999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.logout-btn:hover {
+  background: var(--ifk-green);
+  color: #ffffff;
+}
+
+.login-card {
+  max-width: 420px;
+  margin: 40px auto;
+}
+
+.login-card h1 {
+  margin: 0 0 12px;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 26px;
+  color: var(--text);
+}
+
+.login-card .intro {
+  margin: 0 0 24px;
+  font-size: 15px;
+}
+
+.login-card .person-field {
+  margin-bottom: 16px;
+}
+
+.login-card input[type="text"],
+.login-card input[type="password"] {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  color: var(--text);
+}
+
+.login-card input[type="text"]:focus,
+.login-card input[type="password"]:focus {
+  outline: none;
+  border-color: var(--ifk-green);
+  box-shadow: 0 0 0 3px rgba(140, 193, 64, 0.18);
+}
+
+#login-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 12px 32px;
+  font-size: 17px;
+  font-weight: 400;
+  font-family: var(--font-sans);
+  color: #ffffff;
+  background: var(--ifk-green);
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+#login-btn:hover {
+  background: var(--ifk-green-dark);
+}
+
 .person-fields {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;

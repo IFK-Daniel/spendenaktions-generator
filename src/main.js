@@ -1,5 +1,15 @@
-import QRCode from "qrcode";
 import logoUrl from "../Medien/IFK Logo nur Zähne.png";
+import { generateQr } from "../core/qr/generateQr.js";
+import { loadImage } from "../core/branding/loadImage.js";
+import { buildGirocodePayload } from "../core/girocode/buildGirocodePayload.js";
+import { QR_COLOR_SCHWARZ, QR_COLOR_GRUEN } from "../core/config/colors.js";
+import { GIROCODE_DEFAULTS } from "../core/config/girocodeDefaults.js";
+import { extractPaypalLink } from "../core/text/extractPaypalLink.js";
+import { extractCampaignTitle } from "../core/text/extractCampaignTitle.js";
+import { isDonateLink } from "../core/text/isDonateLink.js";
+import { slugify } from "../core/text/slugify.js";
+import { isValidEmail } from "../core/mail/validateEmail.js";
+import { sendGeneratedMaterials } from "../core/mail/sendGeneratedMaterials.js";
 
 const input = document.getElementById("paypal-input");
 const generateBtn = document.getElementById("generate-btn");
@@ -24,67 +34,7 @@ const infoCheckbox = document.getElementById("info-checkbox");
 const emailSendBtn = document.getElementById("email-send-btn");
 const emailStatus = document.getElementById("email-status");
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 let generatedState = null;
-
-const GIROCODE_DATA = {
-  empfaenger: "Stiftung It s for Kids",
-  iban: "DE48300800000228228800",
-  bic: "",
-  betrag: "",
-};
-
-const QR_COLOR_SCHWARZ = "#000000";
-const QR_COLOR_GRUEN = "#8CC140";
-
-const PAYPAL_URL_REGEX =
-  /https?:\/\/(www\.)?paypal\.com\/[^\s"'<>]+|https?:\/\/(www\.)?paypal\.me\/[^\s"'<>]+/i;
-
-const CAMPAIGN_TITLE_REGEX = /für\s+(.+?)(?:[.!?\n]|$)/i;
-const DONATE_LINK_REGEX = /paypal\.com\/donate/i;
-
-function extractPaypalLink(text) {
-  const match = text.match(PAYPAL_URL_REGEX);
-  if (!match) return null;
-  return match[0].replace(/[),.]+$/, "");
-}
-
-function extractCampaignTitle(text) {
-  const match = text.match(CAMPAIGN_TITLE_REGEX);
-  if (!match) return null;
-  const title = match[1].trim();
-  return title || null;
-}
-
-function slugify(text) {
-  const umlautMap = { ä: "ae", ö: "oe", ü: "ue", Ä: "Ae", Ö: "Oe", Ü: "Ue", ß: "ss" };
-  const replaced = text.replace(/[äöüÄÖÜß]/g, (ch) => umlautMap[ch]);
-  return replaced
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function buildGirocodePayload({ empfaenger, iban, bic, betrag, verwendungszweck }) {
-  const lines = [
-    "BCD",
-    "002",
-    "1",
-    "SCT",
-    bic,
-    empfaenger,
-    iban.replace(/\s+/g, ""),
-    betrag ? `EUR${betrag}` : "",
-    "",
-    "",
-    verwendungszweck,
-    "",
-  ];
-  return lines.join("\n");
-}
 
 function showError(message) {
   errorMessage.textContent = message;
@@ -109,42 +59,11 @@ function clearEmailStatus() {
   emailStatus.className = "email-status";
 }
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function drawLogoOnCanvas(canvas, logoImage) {
-  const ctx = canvas.getContext("2d");
-  const size = canvas.width;
-  const logoSize = size * 0.18;
-  const logoX = (size - logoSize) / 2;
-  const logoY = (size - logoSize) / 2;
-
-  const paddedSize = logoSize * 1.25;
-  const paddedX = (size - paddedSize) / 2;
-  const paddedY = (size - paddedSize) / 2;
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(paddedX, paddedY, paddedSize, paddedSize);
-
-  ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
-}
-
 async function renderQrToCanvas(canvas, downloadLink, text, filename, logoImage, moduleColor) {
-  await QRCode.toCanvas(canvas, text, {
-    width: 280,
-    margin: 2,
-    errorCorrectionLevel: "H",
-    color: { dark: moduleColor, light: "#ffffff" },
-  });
-  await drawLogoOnCanvas(canvas, logoImage);
-  downloadLink.href = canvas.toDataURL("image/png");
+  const dataUrl = await generateQr(canvas, text, logoImage, moduleColor);
+  downloadLink.href = dataUrl;
   downloadLink.download = filename;
+  return dataUrl;
 }
 
 async function handleGenerate() {
@@ -165,8 +84,7 @@ async function handleGenerate() {
   }
 
   const autoTitle = extractCampaignTitle(rawText);
-  const isDonateLink = DONATE_LINK_REGEX.test(paypalLink);
-  const needsManualTitle = isDonateLink && !autoTitle;
+  const needsManualTitle = isDonateLink(paypalLink) && !autoTitle;
 
   if (needsManualTitle) {
     manualTitleField.hidden = false;
@@ -184,13 +102,14 @@ async function handleGenerate() {
   campaignTitleEl.textContent = campaignTitle || "Kampagne";
 
   const girocodePayload = buildGirocodePayload({
-    ...GIROCODE_DATA,
+    ...GIROCODE_DEFAULTS,
     verwendungszweck: campaignTitle || "SPENDE",
   });
 
   try {
     const logoImage = await loadImage(logoUrl);
-    await renderQrToCanvas(
+
+    const paypalSchwarz = await renderQrToCanvas(
       paypalCanvasSchwarz,
       paypalDownloadSchwarz,
       paypalLink,
@@ -198,7 +117,7 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_SCHWARZ
     );
-    await renderQrToCanvas(
+    const paypalGruen = await renderQrToCanvas(
       paypalCanvasGruen,
       paypalDownloadGruen,
       paypalLink,
@@ -206,7 +125,7 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_GRUEN
     );
-    await renderQrToCanvas(
+    const girocodeSchwarz = await renderQrToCanvas(
       girocodeCanvasSchwarz,
       girocodeDownloadSchwarz,
       girocodePayload,
@@ -214,7 +133,7 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_SCHWARZ
     );
-    await renderQrToCanvas(
+    const girocodeGruen = await renderQrToCanvas(
       girocodeCanvasGruen,
       girocodeDownloadGruen,
       girocodePayload,
@@ -222,14 +141,15 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_GRUEN
     );
+
     generatedState = {
       campaignTitle: campaignTitle || "Kampagne",
       paypalLink,
       pngs: {
-        paypalSchwarz: paypalCanvasSchwarz.toDataURL("image/png"),
-        paypalGruen: paypalCanvasGruen.toDataURL("image/png"),
-        girocodeSchwarz: girocodeCanvasSchwarz.toDataURL("image/png"),
-        girocodeGruen: girocodeCanvasGruen.toDataURL("image/png"),
+        paypalSchwarz,
+        paypalGruen,
+        girocodeSchwarz,
+        girocodeGruen,
       },
       filenames: {
         paypalSchwarz: `${slug}-paypal-schwarz.png`,
@@ -256,7 +176,7 @@ async function handleSendEmail() {
   }
 
   const email = emailInput.value.trim();
-  if (!email || !EMAIL_REGEX.test(email)) {
+  if (!isValidEmail(email)) {
     showEmailStatus("Bitte gib eine gültige E-Mail-Adresse ein.", "error");
     return;
   }
@@ -267,26 +187,20 @@ async function handleSendEmail() {
   showEmailStatus("QR-Codes werden gesendet …", "success");
 
   try {
-    const response = await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        campaignTitle,
-        paypalLink,
-        infoOptIn: infoCheckbox.checked,
-        attachments: [
-          { filename: filenames.paypalSchwarz, content: pngs.paypalSchwarz },
-          { filename: filenames.paypalGruen, content: pngs.paypalGruen },
-          { filename: filenames.girocodeSchwarz, content: pngs.girocodeSchwarz },
-          { filename: filenames.girocodeGruen, content: pngs.girocodeGruen },
-        ],
-      }),
+    const result = await sendGeneratedMaterials({
+      email,
+      campaignTitle,
+      paypalLink,
+      infoOptIn: infoCheckbox.checked,
+      attachments: [
+        { filename: filenames.paypalSchwarz, content: pngs.paypalSchwarz },
+        { filename: filenames.paypalGruen, content: pngs.paypalGruen },
+        { filename: filenames.girocodeSchwarz, content: pngs.girocodeSchwarz },
+        { filename: filenames.girocodeGruen, content: pngs.girocodeGruen },
+      ],
     });
 
-    const result = await response.json();
-
-    if (response.ok && result.ok) {
+    if (result.ok) {
       showEmailStatus("QR-Codes wurden per E-Mail versendet.", "success");
     } else {
       showEmailStatus(result.error || "Versand fehlgeschlagen.", "error");

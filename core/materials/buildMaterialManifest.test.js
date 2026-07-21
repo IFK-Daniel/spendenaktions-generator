@@ -120,3 +120,48 @@ test("ungültige IFK-ID wirft einen Fehler (delegiert an buildMaterialFilenames)
     /ungültige IFK-ID/
   );
 });
+
+test("ohne Angabe von gender enthält person kein gender-Feld", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+  });
+
+  assert.deepEqual(Object.keys(manifest.person).sort(), ["firstName", "ifkId", "lastName"]);
+});
+
+test("gender 'male' wird unverändert in person übernommen", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+    gender: "male",
+  });
+
+  assert.equal(manifest.person.gender, "male");
+});
+
+test("gender 'female' wird unverändert in person übernommen", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Anna",
+    lastName: "Beispiel",
+    ifkId: VALID_IFK_ID,
+    gender: "female",
+  });
+
+  assert.equal(manifest.person.gender, "female");
+});
+
+test("ungültiger gender-Wert wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        gender: "divers",
+      }),
+    /ungültiger Wert für 'gender'/
+  );
+});

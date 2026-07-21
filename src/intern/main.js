@@ -80,6 +80,12 @@ async function handleGenerate() {
     return;
   }
 
+  const genderInput = document.querySelector('input[name="gender"]:checked');
+  if (!genderInput) {
+    showError("Bitte ein Geschlecht auswählen.");
+    return;
+  }
+
   const ifkIdCheck = validateIfkId(ifkIdInput.value.trim());
   if (!ifkIdCheck.valid) {
     showError("Bitte eine gültige IFK-ID eintragen (z. B. IFK7QX).");
@@ -109,6 +115,7 @@ async function handleGenerate() {
     firstName,
     lastName,
     ifkId: ifkIdCheck.normalized,
+    gender: genderInput.value,
     materials: materialKeys,
   });
 

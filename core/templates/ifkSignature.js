@@ -29,7 +29,7 @@ export function buildIfkSignatureHtml({ logoUrl } = {}) {
         RegNr 21.13 – St.1820<br />
         <a href="https://www.its-for-kids.de/datenschutz" style="color: #8a8a89;">Datenschutzerklärung</a>
         &middot;
-        Datenschutzkontakt: <a href="mailto:info@its-for-kids.de" style="color: #8a8a89;">info@its-for-kids.de</a>
+        Datenschutzkontakt: <a href="mailto:info@datenschutzkonzept.com" style="color: #8a8a89;">info@datenschutzkonzept.com</a>
       </p>
       <p style="font-size: 11px; color: #8a8a89; line-height: 1.5;">
         Diese E-Mail kann vertrauliche und/oder rechtlich geschützte Informationen enthalten. Wenn Sie

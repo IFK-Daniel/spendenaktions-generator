@@ -43,7 +43,7 @@ test("enthält Vorstand, Stiftungsnamen, Aufsichtsbehörde und Registriernummer"
 test("enthält Datenschutzlink und Datenschutzkontakt", () => {
   const html = buildIfkSignatureHtml({ logoUrl: "https://example.com/logo.png" });
   assert.match(html, /href="https:\/\/www\.its-for-kids\.de\/datenschutz"/);
-  assert.match(html, /Datenschutzkontakt/);
+  assert.match(html, /Datenschutzkontakt: <a href="mailto:info@datenschutzkonzept\.com"/);
 });
 
 test("enthält den deutschen und englischen Vertraulichkeitshinweis", () => {

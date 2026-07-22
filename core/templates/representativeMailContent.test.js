@@ -62,8 +62,9 @@ test("HTML-Version enthält die vollständige IFK-Signatur", () => {
   assert.match(html, /Tobias Mehwitz \(2\. Vorsitzender\)/);
   assert.match(html, /Bezirksregierung Düsseldorf/);
   assert.match(html, /RegNr 21\.13 – St\.1820/);
+  assert.match(html, /href="https:\/\/www\.its-for-kids\.de\/datenschutz"/);
   assert.match(html, /Datenschutzerklärung/);
-  assert.match(html, /Datenschutzkontakt/);
+  assert.match(html, /Datenschutzkontakt: <a href="mailto:info@datenschutzkonzept\.com"/);
   assert.match(html, /vertrauliche und\/oder rechtlich geschützte Informationen/);
   assert.match(html, /confidential and\/or privileged information/);
 });

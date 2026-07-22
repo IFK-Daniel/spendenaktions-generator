@@ -11,8 +11,8 @@
  * }} request Ergebnis von `buildRepresentativeDeliveryRequest()`.
  * @returns {Promise<{
  *   ok: boolean,
- *   recipient: { ok: boolean, error?: string },
- *   humbee: { ok: boolean, error?: string }
+ *   representative: { success: boolean, messageId?: string, error?: string },
+ *   humbee: { success: boolean, messageId?: string, error?: string }
  * }>}
  */
 export async function sendRepresentativeMaterials(request) {
@@ -24,17 +24,17 @@ export async function sendRepresentativeMaterials(request) {
 
   const result = await response.json().catch(() => ({}));
 
-  if (!response.ok && !result.recipient && !result.humbee) {
+  if (!response.ok && !result.representative && !result.humbee) {
     return {
       ok: false,
-      recipient: { ok: false, error: result.error || "Versand fehlgeschlagen." },
-      humbee: { ok: false, error: result.error || "Versand fehlgeschlagen." },
+      representative: { success: false, error: result.error || "Versand fehlgeschlagen." },
+      humbee: { success: false, error: result.error || "Versand fehlgeschlagen." },
     };
   }
 
   return {
     ok: result.ok === true,
-    recipient: result.recipient ?? { ok: false, error: "Versand fehlgeschlagen." },
-    humbee: result.humbee ?? { ok: false, error: "Versand fehlgeschlagen." },
+    representative: result.representative ?? { success: false, error: "Versand fehlgeschlagen." },
+    humbee: result.humbee ?? { success: false, error: "Versand fehlgeschlagen." },
   };
 }

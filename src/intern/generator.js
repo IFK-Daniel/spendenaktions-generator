@@ -181,14 +181,14 @@ export function initGenerator() {
 
       if (result.ok) {
         showDeliveryStatus("Versand erfolgreich.", "success");
-      } else if (!result.recipient.ok && !result.humbee.ok) {
+      } else if (!result.representative.success && !result.humbee.success) {
         showDeliveryStatus(
           `Versand an Empfänger fehlgeschlagen. Dokumentation an humbee fehlgeschlagen.`,
           "error"
         );
-      } else if (!result.recipient.ok) {
+      } else if (!result.representative.success) {
         showDeliveryStatus(
-          result.recipient.error || "Versand an Empfänger fehlgeschlagen.",
+          result.representative.error || "Versand an Empfänger fehlgeschlagen.",
           "error"
         );
       } else {

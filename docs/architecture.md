@@ -828,15 +828,21 @@ Mailanhang erzeugt.
 5. `core/mail/sendRepresentativeMaterials.js` (reiner `fetch`-Wrapper,
    analog zu `core/mail/sendGeneratedMaterials.js`) schickt den
    Payload an `POST /api/send-representative-mail`.
-6. Die Serverless-Function versendet zwei unabhängige Mails
-   (Empfänger, humbee) und liefert für jede einzeln `{ ok, error? }`
+6. Die Serverless-Function versendet über
+   `core/mail/deliverRepresentativeMaterials.js` zwei unabhängige
+   Mails (Repräsentant, humbee) und liefert für jede einzeln
+   `{ success, messageId?, error? }` unter `representative`/`humbee`
    zurück; `ok` im Gesamtergebnis ist nur `true`, wenn **beide**
-   erfolgreich waren. Das UI zeigt "Versand läuft …" während des
-   Requests, bei Erfolg "Versand erfolgreich.", bei Teil- oder
-   Komplettfehlern eine eindeutige Fehlermeldung (welcher Teil
-   fehlgeschlagen ist) statt eines generischen Fehlers. Der
-   Versand-Button ist während eines laufenden Versands deaktiviert
-   (`isSending`-Flag), um Doppel-/Mehrfachversand zu verhindern.
+   erfolgreich waren. Beide Versandversuche werden immer durchgeführt,
+   unabhängig vom Ergebnis des jeweils anderen (ein Fehlschlag der
+   Repräsentanten-Mail überspringt den humbee-Versand nicht und
+   umgekehrt) — siehe auch die Logging-Details unten. Das UI zeigt
+   "Versand läuft …" während des Requests, bei Erfolg
+   "Versand erfolgreich.", bei Teil- oder Komplettfehlern eine
+   eindeutige Fehlermeldung (welcher Teil fehlgeschlagen ist) statt
+   eines generischen Fehlers. Der Versand-Button ist während eines
+   laufenden Versands deaktiviert (`isSending`-Flag), um
+   Doppel-/Mehrfachversand zu verhindern.
 
 **Inhalt der Repräsentanten-Mail**: Betreff konstant "Deine
 personalisierten Materialien von It's for Kids". Anrede/Rollenbezeichnung
@@ -856,17 +862,36 @@ dieselbe generische Dateiliste automatisch mit angehängt, ohne
 Code-Änderung) — **keine** ZIP-Datei.
 
 **Serverseitig** (`api/send-representative-mail.js`, `api/_lib/
-buildMailTransporter.js`): neue, eigenständige Serverless-Function.
-`api/_lib/buildMailTransporter.js` kapselt den `nodemailer`-Transporter-
-Aufbau aus denselben `SMTP_*`-Umgebungsvariablen wie `api/
-send-email.js`. Bewusst als separate Datei angelegt statt aus `api/
-send-email.js` importiert: der bestehende öffentliche QR-Code-
-Generator und dessen Mailfunktion (`api/send-email.js`) dürfen laut
-Vorgabe nicht verändert werden. Serverseitige Validierung (Empfänger-
-und humbee-Adresse über `core/mail/validateEmail.js`, Pflichtfelder)
-erfolgt unabhängig von der clientseitigen Prüfung, keine
-Zugangsdaten oder sensiblen Nutzdaten werden geloggt (nur
-Fehler-Namen, analog zu `api/send-email.js`).
+buildMailTransporter.js`, `core/mail/deliverRepresentativeMaterials.js`):
+`api/send-representative-mail.js` bleibt bewusst dünn — Request-
+Validierung (Empfänger- und humbee-Adresse über
+`core/mail/validateEmail.js`, Pflichtfelder), Base64-Dekodierung der
+Anhänge und Aufbau des `nodemailer`-Transporters über
+`api/_lib/buildMailTransporter.js` (kapselt denselben `SMTP_*`-Aufbau
+wie `api/send-email.js`; bewusst als separate Datei angelegt statt von
+dort importiert, da der bestehende öffentliche QR-Code-Generator und
+dessen Mailfunktion laut Vorgabe nicht verändert werden dürfen). Der
+eigentliche Versand inkl. Protokollierung liegt im DOM-freien,
+ohne echten Mailserver testbaren `core/mail/
+deliverRepresentativeMaterials.js` (SMTP-Transport über injizierbares
+`deps.sendMail`).
+
+**Protokollierung** (`core/mail/deliverRepresentativeMaterials.js`):
+Repräsentanten- und humbee-Versand werden als zwei unabhängige, klar
+unterscheidbare Vorgänge protokolliert — je Vorgang eine Zeile vor dem
+Versand (`representative mail delivery started` /
+`humbee mail delivery started`), eine bei Erfolg
+(`… delivery accepted`, inkl. SMTP-Response-Code, SMTP-Message-ID,
+Anzahl und Typen der Anhänge) und eine bei Fehlschlag
+(`… delivery failed`, inkl. Fehlerkategorie). Eine optionale
+Lauf-/Request-ID (`x-vercel-id`-Header, sofern vorhanden) wird in
+jede Zeile aufgenommen, um zusammengehörige Log-Zeilen zu
+korrelieren. Bewusst **nicht** geloggt: Namen, E-Mail-Adressen,
+IFK-ID, Bundesland/Region, Betreff, Dateinamen, Mailtext,
+Dateiinhalte oder Zugangsdaten. Zusätzlich gilt ein von der
+SMTP-Antwort abgelehnter Empfänger (`info.rejected`) auch dann als
+Fehlschlag, wenn `sendMail` nicht wirft — ein bloßes "hat nicht
+geworfen" reicht nicht als Erfolgsnachweis.
 
 **Core-Module**:
 - `core/materials/getRepresentativeRoleLabel.js` — Gender →
@@ -888,8 +913,18 @@ Fehler-Namen, analog zu `api/send-email.js`).
   vollständigen Request-Payload; exportiert zusätzlich
   `resolveRepresentativeRecipient` (Standard- vs. abweichende
   Adresse) einzeln testbar.
+- `core/mail/guessAttachmentMimeType.js` — leitet aus der
+  Dateiendung einen groben MIME-Typ ab, ausschließlich zur
+  datensparsamen Log-Protokollierung von Anhangs-**Typen** (keine
+  Dateinamen). Generisch über eine Endungs-Tabelle, keine
+  hartcodierte Vier-QR-Dateien-Logik.
+- `core/mail/deliverRepresentativeMaterials.js` — serverseitige
+  Versand-Orchestrierung (zwei unabhängige `sendMail`-Aufrufe,
+  Protokollierung, Ablehnungs-Erkennung); `sendMail` ist injizierbar,
+  daher ohne echten Mailserver testbar.
 - `core/mail/sendRepresentativeMaterials.js` — `fetch`-Wrapper zum
-  neuen Endpunkt.
+  neuen Endpunkt; liefert
+  `{ ok, representative: { success, messageId?, error? }, humbee: { success, messageId?, error? } }`.
 
 Alle oben genannten Core-Module sind DOM-frei und ausschließlich über
 Parameter/Rückgabewerte nutzbar; `core/mail/sendRepresentativeMaterials.js`
@@ -905,21 +940,29 @@ des öffentlichen Generators.
 **Tests**: `getRepresentativeRoleLabel.test.js`,
 `buildMaterialZipFilename.test.js`, `buildMaterialZip.test.js`,
 `encodeAttachmentBase64.test.js`, `representativeMailContent.test.js`,
-`humbeeMailContent.test.js`, `buildRepresentativeDeliveryRequest.test.js`
+`humbeeMailContent.test.js`, `buildRepresentativeDeliveryRequest.test.js`,
+`guessAttachmentMimeType.test.js`, `deliverRepresentativeMaterials.test.js`
 (Node.js eingebauter Test-Runner, ausführbar via `npm test`) — decken
 u. a. ab: Standard- vs. abweichender Empfänger, Ablehnung einer
 ungültigen abweichenden Adresse, Rollenbezeichnung nach Geschlecht,
 ZIP-Dateiname und -Inhalt, humbee-Betreffschema, getrennte Anhänge
-(Repräsentant erhält nur das ZIP, humbee nur Einzeldateien). Keine
-echten Zugangsdaten oder echten Repräsentantendaten in den Tests.
+(Repräsentant erhält nur das ZIP, humbee nur Einzeldateien), dass
+beide Versandaufrufe unabhängig vom Ergebnis des jeweils anderen
+durchgeführt werden, dass ein von der SMTP-Antwort abgelehnter
+Empfänger als Fehlschlag gilt, sowie dass die Logs beide Vorgänge
+eindeutig unterscheiden und keine Empfängeradressen, Betreffs,
+Dateinamen oder Mailtexte enthalten. Keine echten Zugangsdaten oder
+echten Repräsentantendaten in den Tests.
 `core/mail/sendRepresentativeMaterials.js` ist analog zu
 `core/mail/sendGeneratedMaterials.js` bewusst ungetestet (reiner
 `fetch`-Wrapper ohne eigene Logik).
 
 **Abhängigkeiten**: siehe Abschnitt 7 sowie die Core-Modul-Liste oben.
 `api/send-representative-mail.js` → `api/_lib/buildMailTransporter.js`,
-`core/mail/validateEmail.js`, `nodemailer`. Keine Abhängigkeit zu
-`api/send-email.js` oder umgekehrt.
+`core/mail/validateEmail.js`, `core/mail/deliverRepresentativeMaterials.js`.
+`core/mail/deliverRepresentativeMaterials.js` → `core/mail/
+guessAttachmentMimeType.js`. Keine Abhängigkeit zu `api/send-email.js`
+oder umgekehrt.
 
 **Erweiterungsmöglichkeiten**: mehrere Administrator-/Versandkonten,
 automatischer Abruf und Anhang der Foto-Datei, Versandhistorie/

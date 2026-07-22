@@ -1,19 +1,21 @@
 import { buildMailTransporter, getMailFromAddress } from "./_lib/buildMailTransporter.js";
 import { isValidEmail } from "../core/mail/validateEmail.js";
+import { deliverRepresentativeMaterials } from "../core/mail/deliverRepresentativeMaterials.js";
 
 /**
- * Versendet die Repräsentanten-Mail (ZIP-Anhang) und die separate
- * Dokumentations-Mail an humbee (Einzeldateien als Anhänge). Die
- * Mailinhalte (Betreff/Text/HTML) werden bereits clientseitig über
- * `core/materials/buildRepresentativeDeliveryRequest.js` gebaut — diese
- * Funktion versendet sie ausschließlich, ohne SMTP-Zugangsdaten im
- * Frontend preiszugeben.
+ * Validiert die Anfrage und delegiert den eigentlichen Versand an
+ * `core/materials/deliverRepresentativeMaterials.js` (Repräsentanten-
+ * Mail mit ZIP-Anhang + separate humbee-Dokumentations-Mail mit
+ * Einzeldateien). Diese Datei bleibt bewusst dünn: SMTP-Transport-
+ * Aufbau (`buildMailTransporter`), Request-Validierung und Base64-
+ * Dekodierung — die eigentliche Versand-/Log-Logik liegt im
+ * DOM-freien, ohne echten Mailserver testbaren Core-Modul.
  *
  * Der Versand gilt nur dann als vollständig erfolgreich, wenn sowohl
- * die Empfängermail als auch die humbee-Mail erfolgreich versendet
- * wurden. Beide Versandversuche werden unabhängig voneinander
- * durchgeführt und im Ergebnis einzeln ausgewiesen, damit ein
- * Teilfehler eindeutig benannt werden kann.
+ * die Repräsentanten-Mail als auch die humbee-Mail erfolgreich
+ * versendet wurden. Beide Versandversuche werden unabhängig
+ * voneinander durchgeführt und im Ergebnis einzeln ausgewiesen, damit
+ * ein Teilfehler eindeutig benannt werden kann.
  */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -63,47 +65,26 @@ export default async function handler(req, res) {
 
   const transporter = buildMailTransporter();
   const fromAddress = getMailFromAddress();
+  const runId = typeof req.headers?.["x-vercel-id"] === "string" ? req.headers["x-vercel-id"] : undefined;
 
-  const result = {
-    recipient: { ok: false },
-    humbee: { ok: false },
-  };
-
-  try {
-    await transporter.sendMail({
-      from: fromAddress,
+  const result = await deliverRepresentativeMaterials({
+    recipient: {
       to: recipient.to,
       subject: recipient.subject,
       text: recipient.text,
       html: recipient.html,
-      attachments: [{ filename: recipient.zipFilename, content: zipBuffer }],
-    });
-    result.recipient.ok = true;
-  } catch (err) {
-    console.error(
-      "[send-representative-mail] Versand an Empfänger fehlgeschlagen:",
-      err instanceof Error ? err.name : "unknown error"
-    );
-    result.recipient.error = "Versand an Empfänger fehlgeschlagen. Bitte versuche es später erneut.";
-  }
-
-  try {
-    await transporter.sendMail({
-      from: fromAddress,
+      zipFilename: recipient.zipFilename,
+      zipContent: zipBuffer,
+    },
+    humbee: {
       to: humbee.to,
       subject: humbee.subject,
       text: humbee.text,
       attachments: humbeeAttachments,
-    });
-    result.humbee.ok = true;
-  } catch (err) {
-    console.error(
-      "[send-representative-mail] Dokumentation an humbee fehlgeschlagen:",
-      err instanceof Error ? err.name : "unknown error"
-    );
-    result.humbee.error = "Dokumentation an humbee fehlgeschlagen.";
-  }
+    },
+    sendMail: (mailOptions) => transporter.sendMail({ from: fromAddress, ...mailOptions }),
+    runId,
+  });
 
-  const ok = result.recipient.ok && result.humbee.ok;
-  res.status(200).json({ ok, ...result });
+  res.status(200).json(result);
 }

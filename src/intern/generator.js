@@ -2,7 +2,10 @@ import logoUrl from "../../Medien/IFK Logo nur Zähne.png";
 import { generateIfkId } from "../../core/id/generateIfkId.js";
 import { validateIfkId } from "../../core/id/validateIfkId.js";
 import { isValidEmail } from "../../core/mail/validateEmail.js";
+import { sendRepresentativeMaterials } from "../../core/mail/sendRepresentativeMaterials.js";
 import { buildMaterialManifest } from "../../core/materials/buildMaterialManifest.js";
+import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
+import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
@@ -34,6 +37,18 @@ export function initGenerator() {
   const resultGrid = document.getElementById("result-grid");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
 
+  const deliverySection = document.getElementById("delivery-section");
+  const deliveryTargetRadios = Array.from(document.querySelectorAll('input[name="delivery-target"]'));
+  const alternativeEmailField = document.getElementById("alternative-email-field");
+  const alternativeEmailInput = document.getElementById("alternative-email-input");
+  const deliveryErrorMessage = document.getElementById("delivery-error-message");
+  const deliveryStatus = document.getElementById("delivery-status");
+  const deliverySendBtn = document.getElementById("delivery-send-btn");
+
+  let lastManifest = null;
+  let lastFiles = null;
+  let isSending = false;
+
   ifkIdInput.value = generateIfkId();
 
   function showError(message) {
@@ -45,6 +60,44 @@ export function initGenerator() {
   function clearError() {
     errorMessage.hidden = true;
     errorMessage.textContent = "";
+  }
+
+  function showDeliveryError(message) {
+    deliveryErrorMessage.textContent = message;
+    deliveryErrorMessage.hidden = false;
+  }
+
+  function clearDeliveryError() {
+    deliveryErrorMessage.hidden = true;
+    deliveryErrorMessage.textContent = "";
+  }
+
+  function showDeliveryStatus(message, type) {
+    deliveryStatus.textContent = message;
+    deliveryStatus.className = `delivery-status ${type}`;
+    deliveryStatus.hidden = false;
+  }
+
+  function clearDeliveryStatus() {
+    deliveryStatus.hidden = true;
+    deliveryStatus.textContent = "";
+    deliveryStatus.className = "delivery-status";
+  }
+
+  function selectedDeliveryTarget() {
+    const checked = deliveryTargetRadios.find((radio) => radio.checked);
+    return checked ? checked.value : "representative";
+  }
+
+  function resetDeliverySection() {
+    clearDeliveryError();
+    clearDeliveryStatus();
+    alternativeEmailInput.value = "";
+    alternativeEmailField.hidden = true;
+    for (const radio of deliveryTargetRadios) {
+      radio.checked = radio.value === "representative";
+    }
+    deliverySendBtn.disabled = false;
   }
 
   function selectedMaterialKeys() {
@@ -83,8 +136,80 @@ export function initGenerator() {
     results.hidden = false;
   }
 
+  async function handleSendDelivery() {
+    if (isSending) return;
+
+    clearDeliveryError();
+
+    if (!lastManifest || !lastFiles || lastFiles.length === 0) {
+      showDeliveryError("Bitte zuerst Materialien erstellen.");
+      return;
+    }
+
+    const target = selectedDeliveryTarget();
+    let alternativeEmail;
+    if (target === "alternative") {
+      alternativeEmail = alternativeEmailInput.value.trim();
+      if (!isValidEmail(alternativeEmail)) {
+        showDeliveryError("Bitte eine gültige abweichende E-Mail-Adresse eintragen.");
+        return;
+      }
+    }
+
+    isSending = true;
+    deliverySendBtn.disabled = true;
+    clearDeliveryStatus();
+    showDeliveryStatus("Versand läuft …", "loading");
+
+    try {
+      const zip = await buildMaterialZip({
+        ifkId: lastManifest.person.ifkId,
+        firstName: lastManifest.person.firstName,
+        lastName: lastManifest.person.lastName,
+        files: lastFiles,
+      });
+
+      const request = await buildRepresentativeDeliveryRequest({
+        manifest: lastManifest,
+        zip,
+        files: lastFiles,
+        alternativeEmail,
+        logoUrl: `${window.location.origin}/ifk-logo-full.png`,
+      });
+
+      const result = await sendRepresentativeMaterials(request);
+
+      if (result.ok) {
+        showDeliveryStatus("Versand erfolgreich.", "success");
+      } else if (!result.recipient.ok && !result.humbee.ok) {
+        showDeliveryStatus(
+          `Versand an Empfänger fehlgeschlagen. Dokumentation an humbee fehlgeschlagen.`,
+          "error"
+        );
+      } else if (!result.recipient.ok) {
+        showDeliveryStatus(
+          result.recipient.error || "Versand an Empfänger fehlgeschlagen.",
+          "error"
+        );
+      } else {
+        showDeliveryStatus(
+          result.humbee.error || "Dokumentation an humbee fehlgeschlagen. Der Empfänger hat seine Materialien bereits erhalten.",
+          "error"
+        );
+      }
+    } catch (err) {
+      showDeliveryStatus(err.message || "Versand fehlgeschlagen. Bitte versuche es später erneut.", "error");
+    } finally {
+      isSending = false;
+      deliverySendBtn.disabled = false;
+    }
+  }
+
   async function handleGenerate() {
     clearError();
+    deliverySection.hidden = true;
+    lastManifest = null;
+    lastFiles = null;
 
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
@@ -176,6 +301,11 @@ export function initGenerator() {
       });
 
       renderResults(manifest.person, files);
+
+      lastManifest = manifest;
+      lastFiles = files;
+      resetDeliverySection();
+      deliverySection.hidden = false;
     } catch (err) {
       showError(err.message || "Beim Erstellen der Materialien ist ein Fehler aufgetreten.");
     }
@@ -185,5 +315,12 @@ export function initGenerator() {
     ifkIdInput.value = generateIfkId();
   });
 
+  for (const radio of deliveryTargetRadios) {
+    radio.addEventListener("change", () => {
+      alternativeEmailField.hidden = selectedDeliveryTarget() !== "alternative";
+    });
+  }
+
   generateBtn.addEventListener("click", handleGenerate);
+  deliverySendBtn.addEventListener("click", handleSendDelivery);
 }

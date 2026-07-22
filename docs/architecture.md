@@ -658,21 +658,27 @@ getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
   erzeugten PNGs werden je Material als Vorschaubild (`URL
   .createObjectURL`) sowie als Einzeldownload mit dem Dateinamen aus
   dem Manifest angezeigt.
+- Versand: Im Anschluss an eine erfolgreiche Erzeugung erscheint ein
+  Versandbereich, über den die erzeugten Materialien per Mail an den
+  Repräsentanten (oder eine abweichende Adresse) sowie zur
+  Dokumentation an humbee versendet werden können — siehe Abschnitt 9.
 
-**Bewusst nicht Teil dieses Schritts**: ZIP-Paketierung
-(`core/zip/createZip.js` ist vorhanden, aber hier nicht eingebunden),
-Mailversand der erzeugten Materialien. Die Seite ist zusätzlich mit
-`<meta name="robots" content="noindex, nofollow">` versehen — das
+**Bewusst nicht Teil dieses Schritts**: ein lokaler Download des
+gesamten ZIP-Archivs (das Archiv wird ausschließlich als Mailanhang
+erzeugt, nicht als Download-Link angeboten). Die Seite ist zusätzlich
+mit `<meta name="robots" content="noindex, nofollow">` versehen — das
 ersetzt keinen Zugriffsschutz, sondern vermeidet lediglich
 versehentliche Auffindbarkeit über Suchmaschinen; der eigentliche
 Zugriffsschutz ist der in Abschnitt 8 beschriebene Login.
 
 **Abhängigkeiten**: `src/intern/generator.js` (Materialgenerator-Logik,
 DOM-Wiring) → `core/id/generateIfkId.js`, `core/id/validateIfkId.js`,
-`core/mail/validateEmail.js`, `core/materials/buildMaterialManifest.js`,
+`core/mail/validateEmail.js`, `core/mail/sendRepresentativeMaterials.js`,
+`core/materials/buildMaterialManifest.js`, `core/materials/buildMaterialZip.js`,
+`core/materials/buildRepresentativeDeliveryRequest.js`,
 `core/materials/generateQrMaterials.js`,
 `core/materials/materialTypes.js`, `core/text/extractPaypalLink.js`,
-`core/text/isHttpUrl.js`.
+`core/text/isHttpUrl.js` (siehe auch Abschnitt 9).
 `src/intern/auth.js` (Login/Logout-Wiring) → `core/auth/authSession.js`,
 `core/auth/requestLogin.js` (siehe Abschnitt 8). `src/intern/main.js`
 verdrahtet beide Module miteinander, ohne dass sie sich gegenseitig
@@ -779,3 +785,143 @@ Speicher ab. `core/auth/requestLogin.js` ist analog zu
 **Erweiterungsmöglichkeiten**: mehrere Administrator-Konten, echte
 Benutzerverwaltung mit Rollen, serverseitige Sessions/JWT, Ablauf der
 Anmeldung nach Inaktivität — bewusst nicht Teil dieses Schritts.
+
+## 9. Materialversand an Repräsentant und humbee (`core/materials/`, `core/templates/`, `core/mail/`, `api/send-representative-mail.js`)
+
+**Zweck**: Nach erfolgreicher Erzeugung der ausgewählten Materialien
+im internen Materialgenerator können diese direkt per Mail versendet
+werden — an den Repräsentanten (Standardfall: `person.email`, oder
+wahlweise an eine abweichende Adresse, z. B. damit ein Mitarbeiter die
+Mail zunächst an sich selbst schickt) sowie parallel als
+Dokumentations-Mail an humbee. Es gibt weiterhin **keinen** lokalen
+ZIP-Download-Button — das ZIP-Archiv wird ausschließlich als
+Mailanhang erzeugt.
+
+**Ablauf** (`src/intern/generator.js`, Funktion `handleSendDelivery`):
+1. Nach `generateQrMaterials()` werden Manifest und erzeugte Dateien
+   im Modul gemerkt (`lastManifest`/`lastFiles`) und der
+   Versandbereich (`#delivery-section`) eingeblendet und zurückgesetzt
+   (Standardoption "Direkt an den Repräsentanten senden").
+2. Bei Auswahl "An abweichende E-Mail-Adresse senden" erscheint ein
+   Pflichtfeld; die Adresse wird vor dem Versand über die bestehende
+   `core/mail/validateEmail.js` geprüft.
+3. `core/materials/buildMaterialZip.js` bündelt die tatsächlich
+   erzeugten Dateien (nicht mehr, nicht weniger) über den bestehenden
+   `core/zip/createZip.js` zu genau einem Archiv; der Dateiname kommt
+   von `core/materials/buildMaterialZipFilename.js`
+   (`IFK_Materialien_<IFK-ID>_<Vorname>_<Nachname>.zip`, mit derselben
+   Sanitizing-Logik wie die einzelnen Materialdateinamen — siehe
+   `buildMaterialFilenames.js`, dessen `sanitizeNamePart` dafür
+   exportiert wurde).
+4. `core/materials/buildRepresentativeDeliveryRequest.js` baut daraus
+   den vollständigen, versandfertigen Request-Payload: Betreff/Text/
+   HTML für die Repräsentanten-Mail (`core/templates/
+   representativeMailContent.js`, inkl. Rollenbezeichnung über
+   `getRepresentativeRoleLabel.js` und dem gemeinsamen HTML-Rahmen
+   `core/templates/ifkHtmlEmail.js` — der bestehenden IFK-HTML-Signatur/
+   Branding, wie sie bereits in `api/send-email.js` verwendet wird),
+   sowie Betreff/Text für die humbee-Mail
+   (`core/templates/humbeeMailContent.js`). ZIP- und Einzeldatei-
+   Inhalte werden über `core/mail/encodeAttachmentBase64.js` als
+   Base64-Strings kodiert (browser- und Node-kompatibel, ohne
+   Duplikat der ZIP-Inhaltsnormalisierung).
+5. `core/mail/sendRepresentativeMaterials.js` (reiner `fetch`-Wrapper,
+   analog zu `core/mail/sendGeneratedMaterials.js`) schickt den
+   Payload an `POST /api/send-representative-mail`.
+6. Die Serverless-Function versendet zwei unabhängige Mails
+   (Empfänger, humbee) und liefert für jede einzeln `{ ok, error? }`
+   zurück; `ok` im Gesamtergebnis ist nur `true`, wenn **beide**
+   erfolgreich waren. Das UI zeigt "Versand läuft …" während des
+   Requests, bei Erfolg "Versand erfolgreich.", bei Teil- oder
+   Komplettfehlern eine eindeutige Fehlermeldung (welcher Teil
+   fehlgeschlagen ist) statt eines generischen Fehlers. Der
+   Versand-Button ist während eines laufenden Versands deaktiviert
+   (`isSending`-Flag), um Doppel-/Mehrfachversand zu verhindern.
+
+**Inhalt der Repräsentanten-Mail**: Betreff konstant "Deine
+personalisierten Materialien von It's for Kids". Anrede/Rollenbezeichnung
+abhängig von `person.gender` ("Repräsentant" bei `"male"` oder
+fehlender Angabe, "Repräsentantin" bei `"female"` —
+`getRepresentativeRoleLabel.js`). Genau ein Anhang: das ZIP-Archiv mit
+allen tatsächlich erzeugten Materialien. Keine einzelnen
+Materialdateien zusätzlich als Anhang.
+
+**Inhalt der humbee-Mail**: Empfänger `office@its-for-kids.de`
+(konstant). Betreff exakt `Repräsentant <Bundesland> / <Region> /
+<Nachname>, <Vorname>` — immer das Wort "Repräsentant", unabhängig vom
+Geschlecht (`buildHumbeeMailSubject`). Kurzer technischer Klartext
+ohne Signatur/Grußformel. Anhänge: alle tatsächlich erzeugten
+Materialdateien einzeln (aktuell PNGs; künftige Flyer-PDFs würden über
+dieselbe generische Dateiliste automatisch mit angehängt, ohne
+Code-Änderung) — **keine** ZIP-Datei.
+
+**Serverseitig** (`api/send-representative-mail.js`, `api/_lib/
+buildMailTransporter.js`): neue, eigenständige Serverless-Function.
+`api/_lib/buildMailTransporter.js` kapselt den `nodemailer`-Transporter-
+Aufbau aus denselben `SMTP_*`-Umgebungsvariablen wie `api/
+send-email.js`. Bewusst als separate Datei angelegt statt aus `api/
+send-email.js` importiert: der bestehende öffentliche QR-Code-
+Generator und dessen Mailfunktion (`api/send-email.js`) dürfen laut
+Vorgabe nicht verändert werden. Serverseitige Validierung (Empfänger-
+und humbee-Adresse über `core/mail/validateEmail.js`, Pflichtfelder)
+erfolgt unabhängig von der clientseitigen Prüfung, keine
+Zugangsdaten oder sensiblen Nutzdaten werden geloggt (nur
+Fehler-Namen, analog zu `api/send-email.js`).
+
+**Core-Module**:
+- `core/materials/getRepresentativeRoleLabel.js` — Gender →
+  Rollenbezeichnung.
+- `core/materials/buildMaterialZipFilename.js` — ZIP-Dateiname, nutzt
+  `sanitizeNamePart` aus `buildMaterialFilenames.js`.
+- `core/materials/buildMaterialZip.js` — Orchestrierung über
+  `createZip.js` und `buildMaterialZipFilename.js`.
+- `core/templates/ifkHtmlEmail.js` — gemeinsamer HTML-Rahmen
+  (Logo + Absätze), entspricht optisch dem bestehenden Markup in
+  `api/send-email.js`.
+- `core/templates/representativeMailContent.js` — Betreff/Text/HTML
+  der Repräsentanten-Mail.
+- `core/templates/humbeeMailContent.js` — Betreff/Text der
+  humbee-Mail.
+- `core/mail/encodeAttachmentBase64.js` — Content (Blob/ArrayBuffer/
+  Uint8Array) → Base64-String.
+- `core/materials/buildRepresentativeDeliveryRequest.js` — baut den
+  vollständigen Request-Payload; exportiert zusätzlich
+  `resolveRepresentativeRecipient` (Standard- vs. abweichende
+  Adresse) einzeln testbar.
+- `core/mail/sendRepresentativeMaterials.js` — `fetch`-Wrapper zum
+  neuen Endpunkt.
+
+Alle oben genannten Core-Module sind DOM-frei und ausschließlich über
+Parameter/Rückgabewerte nutzbar; `core/mail/sendRepresentativeMaterials.js`
+nutzt wie `core/mail/sendGeneratedMaterials.js` bewusst die Browser-
+`fetch`-API (kein DOM-Zugriff).
+
+**Bewusst nicht Teil dieses Schritts**: Abruf/Verarbeitung der unter
+`photoUrl` hinterlegten Foto-Datei, Erzeugung der beiden Flyer-Typen,
+weitere Versandoptionen (z. B. mehrere Empfänger, Terminierung),
+Änderungen am Login oder an der bestehenden QR-Erzeugung/-Mailfunktion
+des öffentlichen Generators.
+
+**Tests**: `getRepresentativeRoleLabel.test.js`,
+`buildMaterialZipFilename.test.js`, `buildMaterialZip.test.js`,
+`encodeAttachmentBase64.test.js`, `representativeMailContent.test.js`,
+`humbeeMailContent.test.js`, `buildRepresentativeDeliveryRequest.test.js`
+(Node.js eingebauter Test-Runner, ausführbar via `npm test`) — decken
+u. a. ab: Standard- vs. abweichender Empfänger, Ablehnung einer
+ungültigen abweichenden Adresse, Rollenbezeichnung nach Geschlecht,
+ZIP-Dateiname und -Inhalt, humbee-Betreffschema, getrennte Anhänge
+(Repräsentant erhält nur das ZIP, humbee nur Einzeldateien). Keine
+echten Zugangsdaten oder echten Repräsentantendaten in den Tests.
+`core/mail/sendRepresentativeMaterials.js` ist analog zu
+`core/mail/sendGeneratedMaterials.js` bewusst ungetestet (reiner
+`fetch`-Wrapper ohne eigene Logik).
+
+**Abhängigkeiten**: siehe Abschnitt 7 sowie die Core-Modul-Liste oben.
+`api/send-representative-mail.js` → `api/_lib/buildMailTransporter.js`,
+`core/mail/validateEmail.js`, `nodemailer`. Keine Abhängigkeit zu
+`api/send-email.js` oder umgekehrt.
+
+**Erweiterungsmöglichkeiten**: mehrere Administrator-/Versandkonten,
+automatischer Abruf und Anhang der Foto-Datei, Versandhistorie/
+Protokollierung je Repräsentant, Retry-Mechanismus bei
+Teilfehlschlägen — bewusst nicht Teil dieses Schritts.

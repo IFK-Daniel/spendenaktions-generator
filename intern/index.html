@@ -156,6 +156,35 @@
 
           <div class="result-group-grid" id="result-grid"></div>
         </section>
+
+        <section class="delivery-section" id="delivery-section" hidden>
+          <h3 class="delivery-title">Materialien versenden</h3>
+
+          <div class="delivery-target-options">
+            <label class="delivery-target-option">
+              <input type="radio" name="delivery-target" value="representative" checked />
+              Direkt an den Repräsentanten senden
+            </label>
+            <label class="delivery-target-option">
+              <input type="radio" name="delivery-target" value="alternative" />
+              An abweichende E-Mail-Adresse senden
+            </label>
+          </div>
+
+          <div class="person-field" id="alternative-email-field" hidden>
+            <label class="field-label" for="alternative-email-input">Abweichende E-Mail-Adresse</label>
+            <input
+              type="email"
+              id="alternative-email-input"
+              placeholder="z. B. mitarbeiter@its-for-kids.de"
+            />
+          </div>
+
+          <div class="error-message" id="delivery-error-message" hidden></div>
+          <div class="delivery-status" id="delivery-status" hidden></div>
+
+          <button id="delivery-send-btn" type="button">Materialien versenden</button>
+        </section>
       </main>
       </div>
     </div>

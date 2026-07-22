@@ -78,7 +78,13 @@ function resolveMaterials(materials) {
   });
 }
 
-function sanitizeNamePart(value, fieldName) {
+/**
+ * Bereinigt einen Namensteil für die Verwendung in Dateinamen (siehe
+ * oben). Exportiert, damit andere Module (z. B.
+ * `buildMaterialZipFilename.js`) dieselbe Sanitizing-Logik
+ * wiederverwenden können, statt sie zu duplizieren.
+ */
+export function sanitizeNamePart(value, fieldName) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`buildMaterialFilenames: '${fieldName}' ist erforderlich.`);
   }

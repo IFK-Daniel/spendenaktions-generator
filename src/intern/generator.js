@@ -8,6 +8,8 @@ import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
 import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
+import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
+import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
 
@@ -35,6 +37,7 @@ export function initGenerator() {
   const results = document.getElementById("results");
   const resultPersonName = document.getElementById("result-person-name");
   const resultGrid = document.getElementById("result-grid");
+  const photoStatus = document.getElementById("photo-status");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
 
   const deliverySection = document.getElementById("delivery-section");
@@ -47,6 +50,7 @@ export function initGenerator() {
 
   let lastManifest = null;
   let lastFiles = null;
+  let lastPhoto = null;
   let isSending = false;
 
   ifkIdInput.value = generateIfkId();
@@ -60,6 +64,38 @@ export function initGenerator() {
   function clearError() {
     errorMessage.hidden = true;
     errorMessage.textContent = "";
+  }
+
+  function showPhotoStatus(message, type) {
+    photoStatus.textContent = message;
+    photoStatus.className = `photo-status ${type}`;
+    photoStatus.hidden = false;
+  }
+
+  function clearPhotoStatus() {
+    photoStatus.hidden = true;
+    photoStatus.textContent = "";
+    photoStatus.className = "photo-status";
+  }
+
+  async function checkRepresentativePhoto(photoUrl) {
+    showPhotoStatus("Foto wird geprüft …", "loading");
+
+    try {
+      const result = await fetchRepresentativePhoto(photoUrl);
+
+      if (result.ok) {
+        lastPhoto = result;
+        const sizeKb = Math.max(1, Math.round(result.size / 1024));
+        showPhotoStatus(`Foto erfolgreich geladen (${result.format}, ${sizeKb} KB).`, "success");
+      } else {
+        lastPhoto = null;
+        showPhotoStatus(getPhotoRetrievalErrorMessage(result.reason), "error");
+      }
+    } catch {
+      lastPhoto = null;
+      showPhotoStatus(getPhotoRetrievalErrorMessage(), "error");
+    }
   }
 
   function showDeliveryError(message) {
@@ -207,9 +243,11 @@ export function initGenerator() {
 
   async function handleGenerate() {
     clearError();
+    clearPhotoStatus();
     deliverySection.hidden = true;
     lastManifest = null;
     lastFiles = null;
+    lastPhoto = null;
 
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
@@ -306,6 +344,8 @@ export function initGenerator() {
       lastFiles = files;
       resetDeliverySection();
       deliverySection.hidden = false;
+
+      await checkRepresentativePhoto(photoUrl);
     } catch (err) {
       showError(err.message || "Beim Erstellen der Materialien ist ein Fehler aufgetreten.");
     }

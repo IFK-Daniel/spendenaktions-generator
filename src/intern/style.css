@@ -285,6 +285,30 @@
   color: var(--error);
 }
 
+.photo-status {
+  max-width: 620px;
+  margin: 0 auto 20px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.photo-status.loading {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.photo-status.success {
+  background: #eafaf1;
+  color: #1e7e42;
+}
+
+.photo-status.error {
+  background: #fdecea;
+  color: var(--error);
+}
+
 #delivery-send-btn {
   display: block;
   margin-top: 16px;

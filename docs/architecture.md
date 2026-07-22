@@ -968,3 +968,102 @@ oder umgekehrt.
 automatischer Abruf und Anhang der Foto-Datei, Versandhistorie/
 Protokollierung je Repräsentant, Retry-Mechanismus bei
 Teilfehlschlägen — bewusst nicht Teil dieses Schritts.
+
+## 10. Serverseitige Foto-Link-Prüfung (`core/photo/`, `api/validate-photo.js`)
+
+**Zweck**: Testet, ob ein im Personenformular hinterlegter Foto-Link
+(`photoUrl`, siehe Abschnitt 6/7) serverseitig tatsächlich als Bild
+geladen werden kann — reine Erreichbarkeits-/Formatprüfung. Bewusst
+**kein** PDF-Erzeugung, **keine** Bildbearbeitung, **keine**
+Speicherung: Das Bild wird bei Erfolg lediglich als Base64-Inhalt
+inkl. Größe/Format zurückgeliefert und clientseitig in einer
+In-Memory-Variable (`lastPhoto` in `src/intern/generator.js`)
+zwischengehalten, ohne weitere Verarbeitung oder Persistenz.
+
+**Ablauf**: Nach erfolgreicher `generateQrMaterials()`-Erzeugung ruft
+`src/intern/generator.js` (`checkRepresentativePhoto`) den neuen
+Endpunkt `POST /api/validate-photo` mit der bereits validierten
+`photoUrl` auf (Client-Wrapper: `core/photo/
+fetchRepresentativePhoto.js`, analog zu `core/mail/
+sendGeneratedMaterials.js`). Der Foto-Check läuft unabhängig von der
+QR-Materialerzeugung und blockiert diese nicht — ein fehlgeschlagener
+Foto-Abruf verhindert weder die Anzeige der erzeugten QR-Materialien
+noch den späteren Mailversand (Abschnitt 9).
+
+**Serverseitig** (`api/validate-photo.js`): validiert den Foto-Link
+über die bestehende `core/text/isHttpUrl.js` (keine zweite
+URL-Prüfung), ruft ihn dann mit `fetch()` und einem 8-Sekunden-Timeout
+(`AbortController`) ab (`redirect: "follow"`). Erwartet für Erfolg
+Status 200 **und** einen Content-Type, der mit `image/` beginnt —
+beides wird über die DOM-freie, ohne echten Server testbare
+`core/photo/classifyPhotoFetchResponse.js` entschieden. Bei Erfolg
+werden Größe (`arrayBuffer.byteLength`) und Format
+(`core/photo/detectImageFormatFromContentType.js`, z. B. "JPEG",
+"PNG", "WebP") bestimmt und der Bildinhalt als Base64-String
+zurückgegeben.
+
+**Fehlerkategorien** (unterschieden über
+`core/photo/classifyPhotoFetchResponse.js` bzw. bei geworfenen
+Ausnahmen über `core/photo/classifyPhotoFetchException.js`):
+- `"http_error"` — Status ist nicht 200 (z. B. 404, 403, 500) oder ein
+  nicht auf Abbruch zurückzuführender Netzwerkfehler (z. B. DNS).
+- `"timeout"` — der Abruf wurde nach 8 Sekunden abgebrochen
+  (`AbortError`).
+- `"redirect_login"` — Status 200, aber kein Bild-Content-Type, UND
+  es fand mindestens eine Weiterleitung statt (typisches Muster für
+  eine Umleitung auf eine Anmelde-/Login-Seite statt des Bildes).
+- `"invalid_content_type"` — Status 200, kein Bild-Content-Type, ohne
+  vorherige Weiterleitung (z. B. eine HTML-Seite statt eines Bildes).
+
+Die verständliche Fehlermeldung ("Das Foto konnte nicht geladen
+werden.") wird immer angezeigt; `core/photo/
+getPhotoRetrievalErrorMessage.js` ergänzt je nach Kategorie einen
+unterscheidenden Klammerzusatz.
+
+**Core-Module**:
+- `core/photo/classifyPhotoFetchResponse.js` — Status/Content-Type/
+  Weiterleitung → Erfolg oder Fehlerkategorie.
+- `core/photo/classifyPhotoFetchException.js` — geworfene Ausnahme
+  (z. B. `AbortError`) → Fehlerkategorie.
+- `core/photo/detectImageFormatFromContentType.js` — Content-Type →
+  lesbare Formatbezeichnung.
+- `core/photo/getPhotoRetrievalErrorMessage.js` — Fehlerkategorie →
+  verständliche, unterscheidbare Fehlermeldung.
+- `core/photo/fetchRepresentativePhoto.js` — `fetch`-Wrapper zum
+  neuen Endpunkt.
+
+Alle Core-Module sind DOM-frei; `fetchRepresentativePhoto.js` nutzt
+wie andere `core/mail/*`-Wrapper bewusst die Browser-`fetch`-API.
+
+**Bewusst nicht Teil dieses Schritts**: PDF-Erzeugung, Bildbearbeitung
+(Zuschnitt, Skalierung, Konvertierung), Persistenz des Bildinhalts,
+Einbindung des Fotos in ZIP/Mailversand (Abschnitt 9), Änderungen am
+Login oder an der bestehenden QR-Erzeugung/-Mailfunktion des
+öffentlichen Generators.
+
+**Tests**: `classifyPhotoFetchResponse.test.js`,
+`classifyPhotoFetchException.test.js`,
+`detectImageFormatFromContentType.test.js`,
+`getPhotoRetrievalErrorMessage.test.js` (Node.js eingebauter
+Test-Runner, ausführbar via `npm test`) — decken u. a. ab: öffentlich
+erreichbares Bild (Erfolg), 404, 403, HTML statt Bild (mit und ohne
+Weiterleitung), Timeout (`AbortError`), sowie alle vier
+Fehlermeldungs-Varianten. `core/photo/fetchRepresentativePhoto.js`
+ist analog zu `core/mail/sendGeneratedMaterials.js` bewusst
+ungetestet (reiner `fetch`-Wrapper ohne eigene Logik); der reale
+`fetch()`-Aufruf inkl. Timeout-Steuerung in `api/validate-photo.js`
+ist wie bei den übrigen `api/*`-Handlern nicht separat unit-getestet.
+
+**Abhängigkeiten**: `api/validate-photo.js` → `core/text/isHttpUrl.js`,
+`core/photo/classifyPhotoFetchResponse.js`, `core/photo/
+classifyPhotoFetchException.js`, `core/photo/
+detectImageFormatFromContentType.js`. `src/intern/generator.js` →
+`core/photo/fetchRepresentativePhoto.js`, `core/photo/
+getPhotoRetrievalErrorMessage.js`. Keine Abhängigkeit zu
+`api/send-email.js`, `api/send-representative-mail.js` oder dem
+öffentlichen Generator.
+
+**Erweiterungsmöglichkeiten**: Einbindung des geprüften Fotos in ZIP-
+Archiv/Mailversand, Bildverarbeitung (Zuschnitt/Skalierung für
+Flyer-PDFs), Persistenz je Repräsentant — bewusst nicht Teil dieses
+Schritts.

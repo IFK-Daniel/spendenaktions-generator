@@ -38,6 +38,8 @@ export function initGenerator() {
   const resultPersonName = document.getElementById("result-person-name");
   const resultGrid = document.getElementById("result-grid");
   const photoStatus = document.getElementById("photo-status");
+  const photoPreview = document.getElementById("photo-preview");
+  const photoPreviewImg = document.getElementById("photo-preview-img");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
 
   const deliverySection = document.getElementById("delivery-section");
@@ -52,8 +54,6 @@ export function initGenerator() {
   let lastFiles = null;
   let lastPhoto = null;
   let isSending = false;
-
-  ifkIdInput.value = generateIfkId();
 
   function showError(message) {
     errorMessage.textContent = message;
@@ -76,9 +76,23 @@ export function initGenerator() {
     photoStatus.hidden = true;
     photoStatus.textContent = "";
     photoStatus.className = "photo-status";
+    clearPhotoPreview();
+  }
+
+  function showPhotoPreview(dataUrl) {
+    photoPreviewImg.src = dataUrl;
+    photoPreviewImg.alt = "Vorschau des für den Repräsentanten geladenen Fotos";
+    photoPreview.hidden = false;
+  }
+
+  function clearPhotoPreview() {
+    photoPreview.hidden = true;
+    photoPreviewImg.src = "";
+    photoPreviewImg.alt = "";
   }
 
   async function checkRepresentativePhoto(photoUrl) {
+    clearPhotoPreview();
     showPhotoStatus("Foto wird geprüft …", "loading");
 
     try {
@@ -88,6 +102,7 @@ export function initGenerator() {
         lastPhoto = result;
         const sizeKb = Math.max(1, Math.round(result.size / 1024));
         showPhotoStatus(`Foto erfolgreich geladen (${result.format}, ${sizeKb} KB).`, "success");
+        showPhotoPreview(`data:${result.contentType};base64,${result.content}`);
       } else {
         lastPhoto = null;
         showPhotoStatus(getPhotoRetrievalErrorMessage(result.reason), "error");

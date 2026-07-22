@@ -146,12 +146,13 @@
 
 .ifk-id-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .ifk-id-row input {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 140px;
+  min-width: 140px;
   text-transform: uppercase;
 }
 

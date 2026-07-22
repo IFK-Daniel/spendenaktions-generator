@@ -990,17 +990,31 @@ QR-Materialerzeugung und blockiert diese nicht — ein fehlgeschlagener
 Foto-Abruf verhindert weder die Anzeige der erzeugten QR-Materialien
 noch den späteren Mailversand (Abschnitt 9).
 
-**Serverseitig** (`api/validate-photo.js`): validiert den Foto-Link
-über die bestehende `core/text/isHttpUrl.js` (keine zweite
-URL-Prüfung), ruft ihn dann mit `fetch()` und einem 8-Sekunden-Timeout
-(`AbortController`) ab (`redirect: "follow"`). Erwartet für Erfolg
-Status 200 **und** einen Content-Type, der mit `image/` beginnt —
-beides wird über die DOM-freie, ohne echten Server testbare
-`core/photo/classifyPhotoFetchResponse.js` entschieden. Bei Erfolg
-werden Größe (`arrayBuffer.byteLength`) und Format
-(`core/photo/detectImageFormatFromContentType.js`, z. B. "JPEG",
-"PNG", "WebP") bestimmt und der Bildinhalt als Base64-String
-zurückgegeben.
+**Serverseitig** (`api/validate-photo.js`, `core/photo/
+retrieveRepresentativePhotoAsset.js`): validiert den Foto-Link über
+die bestehende `core/text/isHttpUrl.js` (keine zweite URL-Prüfung).
+Der eigentliche Abruf — **genau ein** `fetch()`-Aufruf mit
+8-Sekunden-Timeout (`AbortController`, `redirect: "follow"`) — sowie
+die Entscheidung Erfolg/Fehlerkategorie
+(`core/photo/classifyPhotoFetchResponse.js`, DOM-frei und ohne echten
+Server testbar) liegen in `core/photo/
+retrieveRepresentativePhotoAsset.js`. Bei Erfolg liefert diese
+Funktion ein In-Memory-"Photo-Asset" `{ contentType, format, size,
+content: Uint8Array }` (Format über `core/photo/
+detectImageFormatFromContentType.js`, z. B. "JPEG", "PNG", "WebP").
+`api/validate-photo.js` wandelt daraus lediglich die
+JSON-Antwort (`content` als Base64-String für den Client).
+
+Diese Trennung ist bewusst auf Wiederverwendung angelegt: Ein
+künftiger Materialgenerator (z. B. ein Repräsentanten-Flyer, der das
+Foto einbettet) kann innerhalb **desselben** Funktionsaufrufs auf
+`asset.content` zugreifen, ohne das Foto ein zweites Mal per HTTP zu
+laden. Das Asset ist ausschließlich eine lokale Variable im laufenden
+Request — kein modulweiter Cache, keine Datei-/DB-Ablage, keine
+Persistenz zwischen Requests. Aktuell hat `retrieveRepresentativePhotoAsset`
+genau einen Konsumenten (`api/validate-photo.js`); die UI ist von
+dieser internen Umstrukturierung unverändert (gleiche Response-Form,
+gleiches Verhalten wie zuvor).
 
 **Fehlerkategorien** (unterschieden über
 `core/photo/classifyPhotoFetchResponse.js` bzw. bei geworfenen
@@ -1029,6 +1043,11 @@ unterscheidenden Klammerzusatz.
   lesbare Formatbezeichnung.
 - `core/photo/getPhotoRetrievalErrorMessage.js` — Fehlerkategorie →
   verständliche, unterscheidbare Fehlermeldung.
+- `core/photo/retrieveRepresentativePhotoAsset.js` — serverseitige
+  Abruf-Orchestrierung (genau ein `fetch()`, injizierbar für Tests)
+  inkl. Aufbau des In-Memory-Photo-Assets; Grundlage für künftige
+  Materialgeneratoren, die denselben Bildinhalt weiterverwenden
+  wollen.
 - `core/photo/fetchRepresentativePhoto.js` — `fetch`-Wrapper zum
   neuen Endpunkt.
 
@@ -1044,18 +1063,24 @@ Login oder an der bestehenden QR-Erzeugung/-Mailfunktion des
 **Tests**: `classifyPhotoFetchResponse.test.js`,
 `classifyPhotoFetchException.test.js`,
 `detectImageFormatFromContentType.test.js`,
-`getPhotoRetrievalErrorMessage.test.js` (Node.js eingebauter
+`getPhotoRetrievalErrorMessage.test.js`,
+`retrieveRepresentativePhotoAsset.test.js` (Node.js eingebauter
 Test-Runner, ausführbar via `npm test`) — decken u. a. ab: öffentlich
 erreichbares Bild (Erfolg), 404, 403, HTML statt Bild (mit und ohne
 Weiterleitung), Timeout (`AbortError`), sowie alle vier
-Fehlermeldungs-Varianten. `core/photo/fetchRepresentativePhoto.js`
+Fehlermeldungs-Varianten. `retrieveRepresentativePhotoAsset.test.js`
+prüft zusätzlich explizit, dass pro Aufruf genau ein
+`fetch()`-Aufruf stattfindet (kein zweiter HTTP-Abruf) und dass das
+zurückgegebene Asset den geladenen Inhalt, die Größe, das Format und
+den Content-Type enthält — über ein injizierbares `fetchImpl`, ohne
+echten Mailserver/Netzwerk. `core/photo/fetchRepresentativePhoto.js`
 ist analog zu `core/mail/sendGeneratedMaterials.js` bewusst
-ungetestet (reiner `fetch`-Wrapper ohne eigene Logik); der reale
-`fetch()`-Aufruf inkl. Timeout-Steuerung in `api/validate-photo.js`
-ist wie bei den übrigen `api/*`-Handlern nicht separat unit-getestet.
+ungetestet (reiner `fetch`-Wrapper ohne eigene Logik).
 
 **Abhängigkeiten**: `api/validate-photo.js` → `core/text/isHttpUrl.js`,
-`core/photo/classifyPhotoFetchResponse.js`, `core/photo/
+`core/photo/retrieveRepresentativePhotoAsset.js`.
+`core/photo/retrieveRepresentativePhotoAsset.js` → `core/photo/
+classifyPhotoFetchResponse.js`, `core/photo/
 classifyPhotoFetchException.js`, `core/photo/
 detectImageFormatFromContentType.js`. `src/intern/generator.js` →
 `core/photo/fetchRepresentativePhoto.js`, `core/photo/
@@ -1063,7 +1088,8 @@ getPhotoRetrievalErrorMessage.js`. Keine Abhängigkeit zu
 `api/send-email.js`, `api/send-representative-mail.js` oder dem
 öffentlichen Generator.
 
-**Erweiterungsmöglichkeiten**: Einbindung des geprüften Fotos in ZIP-
-Archiv/Mailversand, Bildverarbeitung (Zuschnitt/Skalierung für
+**Erweiterungsmöglichkeiten**: Übergabe des In-Memory-Photo-Assets an
+einen künftigen Materialgenerator (z. B. Repräsentanten-Flyer) inner-
+halb desselben Requests, Bildverarbeitung (Zuschnitt/Skalierung für
 Flyer-PDFs), Persistenz je Repräsentant — bewusst nicht Teil dieses
 Schritts.

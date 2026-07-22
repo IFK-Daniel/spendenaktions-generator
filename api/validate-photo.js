@@ -1,19 +1,22 @@
 import { isHttpUrl } from "../core/text/isHttpUrl.js";
-import { classifyPhotoFetchResponse } from "../core/photo/classifyPhotoFetchResponse.js";
-import { classifyPhotoFetchException } from "../core/photo/classifyPhotoFetchException.js";
-import { detectImageFormatFromContentType } from "../core/photo/detectImageFormatFromContentType.js";
-
-const FETCH_TIMEOUT_MS = 8000;
+import { retrieveRepresentativePhotoAsset } from "../core/photo/retrieveRepresentativePhotoAsset.js";
 
 /**
  * Prüft, ob ein im Formular hinterlegter Foto-Link serverseitig
- * tatsächlich als Bild geladen werden kann — testet ausschließlich
- * die Erreichbarkeit (Status 200, Content-Type beginnt mit `image/`).
- * Noch keine PDF-Erzeugung, keine Bildbearbeitung, keine Speicherung:
- * das Bild wird bei Erfolg lediglich als Base64-Inhalt inkl. Größe
- * und Format zurückgegeben, damit die aufrufende Seite es in den
- * bestehenden (nicht persistierten) Ergebnisdaten zwischenspeichern
- * kann.
+ * tatsächlich als Bild geladen werden kann — testet die
+ * Erreichbarkeit (Status 200, Content-Type beginnt mit `image/`).
+ *
+ * Der eigentliche Abruf (genau ein HTTP-Request) sowie das Bereithalten
+ * des geladenen Bildinhalts als In-Memory-"Photo-Asset" liegen in
+ * `core/photo/retrieveRepresentativePhotoAsset.js` — bewusst getrennt,
+ * damit künftige Materialgeneratoren (z. B. ein Repräsentanten-Flyer,
+ * der das Foto einbettet) innerhalb desselben Funktionsaufrufs auf das
+ * bereits abgerufene Asset zugreifen können, ohne das Foto ein zweites
+ * Mal zu laden. Aktuell hat dieser Endpunkt genau einen Konsumenten
+ * (diese Validierungsantwort); noch keine PDF-Erzeugung, keine
+ * Bildbearbeitung, keine Speicherung — das Asset existiert
+ * ausschließlich für die Dauer dieses Requests und wird hier lediglich
+ * als Base64-Inhalt inkl. Größe/Format an den Client zurückgegeben.
  */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -28,40 +31,20 @@ export default async function handler(req, res) {
     return;
   }
 
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const result = await retrieveRepresentativePhotoAsset({ photoUrl });
 
-  try {
-    const response = await fetch(photoUrl, { signal: controller.signal, redirect: "follow" });
-    const contentType = response.headers.get("content-type") || "";
-
-    const classification = classifyPhotoFetchResponse({
-      status: response.status,
-      contentType,
-      redirected: response.redirected,
-    });
-
-    if (!classification.ok) {
-      res.status(200).json({ ok: false, reason: classification.reason });
-      return;
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-
-    res.status(200).json({
-      ok: true,
-      size: arrayBuffer.byteLength,
-      format: detectImageFormatFromContentType(contentType),
-      contentType: classification.contentType,
-      content: Buffer.from(arrayBuffer).toString("base64"),
-    });
-  } catch (err) {
-    console.error(
-      "[validate-photo] Abruf fehlgeschlagen:",
-      err instanceof Error ? err.name : "unknown_error"
-    );
-    res.status(200).json({ ok: false, reason: classifyPhotoFetchException(err) });
-  } finally {
-    clearTimeout(timeoutHandle);
+  if (!result.ok) {
+    res.status(200).json({ ok: false, reason: result.reason });
+    return;
   }
+
+  const { asset } = result;
+
+  res.status(200).json({
+    ok: true,
+    size: asset.size,
+    format: asset.format,
+    contentType: asset.contentType,
+    content: Buffer.from(asset.content).toString("base64"),
+  });
 }

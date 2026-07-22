@@ -32,3 +32,13 @@ test("Mailtext enthält Namen und IFK-ID, aber keine Signatur", () => {
   assert.doesNotMatch(text, /Herzliche Grüße/);
   assert.doesNotMatch(text, /Dein Team/);
 });
+
+test("Mailtext enthält keine Bestandteile der IFK-HTML-Signatur (Zitat, Anschrift, Vorstand, Datenschutz)", () => {
+  const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "IFK7QX" });
+
+  assert.doesNotMatch(text, /Den Schwächsten helfen/);
+  assert.doesNotMatch(text, /Zum Jägerhof/);
+  assert.doesNotMatch(text, /Vorsitzender/);
+  assert.doesNotMatch(text, /Datenschutz/);
+  assert.doesNotMatch(text, /Bezirksregierung/);
+});

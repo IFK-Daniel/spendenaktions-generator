@@ -1,5 +1,6 @@
 import { getRepresentativeRoleLabel } from "../materials/getRepresentativeRoleLabel.js";
 import { buildIfkHtmlEmail } from "./ifkHtmlEmail.js";
+import { buildIfkSignatureHtml } from "./ifkSignature.js";
 
 const REPRESENTATIVE_MAIL_SUBJECT = "Deine personalisierten Materialien von It's for Kids";
 
@@ -12,7 +13,7 @@ export function buildRepresentativeMailSubject() {
   return REPRESENTATIVE_MAIL_SUBJECT;
 }
 
-function buildParagraphs({ firstName, gender, ifkId }) {
+function buildBodyParagraphs({ firstName, gender, ifkId }) {
   const role = getRepresentativeRoleLabel(gender);
 
   return [
@@ -22,14 +23,15 @@ function buildParagraphs({ firstName, gender, ifkId }) {
     `Deine persönliche IFK-ID lautet: ${ifkId}. Die IFK-ID dient ausschließlich der internen eindeutigen Zuordnung. Deshalb ist sie beispielsweise auch im Verwendungszweck des GiroCodes für die Banking-App enthalten.`,
     "Solltest du Fragen haben oder weitere Unterstützung benötigen, sind wir jederzeit gerne für dich da.",
     "Vielen Dank für dein Engagement. Gemeinsam schenken wir Kindern Hoffnung und Zukunft.",
-    "Herzliche Grüße",
-    "Dein Team von It's for Kids",
   ];
 }
 
 /**
  * Klartext-Mailtext für die Repräsentanten-Mail. Rollenbezeichnung
  * ("Repräsentant"/"Repräsentantin") über `getRepresentativeRoleLabel`.
+ * Schließt mit Grußformel — die ausführliche IFK-Signatur (Zitat,
+ * Anschrift, Vorstand, Datenschutz- und Vertraulichkeitshinweise) ist
+ * bewusst nur Teil der HTML-Version (siehe `buildRepresentativeMailHtml`).
  *
  * @param {object} params
  * @param {string} params.firstName
@@ -38,13 +40,19 @@ function buildParagraphs({ firstName, gender, ifkId }) {
  * @returns {string}
  */
 export function buildRepresentativeMailText({ firstName, gender, ifkId }) {
-  return buildParagraphs({ firstName, gender, ifkId }).join("\n\n");
+  return [
+    ...buildBodyParagraphs({ firstName, gender, ifkId }),
+    "Herzliche Grüße",
+    "Dein Team von It's for Kids",
+  ].join("\n\n");
 }
 
 /**
  * HTML-Mailtext für die Repräsentanten-Mail. Nutzt den gemeinsamen
- * `buildIfkHtmlEmail`-Baustein (bestehende IFK-HTML-Signatur/Branding),
- * damit das Logo/Markup nicht dupliziert wird.
+ * `buildIfkHtmlEmail`-Baustein für Logo + Fließtext sowie die
+ * vollständige `buildIfkSignatureHtml`-Signatur (Grußformel, Zitat,
+ * Logo, Anschrift, Spendenkonto, Vorstand, Aufsichtsbehörde,
+ * Datenschutz- und Vertraulichkeitshinweise) direkt im Anschluss.
  *
  * @param {object} params
  * @param {string} params.firstName
@@ -54,8 +62,11 @@ export function buildRepresentativeMailText({ firstName, gender, ifkId }) {
  * @returns {string}
  */
 export function buildRepresentativeMailHtml({ firstName, gender, ifkId, logoUrl }) {
-  return buildIfkHtmlEmail({
+  const bodyHtml = buildIfkHtmlEmail({
     logoUrl,
-    paragraphs: buildParagraphs({ firstName, gender, ifkId }),
+    paragraphs: buildBodyParagraphs({ firstName, gender, ifkId }),
   });
+  const signatureHtml = buildIfkSignatureHtml({ logoUrl });
+
+  return `${bodyHtml}\n${signatureHtml}`;
 }

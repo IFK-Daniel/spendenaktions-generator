@@ -4,3 +4,7 @@ dist
 .vscode
 .env
 .env.*
+
+# Generierte Tesseract.js-Assets (per `npm install`/`node scripts/copy-tesseract-assets.mjs`
+# aus node_modules kopiert, siehe docs/architecture.md) — kein Quellcode, nicht versionieren.
+public/tesseract/

@@ -55,17 +55,57 @@
         </div>
 
         <main class="card">
+        <section class="screenshot-import" id="screenshot-import-section">
+          <h2 class="screenshot-import-title">Daten aus humbee-Screenshot übernehmen</h2>
+          <p class="screenshot-import-hint">
+            Screenshot des humbee-Repräsentantenvorgangs hochladen — erkannte Daten werden
+            zunächst zur Prüfung angezeigt, bevor sie ins Formular übernommen werden.
+          </p>
+
+          <div class="screenshot-dropzone" id="screenshot-dropzone">
+            <p>Screenshot hierher ziehen</p>
+            <button type="button" id="screenshot-select-btn">Screenshot auswählen</button>
+            <input
+              type="file"
+              id="screenshot-file-input"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+            />
+          </div>
+
+          <div class="screenshot-import-status" id="screenshot-import-status" hidden></div>
+
+          <div class="screenshot-import-preview" id="screenshot-import-preview" hidden>
+            <div class="screenshot-preview-table-wrap">
+              <table class="screenshot-preview-table">
+                <thead>
+                  <tr>
+                    <th>Feld</th>
+                    <th>Erkannter Wert</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="screenshot-preview-body"></tbody>
+              </table>
+            </div>
+            <button type="button" id="screenshot-apply-btn">Erkannte Daten ins Formular übernehmen</button>
+          </div>
+        </section>
+
         <div class="person-fields">
           <div class="person-field">
             <label class="field-label" for="first-name-input">Vorname</label>
+            <span class="field-source-badge" data-field-badge="firstName" hidden>Aus Screenshot übernommen</span>
             <input type="text" id="first-name-input" placeholder="z. B. Max" />
           </div>
           <div class="person-field">
             <label class="field-label" for="last-name-input">Nachname</label>
+            <span class="field-source-badge" data-field-badge="lastName" hidden>Aus Screenshot übernommen</span>
             <input type="text" id="last-name-input" placeholder="z. B. Mustermann" />
           </div>
           <fieldset class="person-field gender-fieldset">
             <legend class="field-label">Geschlecht</legend>
+            <span class="field-source-badge" data-field-badge="gender" hidden>Aus Screenshot übernommen</span>
             <div class="gender-options">
               <label class="gender-option">
                 <input type="radio" name="gender" value="male" />
@@ -79,6 +119,7 @@
           </fieldset>
           <div class="person-field">
             <label class="field-label" for="ifk-id-input">IFK-ID</label>
+            <span class="field-source-badge" data-field-badge="ifkId" hidden>Aus Screenshot übernommen</span>
             <div class="ifk-id-row">
               <input type="text" id="ifk-id-input" placeholder="z. B. IFK7QX" maxlength="6" />
               <button type="button" id="ifk-id-generate-btn">Neu generieren</button>
@@ -86,18 +127,22 @@
           </div>
           <div class="person-field">
             <label class="field-label" for="email-input">E-Mail-Adresse</label>
+            <span class="field-source-badge" data-field-badge="email" hidden>Aus Screenshot übernommen</span>
             <input type="email" id="email-input" placeholder="z. B. max@beispiel.de" />
           </div>
           <div class="person-field">
             <label class="field-label" for="phone-input">Telefonnummer</label>
+            <span class="field-source-badge" data-field-badge="phone" hidden>Aus Screenshot übernommen</span>
             <input type="tel" id="phone-input" placeholder="z. B. 0170 1234567" />
           </div>
           <div class="person-field">
             <label class="field-label" for="federal-state-input">Bundesland</label>
+            <span class="field-source-badge" data-field-badge="federalState" hidden>Aus Screenshot übernommen</span>
             <input type="text" id="federal-state-input" placeholder="z. B. Bayern" />
           </div>
           <div class="person-field">
             <label class="field-label" for="region-input">Region</label>
+            <span class="field-source-badge" data-field-badge="region" hidden>Aus Screenshot übernommen</span>
             <input type="text" id="region-input" placeholder="z. B. München" />
           </div>
           <div class="person-field person-field-full">
@@ -109,6 +154,7 @@
         <label class="field-label" for="paypal-input">
           PayPal-Link oder Share-Text einfügen
         </label>
+        <span class="field-source-badge" data-field-badge="paypalUrl" hidden>Aus Screenshot übernommen</span>
         <textarea
           id="paypal-input"
           rows="4"

@@ -12,9 +12,47 @@ import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePh
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
+import {
+  ALLOWED_SCREENSHOT_MIME_TYPES,
+  extractRepresentativeDataFromScreenshot,
+} from "../../core/screenshot/extractRepresentativeDataFromScreenshot.js";
+import { runScreenshotOcr } from "../../core/screenshot/runScreenshotOcr.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
+
+const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
+
+const SCREENSHOT_FIELD_LABELS = {
+  firstName: "Vorname",
+  lastName: "Nachname",
+  gender: "Geschlecht",
+  phone: "Telefonnummer",
+  federalState: "Bundesland",
+  region: "Region",
+  ifkEmail: "IFK-Mailadresse",
+  regularEmail: "Mail-Adresse",
+  emailForForm: "E-Mail (für Formular)",
+  ifkId: "IFK-ID",
+  paypalUrl: "PayPal-URL",
+};
+
+const SCREENSHOT_STATUS_LABELS = {
+  recognized: "erkannt",
+  not_recognized: "nicht erkannt",
+  needs_review: "prüfbedürftig",
+};
+
+const SCREENSHOT_EXTRACTION_ERROR_MESSAGES = {
+  invalid_image: "Kein gültiges Bild übermittelt.",
+  invalid_mime_type: "Nur PNG-, JPEG- oder WebP-Bilder werden unterstützt.",
+  timeout: "Die Texterkennung hat zu lange gedauert. Bitte erneut versuchen.",
+  ocr_error: "Die Texterkennung ist fehlgeschlagen. Bitte erneut versuchen.",
+};
+
+function getScreenshotExtractionErrorMessage(reason) {
+  return SCREENSHOT_EXTRACTION_ERROR_MESSAGES[reason] || "Der Screenshot konnte nicht ausgewertet werden.";
+}
 
 /**
  * Verdrahtet die Oberfläche des Materialgenerators (Personendaten,
@@ -42,6 +80,30 @@ export function initGenerator() {
   const photoPreviewImg = document.getElementById("photo-preview-img");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
 
+  const screenshotDropzone = document.getElementById("screenshot-dropzone");
+  const screenshotSelectBtn = document.getElementById("screenshot-select-btn");
+  const screenshotFileInput = document.getElementById("screenshot-file-input");
+  const screenshotImportStatus = document.getElementById("screenshot-import-status");
+  const screenshotImportPreview = document.getElementById("screenshot-import-preview");
+  const screenshotPreviewBody = document.getElementById("screenshot-preview-body");
+  const screenshotApplyBtn = document.getElementById("screenshot-apply-btn");
+
+  const genderRadios = Array.from(document.querySelectorAll('input[name="gender"]'));
+  const fieldBadges = new Map(
+    Array.from(document.querySelectorAll("[data-field-badge]")).map((el) => [el.dataset.fieldBadge, el])
+  );
+  const fieldBadgeSourceElements = {
+    firstName: [firstNameInput],
+    lastName: [lastNameInput],
+    gender: genderRadios,
+    ifkId: [ifkIdInput],
+    email: [emailInput],
+    phone: [phoneInput],
+    federalState: [federalStateInput],
+    region: [regionInput],
+    paypalUrl: [paypalInput],
+  };
+
   const deliverySection = document.getElementById("delivery-section");
   const deliveryTargetRadios = Array.from(document.querySelectorAll('input[name="delivery-target"]'));
   const alternativeEmailField = document.getElementById("alternative-email-field");
@@ -54,6 +116,8 @@ export function initGenerator() {
   let lastFiles = null;
   let lastPhoto = null;
   let isSending = false;
+  let lastExtractionFields = null;
+  let isExtractingScreenshot = false;
 
   function showError(message) {
     errorMessage.textContent = message;
@@ -256,6 +320,188 @@ export function initGenerator() {
     }
   }
 
+  function showScreenshotStatus(message, type) {
+    screenshotImportStatus.textContent = message;
+    screenshotImportStatus.className = `screenshot-import-status ${type}`;
+    screenshotImportStatus.hidden = false;
+  }
+
+  function clearScreenshotStatus() {
+    screenshotImportStatus.hidden = true;
+    screenshotImportStatus.textContent = "";
+    screenshotImportStatus.className = "screenshot-import-status";
+  }
+
+  function clearScreenshotPreview() {
+    screenshotImportPreview.hidden = true;
+    screenshotPreviewBody.innerHTML = "";
+  }
+
+  function renderScreenshotPreview(fields) {
+    screenshotPreviewBody.innerHTML = "";
+
+    for (const key of Object.keys(SCREENSHOT_FIELD_LABELS)) {
+      const field = fields[key];
+      if (!field) continue;
+
+      const row = document.createElement("tr");
+
+      const labelCell = document.createElement("td");
+      labelCell.textContent = SCREENSHOT_FIELD_LABELS[key];
+      row.appendChild(labelCell);
+
+      const valueCell = document.createElement("td");
+      valueCell.textContent = field.value || "—";
+      row.appendChild(valueCell);
+
+      const statusCell = document.createElement("td");
+      const statusValue = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `screenshot-preview-status ${statusValue}`;
+      statusBadge.textContent = SCREENSHOT_STATUS_LABELS[statusValue] || statusValue;
+      statusCell.appendChild(statusBadge);
+      row.appendChild(statusCell);
+
+      screenshotPreviewBody.appendChild(row);
+    }
+
+    screenshotImportPreview.hidden = false;
+  }
+
+  function markFieldAsImported(fieldKey) {
+    const badge = fieldBadges.get(fieldKey);
+    if (!badge) return;
+
+    badge.hidden = false;
+
+    const sourceElements = fieldBadgeSourceElements[fieldKey] || [];
+    for (const el of sourceElements) {
+      const eventName = el.type === "radio" ? "change" : "input";
+      el.addEventListener(eventName, () => { badge.hidden = true; }, { once: true });
+    }
+  }
+
+  async function handleScreenshotFile(file) {
+    clearScreenshotStatus();
+    clearScreenshotPreview();
+    lastExtractionFields = null;
+
+    if (!file) return;
+
+    if (!ALLOWED_SCREENSHOT_MIME_TYPES.has(file.type)) {
+      showScreenshotStatus("Nur PNG-, JPEG- oder WebP-Bilder werden unterstützt.", "error");
+      return;
+    }
+
+    if (file.size > MAX_SCREENSHOT_BYTES) {
+      showScreenshotStatus("Die Datei ist zu groß (maximal 8 MB).", "error");
+      return;
+    }
+
+    if (isExtractingScreenshot) return;
+    isExtractingScreenshot = true;
+    showScreenshotStatus("Screenshot wird ausgewertet …", "loading");
+
+    try {
+      const result = await extractRepresentativeDataFromScreenshot({
+        file,
+        mimeType: file.type,
+        runOcr: runScreenshotOcr,
+      });
+
+      if (result.ok) {
+        lastExtractionFields = result.fields;
+        showScreenshotStatus("Screenshot erfolgreich ausgewertet. Bitte erkannte Daten prüfen.", "success");
+        renderScreenshotPreview(result.fields);
+      } else {
+        showScreenshotStatus(getScreenshotExtractionErrorMessage(result.reason), "error");
+      }
+    } catch {
+      showScreenshotStatus(getScreenshotExtractionErrorMessage(), "error");
+    } finally {
+      isExtractingScreenshot = false;
+      screenshotFileInput.value = "";
+    }
+  }
+
+  function formHasExistingData() {
+    if (firstNameInput.value.trim()) return true;
+    if (lastNameInput.value.trim()) return true;
+    if (genderRadios.some((radio) => radio.checked)) return true;
+    if (emailInput.value.trim()) return true;
+    if (phoneInput.value.trim()) return true;
+    if (federalStateInput.value.trim()) return true;
+    if (regionInput.value.trim()) return true;
+    if (paypalInput.value.trim()) return true;
+    return false;
+  }
+
+  function handleApplyScreenshotFields() {
+    if (!lastExtractionFields) return;
+
+    if (formHasExistingData()) {
+      const confirmed = window.confirm(
+        "Das Formular enthält bereits Daten. Sollen diese durch die erkannten Werte aus dem Screenshot überschrieben werden?"
+      );
+      if (!confirmed) return;
+    }
+
+    const fields = lastExtractionFields;
+
+    if (fields.firstName.status === "recognized") {
+      firstNameInput.value = fields.firstName.value;
+      markFieldAsImported("firstName");
+    }
+
+    if (fields.lastName.status === "recognized") {
+      lastNameInput.value = fields.lastName.value;
+      markFieldAsImported("lastName");
+    }
+
+    if (fields.gender.status === "recognized") {
+      for (const radio of genderRadios) {
+        radio.checked = radio.value === fields.gender.value;
+      }
+      markFieldAsImported("gender");
+    }
+
+    if (fields.phone.status === "recognized") {
+      phoneInput.value = fields.phone.value;
+      markFieldAsImported("phone");
+    }
+
+    if (fields.federalState.status === "recognized") {
+      federalStateInput.value = fields.federalState.value;
+      markFieldAsImported("federalState");
+    }
+
+    if (fields.region.status === "recognized") {
+      regionInput.value = fields.region.value;
+      markFieldAsImported("region");
+    }
+
+    if (fields.emailForForm.value) {
+      emailInput.value = fields.emailForForm.value;
+      markFieldAsImported("email");
+    }
+
+    // Eine bereits manuell eingetragene IFK-ID wird vor dem Import nie
+    // stillschweigend überschrieben; eine neue IFK-ID wird hier nie
+    // automatisch erzeugt (dafür bleibt bewusst nur der bestehende
+    // "Neu generieren"-Button zuständig).
+    if (!ifkIdInput.value.trim() && fields.ifkId.status === "recognized") {
+      ifkIdInput.value = fields.ifkId.value;
+      markFieldAsImported("ifkId");
+    }
+
+    if (fields.paypalUrl.status === "recognized") {
+      paypalInput.value = fields.paypalUrl.value;
+      markFieldAsImported("paypalUrl");
+    }
+
+    showScreenshotStatus("Erkannte Daten wurden ins Formular übernommen.", "success");
+  }
+
   async function handleGenerate() {
     clearError();
     clearPhotoStatus();
@@ -369,6 +615,30 @@ export function initGenerator() {
   ifkIdGenerateBtn.addEventListener("click", () => {
     ifkIdInput.value = generateIfkId();
   });
+
+  screenshotSelectBtn.addEventListener("click", () => screenshotFileInput.click());
+
+  screenshotFileInput.addEventListener("change", () => {
+    handleScreenshotFile(screenshotFileInput.files && screenshotFileInput.files[0]);
+  });
+
+  screenshotDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    screenshotDropzone.classList.add("drag-over");
+  });
+
+  screenshotDropzone.addEventListener("dragleave", () => {
+    screenshotDropzone.classList.remove("drag-over");
+  });
+
+  screenshotDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    screenshotDropzone.classList.remove("drag-over");
+    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    handleScreenshotFile(file);
+  });
+
+  screenshotApplyBtn.addEventListener("click", handleApplyScreenshotFields);
 
   for (const radio of deliveryTargetRadios) {
     radio.addEventListener("change", () => {

@@ -1093,3 +1093,237 @@ einen künftigen Materialgenerator (z. B. Repräsentanten-Flyer) inner-
 halb desselben Requests, Bildverarbeitung (Zuschnitt/Skalierung für
 Flyer-PDFs), Persistenz je Repräsentant — bewusst nicht Teil dieses
 Schritts.
+
+
+## 11. Import von Repräsentantendaten aus humbee-Screenshots (`core/screenshot/`, `scripts/copy-tesseract-assets.mjs`)
+
+**Zweck**: Im internen Materialgenerator kann ein Screenshot eines
+humbee-Repräsentantenvorgangs hochgeladen bzw. per Drag & Drop abgelegt
+werden. Die erkannten Werte werden zunächst als Importvorschau
+angezeigt und erst nach bewusstem Klick ins Formular übernommen. Reine
+Komfortfunktion — die manuelle Eingabe (Abschnitt 7) bleibt vollständig
+erhalten und unverändert nutzbar.
+
+**Grundentscheidung gegen generative KI**: Da es sich immer um
+denselben, fest definierten humbee-Vorgangstyp mit gleichbleibendem
+Feldlayout handelt, verzichtet diese Funktion bewusst auf generative
+KI oder eine externe Vision-API. Stattdessen kommt klassische,
+deterministische Texterkennung (OCR) über [Tesseract.js](https://tesseract.projectnaptha.com/)
+zum Einsatz, **vollständig im Browser** — kein Server-Endpunkt, kein
+API-Schlüssel, keine KI-Umgebungsvariablen, keine laufenden Kosten,
+keine Übertragung des Screenshots an einen externen Dienst. Der
+Screenshot verlässt zu keinem Zeitpunkt den Browser-Arbeitsspeicher
+und wird weder auf einem Server noch auf der Festplatte gespeichert.
+
+**Warum regelbasiert statt generativ**: Die Zuordnung der erkannten
+Textzeilen zu den zehn benötigten Feldern erfolgt ausschließlich über
+feste, aus dem humbee-Layout bekannte Feldbeschriftungen
+(`core/screenshot/ocrLabels.js`) — keine Interpretation von Bedeutung
+oder Kontext. Das ist für einen einzigen, unveränderlichen
+Vorgangstyp zuverlässiger, schneller und vollständig ohne externe
+Abhängigkeit umsetzbar als ein generatives Modell.
+
+**Tesseract.js-Anbindung**: `core/screenshot/runScreenshotOcr.js` ist
+die einzige Stelle im Projekt mit einer Abhängigkeit zu `tesseract.js`
+(npm-Paket, neue Abhängigkeit). `tesseract.js` wird dort ausschließlich
+per dynamischem `import()` geladen — der normale Materialgenerator
+lädt die Bibliothek nicht mit; sie wird erst beim tatsächlichen
+Öffnen eines Screenshots als eigener, separater Chunk nachgeladen
+(verifiziert über `npm run build`: die OCR-Bibliothek erscheint als
+eigenständige, kleine JS-Datei, die reguläre `intern`-Bundle-Größe
+bleibt dadurch unverändert).
+
+Damit keine Anfrage an ein fremdes CDN nötig ist, werden Worker-Skript,
+WASM-Kernmodule (nur die LSTM-Variante, keine Legacy-Engine) und die
+deutschen Trainingsdaten über die eigene Anwendung ausgeliefert:
+`scripts/copy-tesseract-assets.mjs` kopiert sie aus `node_modules`
+(`tesseract.js`, `tesseract.js-core`, `@tesseract.js-data/deu`) nach
+`public/tesseract/` — als `postinstall`-Skript sowie vor `dev`/`build`
+(`predev`/`prebuild`), damit die Dateien unabhängig davon aktuell
+sind, wann zuletzt `npm install` lief. `public/tesseract/` ist
+generiert und daher in `.gitignore` ausgeschlossen (kein Quellcode,
+keine Versionierung nötig). `runScreenshotOcr.js` konfiguriert
+`createWorker("deu", OEM.LSTM_ONLY, { workerPath, corePath, langPath })`
+entsprechend auf `/tesseract/...` statt auf die sonst von Tesseract.js
+standardmäßig genutzten jsDelivr-CDN-URLs.
+
+**Zu erkennende Felder** (ausschließlich diese, siehe
+`core/screenshot/ocrLabels.js`): Vorname, Nachname, Geschlecht,
+Telefonnummer, Bundesland, Region, IFK-Mailadresse, normale
+Mail-Adresse, IFK-ID, PayPal-URL — jeweils über die im humbee-Layout
+verwendeten Feldbeschriftungen (inkl. Schreibvarianten, z. B. "Telefon
+mobil"/"Telefonnummer"/"Telefon" oder "Paypal-URL"/"PayPal-URL"). Alle
+anderen im Screenshot sichtbaren Inhalte (Land, Geburtstag,
+Nutzername, Erstpasswort, Aufgaben, Dokumente) werden ignoriert.
+
+**E-Mail-Priorität** (DOM-frei und unabhängig von der OCR-Engine
+abgesichert): `core/screenshot/pickEmailForForm.js` entscheidet,
+welche E-Mail-Adresse ins Formular übernommen wird — bevorzugt die
+IFK-Mailadresse, nur bei deren Fehlen/Ungültigkeit die normale
+Mail-Adresse, sonst ein leerer Wert mit `source: null` (in der UI als
+prüfbedürftig dargestellt). Diese Regel wird unverändert von
+`core/screenshot/buildExtractionFields.js` angewendet.
+
+**IFK-ID-Regel**: Eine erkannte, aber laut `core/id/validateIfkId.js`
+ungültige IFK-ID wird nie übernommen (Status `needs_review`, Wert
+leer). Eine bereits im Formular vorhandene IFK-ID wird beim
+"Übernehmen"-Klick nicht überschrieben — `src/intern/generator.js`
+prüft vor dem Setzen, ob `ifk-id-input` bereits einen Wert enthält. Es
+wird an keiner Stelle automatisch eine neue IFK-ID erzeugt; dafür
+bleibt ausschließlich der bestehende "Neu generieren"-Button
+zuständig.
+
+**Ablauf** (`core/screenshot/`):
+1. `core/screenshot/runScreenshotOcr.js` erkennt den Bildinhalt über
+   Tesseract.js und liefert die erkannten Textzeilen inkl.
+   Zeilen-Konfidenz (`0`–`100`, aus `data.blocks[].paragraphs[].lines[]`)
+   sowie je Zeile die einzelnen Wörter mit horizontaler Position
+   (`x0`/`x1`) und Wort-Konfidenz zurück — reiner Browser-Aufruf ohne
+   eigene Fachlogik.
+2. `core/screenshot/extractRawFieldsFromOcrLines.js` ordnet diese
+   Zeilen den zehn Feldern zu: eine Zeile gilt als Beschriftung, wenn
+   sie (nach Trimmen/Kleinschreibung, optionalem Doppelpunkt sowie
+   toleriertem führendem Störzeichen) exakt einer bekannten
+   Label-Variante entspricht oder mit ihr beginnt. Steht der Wert auf
+   derselben Zeile ("Vorname: Daniel"), wird er direkt übernommen;
+   steht die Beschriftung allein in der Zeile, gilt die nächste
+   nicht-leere Zeile als Wert — außer sie ist selbst eine bekannte
+   Beschriftung, dann gilt das Feld als im Screenshot leer (verhindert,
+   dass eine fehlende Angabe versehentlich die nächste Feldbeschriftung
+   als Wert übernimmt).
+
+   **Bereinigung von Bedienelement-Rauschen anhand der Wortposition**:
+   Die reale humbee-Ansicht zeigt rechts neben jedem Wert eigene
+   Bedienelemente (Icons/Buttons), die OCR gelegentlich — oft sogar mit
+   hoher Konfidenz — als zusätzliches Wort auf derselben Zeile liest
+   (z. B. `"Bundesland NRW €"`). Sobald Wortpositionsdaten vorliegen,
+   verwirft `extractRawFieldsFromOcrLines.js` solche Wörter über zwei
+   unabhängige, auflösungsunabhängige Signale: (1) ein Wortabstand, der
+   ein Vielfaches des normalen Abstands zwischen Beschriftung und Wert
+   derselben Zeile beträgt, und (2) eine horizontale Position nahe der
+   in der gesamten Auswertung beobachteten Dokumentbreite (≥ 85 % des
+   größten vorkommenden Wort-Endpunkts) — Signal (2) greift zusätzlich
+   dort, wo ein sehr langer Wert (z. B. eine E-Mail-Adresse) den reinen
+   Abstand zum Rauschwort klein erscheinen lässt. Ohne Wortpositionsdaten
+   (z. B. in älteren Tests ohne `words`) wird unverändert der komplette
+   Resttext verwendet. Diese Verfeinerung wurde anhand eines echten
+   humbee-Test-Screenshots entwickelt und verifiziert.
+
+   **PayPal-URL-Sonderfall**: Die Beschriftung "Paypal-URL" wird von
+   OCR gelegentlich vollständig fehlgelesen, der danebenstehende Link
+   aber zuverlässig erkannt. Findet die reguläre Label-Suche keinen
+   Treffer, sucht `extractRawFieldsFromOcrLines.js` zusätzlich
+   unabhängig von jeder Beschriftung nach einem Wort, das einem
+   PayPal-Link-Muster entspricht. Da lange Links im humbee-Layout auf
+   eine zweite Zeile umbrechen, wird zusätzlich geprüft, ob die
+   Folgezeile ein Wort in derselben Wertespalte (nahezu gleiche
+   horizontale Position wie der Linkbeginn) enthält, und dieses ohne
+   Trennzeichen angehängt.
+3. `core/screenshot/buildExtractionFields.js` validiert jedes Rohfeld
+   mit denselben Core-Funktionen wie bei manueller Eingabe
+   (`core/mail/validateEmail.js`, `core/id/validateIfkId.js`,
+   `core/screenshot/normalizeGender.js`,
+   `core/screenshot/normalizePhone.js`,
+   `core/screenshot/validateExtractedPaypalUrl.js`) und bezieht dabei
+   zusätzlich die OCR-Konfidenz der jeweiligen Zeile ein: ein an sich
+   formal gültiger, aber mit niedriger Konfidenz (< 60) erkannter Wert
+   wird von `recognized` auf `needs_review` herabgestuft, statt
+   unsicher übernommen zu werden. `core/screenshot/isLabelEcho.js`
+   verhindert zusätzlich, dass eine falsch zugeordnete Beschriftung
+   selbst als Wert landet.
+4. `core/screenshot/extractRepresentativeDataFromScreenshot.js`
+   orchestriert die drei Schritte (inkl. 30-Sekunden-Timeout) und
+   nimmt die OCR-Funktion injizierbar entgegen (`runOcr`), damit Tests
+   ohne echten Tesseract.js-Lauf auskommen.
+
+**UI** (`intern/index.html`, `src/intern/generator.js`): Bereich
+"Daten aus humbee-Screenshot übernehmen" oberhalb der Personenfelder
+— Drag-&-Drop-Fläche, Button "Screenshot auswählen"
+(`accept="image/png,image/jpeg,image/webp"`, zusätzlich serverseitig
+irrelevant, da rein clientseitig verarbeitet), Ladezustand
+("Screenshot wird ausgewertet …"), Erfolgs-/Fehleranzeige, danach eine
+Importvorschau (Tabelle: Feldname/erkannter Wert/Status) mit dem
+Button "Erkannte Daten ins Formular übernehmen". Erst dieser bewusste
+Klick überträgt Werte ins Formular. Enthält das Formular zu diesem
+Zeitpunkt bereits Daten, fragt `window.confirm(...)` vor dem
+Überschreiben explizit nach — unabhängig davon bleibt die
+IFK-ID-Sonderregel (siehe oben) in jedem Fall bestehen. Automatisch
+übernommene Felder erhalten ein dezentes Badge ("Aus Screenshot
+übernommen", `[data-field-badge]` in `intern/index.html`); das Badge
+verschwindet automatisch beim nächsten manuellen Bearbeiten des
+jeweiligen Felds (`once`-Event-Listener in `src/intern/generator.js`,
+keine Persistenz der Herkunftsmarkierung).
+
+**Fehlerkategorien** (`core/screenshot/classifyExtractionException.js`
+und direkte Reason-Codes aus
+`extractRepresentativeDataFromScreenshot.js`): `invalid_image`,
+`invalid_mime_type`, `timeout` (30 Sekunden, clientseitig), `ocr_error`.
+Jede Kategorie hat in `src/intern/generator.js` eine eigene,
+verständliche deutsche Fehlermeldung.
+
+**Core-Module**:
+- `core/screenshot/extractionStatus.js` — gemeinsames Status-Vokabular
+  (`recognized`/`not_recognized`/`needs_review`).
+- `core/screenshot/ocrLabels.js` — feste Feldbeschriftungen (inkl.
+  Schreibvarianten) pro Feld, zentrale Quelle für Label-Erkennung und
+  Label-Echo-Schutz.
+- `core/screenshot/isLabelEcho.js`, `normalizeGender.js`,
+  `normalizePhone.js`, `validateExtractedPaypalUrl.js`,
+  `pickEmailForForm.js` — Einzelprüfungen.
+- `core/screenshot/extractRawFieldsFromOcrLines.js` — regelbasierte
+  Zuordnung OCR-Zeilen → Rohfelder.
+- `core/screenshot/buildExtractionFields.js` — Aggregation aller
+  Feldprüfungen inkl. Konfidenz-Herabstufung.
+- `core/screenshot/classifyExtractionException.js` — Ausnahme →
+  Fehlerkategorie.
+- `core/screenshot/extractRepresentativeDataFromScreenshot.js` —
+  Orchestrierung (Timeout, injizierbarer OCR-Aufruf).
+- `core/screenshot/runScreenshotOcr.js` — einzige Stelle mit
+  Abhängigkeit zu `tesseract.js`, per dynamischem Import lazy
+  geladen, ungetestet (reiner Browser-Aufruf ohne eigene Logik,
+  analog zu `core/branding/loadImage.js`).
+
+**Bewusst nicht Teil dieses Schritts**: generative KI/Vision-APIs,
+serverseitige Verarbeitung des Screenshots, Persistenz des Screenshots
+oder der erkannten Daten, automatische IFK-ID-Erzeugung, Unterstützung
+weiterer humbee-Vorgangstypen mit abweichendem Layout, Änderungen an
+Login, Materialerzeugung, Foto-Link-Prüfung oder Mailversand.
+
+**Tests**: `core/screenshot/*.test.js` (Node.js eingebauter
+Test-Runner, ausführbar via `npm test`) — decken u. a. ab: feste
+Label-Wert-Zuordnung (getrennte Zeilen und "Label: Wert" auf einer
+Zeile), abweichende Leerzeichen/Zeilenumbrüche, fehlendes Label,
+Label direkt gefolgt von der nächsten Beschriftung (gilt als leer),
+Priorisierung/Fallback der E-Mail-Regel, beide Mailadressen fehlen,
+vorhandene/fehlende/ungültige IFK-ID, Geschlecht männlich/weiblich
+sowie unbekanntes/fehlendes Geschlecht, korrekt erkannte und
+abgeschnittene PayPal-URL, Feldbeschriftungen als (nicht übernommener)
+OCR-Wert, niedrige OCR-Konfidenz führt zur Herabstufung auf
+`needs_review` statt ungeprüfter Übernahme, ungültiger Dateityp,
+fehlendes Bild, Timeout, OCR-Fehler. `core/screenshot/
+runScreenshotOcr.js` ist analog zu den bestehenden Browser-API-Wrappern
+bewusst ungetestet (reiner Tesseract.js-Aufruf ohne eigene Logik) — in
+allen Tests wird die OCR über den injizierbaren `runOcr`-Parameter
+durch feste, im Test definierte Textzeilen ersetzt. Keine echten
+Repräsentantendaten und kein echter Tesseract.js-Lauf in den Tests.
+
+**Abhängigkeiten**: `core/screenshot/
+extractRepresentativeDataFromScreenshot.js` → `core/screenshot/
+extractRawFieldsFromOcrLines.js`, `core/screenshot/
+buildExtractionFields.js`, `core/screenshot/
+classifyExtractionException.js`. `core/screenshot/
+buildExtractionFields.js` → `core/mail/validateEmail.js`,
+`core/id/validateIfkId.js`. `src/intern/generator.js` → `core/screenshot/
+extractRepresentativeDataFromScreenshot.js`, `core/screenshot/
+runScreenshotOcr.js`. `scripts/copy-tesseract-assets.mjs` läuft
+unabhängig von der Anwendung als `postinstall`/`predev`/`prebuild`-Skript.
+Keine Abhängigkeit zu `api/send-representative-mail.js`,
+`api/validate-photo.js`, `api/login.js` oder einem `api/`-Endpunkt für
+diese Funktion — es existiert keiner.
+
+**Erweiterungsmöglichkeiten**: Unterstützung weiterer humbee-Vorgangstypen
+über zusätzliche Label-Sets in `core/screenshot/ocrLabels.js`,
+automatischer Abgleich der erkannten IFK-ID gegen
+`core/id/reserveIfkId.js` (sobald implementiert), Bildvorverarbeitung
+(Kontrast/Zuschnitt) zur Verbesserung der OCR-Genauigkeit — bewusst
+nicht Teil dieses Schritts.

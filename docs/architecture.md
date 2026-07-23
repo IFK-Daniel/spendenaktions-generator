@@ -1570,3 +1570,117 @@ gezielt per Browsertest mit einem echten humbee-Screenshot verifiziert
 **Bewusst nicht Teil dieses Schritts**: Einführung einer
 JS-DOM-Testbibliothek, Änderungen an der fachlichen OCR-/
 Validierungslogik (Abschnitte 11/12 bleiben unverändert).
+
+## 14. Bearbeitungs-Workflow der Screenshot-Prüfung überarbeitet
+
+Weiterer reiner UX-Schritt auf Basis der unveränderten fachlichen
+Logik (Abschnitte 11/12) — betrifft ausschließlich, wie eine
+Korrektur in der Importvorschau ausgelöst, durchgeführt und
+abgeschlossen wird.
+
+**Sichtbare Korrekturmöglichkeit**: Jedes Feld mit zeichengenauer
+Prüfmöglichkeit (`hasReviewUI(key)`, siehe unten) zeigt jetzt dauerhaft
+einen Button "✎ Korrigieren" neben dem Wert (`.screenshot-correct-btn`)
+— unabhängig von Hover, funktioniert also auch auf Touch-Geräten. Der
+gesamte Wert bleibt zusätzlich anklickbar.
+
+**Originalausschnitt bleibt während der Bearbeitung sichtbar**: Der
+Bearbeitungsmodus (`renderEditMode()` in `src/intern/generator.js`)
+baut Eingabefeld, Vergleichshinweis, (falls vorhanden) Hinweis auf das
+konkret unsichere Zeichen und den großen Bildausschnitt in genau
+dieser Reihenfolge — alle gemeinsam sichtbar, nicht nacheinander. Der
+Ausschnitt bleibt anklickbar und öffnet weiterhin die Lightbox, ohne
+die Bearbeitung zu beenden (Klick-Handler des Ausschnitts/der Lightbox
+berühren `activeEditingKey` nicht).
+
+**Bewusster Abschluss statt Fokusverlust**: Der `blur`-Listener, der
+zuvor beim Verlassen des Felds automatisch speicherte, ist entfallen.
+Stattdessen zeigt der Bearbeitungsmodus zwei Aktionen: "Änderung
+übernehmen" (speichert, setzt Status auf "manuell geprüft") und
+"Abbrechen" (stellt den zuletzt gespeicherten Wert wieder her, Status
+bleibt unverändert). Enter im Eingabefeld löst "Änderung übernehmen"
+aus, Escape "Abbrechen" — beide über einen `keydown`-Listener auf dem
+Eingabefeld, der `preventDefault()` aufruft, bevor die jeweilige
+Commit-/Cancel-Funktion läuft.
+
+**Erneute Bearbeitung bleibt möglich**: Anders als zuvor wird die
+zeichengenaue Rohinformation nicht mehr verworfen, sobald ein Feld
+einmal manuell geprüft wurde. `initialFieldChars` (eine `Map`,
+einmalig beim Rendern der Vorschau befüllt und danach unverändert)
+hält die ursprünglichen OCR-Zeichendaten je Feld dauerhaft vor —
+unabhängig davon, wie oft der Wert seither bearbeitet wurde. Sie ist
+die Grundlage für: (1) `hasReviewUI(key)` — ob ein Feld überhaupt eine
+Korrekturmöglichkeit erhält, bleibt nach der ersten Bearbeitung
+bestehen; (2) den Unsicherheits-Hinweistext und die Cursor-Position
+bei jeder erneuten Bearbeitung, auch nach mehreren Korrekturen in
+Folge. Ein manuell geprüftes Feld zeigt seinen aktuellen Wert als
+Klartext (keine Zeichen-Hervorhebung mehr, da nach einer Bearbeitung
+keine verlässliche Zeichen-Konfidenz mehr für den neuen Text vorliegt)
+— "Korrigieren" und der Bildausschnitt bleiben aber unverändert
+sichtbar.
+
+**Unsicheres Zeichen beim Bearbeiten benennen**: `core/screenshot/
+buildUncertainCharacterHint.js` (neu, rein, getestet) formuliert aus
+den ursprünglichen Zeichen-Konfidenzdaten einen Satz wie "Bitte
+insbesondere das erkannte „U" prüfen." — nennt nur, welches Zeichen
+geprüft werden sollte, schlägt nie eine Ersetzung vor. `core/
+screenshot/firstUncertainCharacterIndex.js` (neu, rein, getestet)
+liefert den Index des ersten unsicheren Zeichens; da diese Liste
+Zeichen für Zeichen mit dem Wert-String übereinstimmt, positioniert
+`renderEditMode()` den Cursor beim Öffnen der Bearbeitung direkt dort
+(`input.setSelectionRange(...)`, browserübergreifend zuverlässig für
+Text-Inputs — keine Sonderlösung nötig).
+
+**Zentrale Übernahme während offener Bearbeitung gesperrt**: Genau ein
+Feld kann gleichzeitig bearbeitet werden (`activeEditingKey`). Solange
+eine Bearbeitung offen ist, ist der Button "Erkannte Daten ins
+Formular übernehmen" deaktiviert (`updateApplyButtonState()`) und ein
+Hinweistext erscheint darunter ("Bitte zunächst die offene Korrektur
+… abschließen."). `handleApplyScreenshotFields()` prüft zusätzlich
+defensiv `activeEditingKey !== null` als zweite Absicherung. Damit
+kann eine gerade geöffnete, aber nicht bestätigte Änderung nie
+stillschweigend übernommen werden.
+
+**IFK-ID "Neu generieren" fragt bei vorhandenem Wert nach**: Der
+bestehende Button im Hauptformular (`ifkIdGenerateBtn`) prüft vor dem
+Erzeugen einer neuen ID, ob bereits ein Wert eingetragen ist (manuell
+oder aus dem Screenshot übernommen) — falls ja, `window.confirm(...)`
+vor dem Überschreiben. Der Button tritt außerdem optisch zurück
+(`.ifk-id-generate-btn--secondary`, kleiner/dezenter), sobald das
+Feld einen Wert enthält (`updateIfkIdGenerateBtnEmphasis()`, reagiert
+auf manuelle Eingabe und auf die Screenshot-Übernahme).
+
+**Vergrößerte Dropzone**: `.screenshot-dropzone` erhält auf Desktop
+mehr Innenabstand und eine Mindesthöhe (190px), auf Mobile bewusst
+moderater (140px). Die gesamte Fläche ist jetzt klickbar (nicht nur
+der Button "Screenshot auswählen") — ein Klick auf den Button selbst
+öffnet den Dateidialog nicht doppelt (`event.target`-Prüfung). Drag-
+over-Rückmeldung nutzt weiterhin dieselben Farben, ergänzt um einen
+dezenten Fokus-Schatten.
+
+**Core-Module (neu)**: `core/screenshot/buildUncertainCharacterHint.js`,
+`core/screenshot/firstUncertainCharacterIndex.js` — beide rein,
+DOM-frei, einzeln getestet.
+
+**Tests**: `buildUncertainCharacterHint.test.js` (Singular-/
+Plural-Formulierung, Deduplizierung, keine/leere Eingabe, unsicheres
+Leerzeichen wird nicht genannt) und `firstUncertainCharacterIndex.test.js`
+(erster Treffer, kein Treffer, leere/fehlende Eingabe). Wie in den
+vorherigen UX-Schritten sind die interaktiven DOM-Verhaltensweisen
+(Korrigieren-Button sichtbar, Ausschnitt bleibt während der Bearbeitung
+sichtbar/anklickbar, Übernehmen/Abbrechen, Enter/Escape, erneute
+Bearbeitung nach "manuell geprüft", zweite Korrektur ersetzt die
+erste, zentrale Übernahme während offener Bearbeitung gesperrt,
+vorhandene IFK-ID sauber übernommen ohne Layout-Verschiebung,
+Neugenerierung fragt nach, vergrößerte Dropzone auf Mobile) bewusst
+nicht Teil der Node-Testsuite (kein jsdom in diesem Projekt) — gezielt
+per Browsertest verifiziert: mit dem echten humbee-Screenshot (leere
+IFK-ID) sowie zusätzlich mit einem synthetischen, über die echte
+Tesseract.js-Pipeline erzeugten Screenshot mit vorhandener,
+gültiger IFK-ID ("IFK7QX") auf Desktop (1280px) und Mobile (375px).
+
+**Bewusst nicht Teil dieses Schritts**: Einführung einer
+JS-DOM-Testbibliothek, Bearbeitung mehrerer Felder gleichzeitig
+(bewusst auf ein Feld begrenzt, um "zentrale Übernahme sperren"
+einfach und eindeutig zu halten), Änderungen an der fachlichen
+OCR-/Validierungslogik.

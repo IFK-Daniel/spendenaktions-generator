@@ -20,6 +20,8 @@ import { runScreenshotOcr } from "../../core/screenshot/runScreenshotOcr.js";
 import { genderDisplayLabel } from "../../core/screenshot/genderDisplayLabel.js";
 import { computeCropRectangle } from "../../core/screenshot/computeCropRectangle.js";
 import { shouldShowFieldCrop } from "../../core/screenshot/shouldShowFieldCrop.js";
+import { buildUncertainCharacterHint } from "../../core/screenshot/buildUncertainCharacterHint.js";
+import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncertainCharacterIndex.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
@@ -91,6 +93,7 @@ export function initGenerator() {
   const screenshotImportPreview = document.getElementById("screenshot-import-preview");
   const screenshotPreviewBody = document.getElementById("screenshot-preview-body");
   const screenshotApplyBtn = document.getElementById("screenshot-apply-btn");
+  const screenshotApplyEditHint = document.getElementById("screenshot-apply-edit-hint");
   const screenshotShowOriginalBtn = document.getElementById("screenshot-show-original-btn");
   const screenshotSourceImg = document.getElementById("screenshot-source-img");
   const screenshotLightbox = document.getElementById("screenshot-lightbox");
@@ -129,6 +132,17 @@ export function initGenerator() {
   let isExtractingScreenshot = false;
   let manuallyReviewedFieldKeys = new Set();
   let lastScreenshotObjectUrl = null;
+  // Zeichengenaue Rohdaten je Feld, einmalig beim Rendern der Vorschau
+  // erfasst und danach unverändert — bleibt auch nach einer manuellen
+  // Korrektur die Grundlage für den Unsicherheits-Hinweis und die
+  // Cursor-Position beim erneuten Bearbeiten (der aktuelle `field.chars`
+  // wird nach einer Bearbeitung nicht mehr verlässlich zum Wert passen).
+  let initialFieldChars = new Map();
+  // Genau ein Feld kann gleichzeitig bearbeitet werden — vereinfacht
+  // "zentrale Übernahme währenddessen deaktivieren" auf eine einzige
+  // Prüfung und verhindert, dass eine zweite Bearbeitung eine erste,
+  // unbestätigte Änderung stillschweigend verwirft.
+  let activeEditingKey = null;
 
   function showError(message) {
     errorMessage.textContent = message;
@@ -428,17 +442,23 @@ export function initGenerator() {
     screenshotImportPreview.hidden = true;
     screenshotPreviewBody.innerHTML = "";
     clearOriginalScreenshot();
+    manuallyReviewedFieldKeys = new Set();
+    initialFieldChars = new Map();
+    activeEditingKey = null;
+    updateApplyButtonState();
   }
 
+  // Ermittelt die zeichengenauen Rohdaten eines Felds für die initiale
+  // Snapshot-Erfassung (`initialFieldChars`). Die
+  // E-Mail-für-Formular-Zeile übernimmt unverändert den Wert des
+  // ausgewählten Quellfelds (IFK-Mailadresse oder normale
+  // Mail-Adresse) — Zeichen-Markierungen werden entsprechend
+  // gespiegelt, damit auch dort nur die tatsächlich unsicheren Zeichen
+  // hervorgehoben werden.
   function fieldCharsForKey(fields, key) {
     const field = fields[key];
     if (!field) return undefined;
     if (Array.isArray(field.chars)) return field.chars;
-    // Die E-Mail-für-Formular-Zeile übernimmt unverändert den Wert des
-    // ausgewählten Quellfelds (IFK-Mailadresse oder normale
-    // Mail-Adresse) — Zeichen-Markierungen werden entsprechend
-    // gespiegelt, damit auch dort nur die tatsächlich unsicheren
-    // Zeichen hervorgehoben werden.
     if (key === "emailForForm" && field.source) {
       const sourceField = fields[field.source];
       if (sourceField && Array.isArray(sourceField.chars) && sourceField.value === field.value) {
@@ -446,6 +466,10 @@ export function initGenerator() {
       }
     }
     return undefined;
+  }
+
+  function hasReviewUI(key) {
+    return initialFieldChars.has(key);
   }
 
   function renderStatusBadge(statusCell, key, statusValue) {
@@ -462,13 +486,20 @@ export function initGenerator() {
     return key === "gender" ? genderDisplayLabel(value) : value;
   }
 
+  function updateApplyButtonState() {
+    const isEditing = activeEditingKey !== null;
+    screenshotApplyBtn.disabled = isEditing;
+    screenshotApplyEditHint.hidden = !isEditing;
+  }
+
   // Fügt für ein prüfbedürftiges Feld mit verlässlicher Bounding-Box
   // einen deutlich vergrößerten, anklickbaren Bildausschnitt an —
   // ausschließlich für `needs_review` (siehe `shouldShowFieldCrop`):
   // erkannte Felder und "Neu generieren" (`confirmed_empty`) erhalten
   // bewusst keinen Ausschnitt, da nichts zu prüfen ist. Ein Klick auf
   // den Ausschnitt öffnet genau diesen (nicht den vollständigen
-  // Screenshot) groß in der Lightbox.
+  // Screenshot, nicht die laufende Bearbeitung) groß in der Lightbox —
+  // unabhängig davon, ob das Feld gerade bearbeitet wird.
   function appendFieldCropIfAvailable(container, field) {
     if (!shouldShowFieldCrop(field)) return;
 
@@ -494,81 +525,198 @@ export function initGenerator() {
     container.appendChild(cropBtn);
   }
 
+  function buildCompareHint() {
+    const hint = document.createElement("p");
+    hint.className = "screenshot-value-review-hint";
+    hint.textContent = "Bitte markiertes Zeichen mit dem Original vergleichen.";
+    return hint;
+  }
+
   function renderValueCell(valueCell, statusCell, fields, key) {
     const field = fields[key];
-    const chars = manuallyReviewedFieldKeys.has(key) ? undefined : fieldCharsForKey(fields, key);
     valueCell.innerHTML = "";
 
-    if (!field.value) {
-      valueCell.appendChild(document.createTextNode("—"));
-      return;
-    }
-
-    if (!chars) {
-      valueCell.appendChild(document.createTextNode(displayValueForKey(key, field.value)));
+    if (!hasReviewUI(key)) {
+      valueCell.appendChild(document.createTextNode(field.value ? displayValueForKey(key, field.value) : "—"));
       appendFieldCropIfAvailable(valueCell, field);
       return;
     }
 
-    // Prüfbedürftiger Wert mit zeichengenauer Markierung: Wert,
-    // Hinweistext und (falls verfügbar) großer Ausschnitt klar
-    // untereinander statt gedrängt in einer Zeile.
-    const review = document.createElement("div");
-    review.className = "screenshot-value-review";
-
-    const charsContainer = document.createElement("span");
-    charsContainer.className = "screenshot-value-editable";
-    charsContainer.title = "Klicken, um das unsichere Zeichen zu korrigieren";
-    for (const { char, uncertain } of chars) {
-      const charSpan = document.createElement("span");
-      charSpan.textContent = char;
-      if (uncertain) charSpan.className = "screenshot-char-uncertain";
-      charsContainer.appendChild(charSpan);
+    if (activeEditingKey === key) {
+      renderEditMode(valueCell, statusCell, fields, key);
+      return;
     }
-    charsContainer.addEventListener("click", () => startEditingValueCell(valueCell, statusCell, fields, key));
-    review.appendChild(charsContainer);
 
-    const hint = document.createElement("p");
-    hint.className = "screenshot-value-review-hint";
-    hint.textContent = "Bitte markiertes Zeichen mit dem Original vergleichen.";
-    review.appendChild(hint);
-
-    appendFieldCropIfAvailable(review, field);
-    valueCell.appendChild(review);
+    renderReviewDisplay(valueCell, statusCell, fields, key);
   }
 
-  function startEditingValueCell(valueCell, statusCell, fields, key) {
+  // Anzeige-Modus eines Felds mit Korrekturmöglichkeit: vor der ersten
+  // Bearbeitung mit hervorgehobenen unsicheren Zeichen, danach mit dem
+  // (nun bestätigten) Wert als Klartext — in beiden Fällen bleibt eine
+  // deutlich sichtbare "Korrigieren"-Aktion vorhanden (kein reiner
+  // Hover-Zustand, funktioniert daher auch auf Touch-Geräten), und der
+  // Bildausschnitt bleibt zur Kontrolle sichtbar.
+  function renderReviewDisplay(valueCell, statusCell, fields, key) {
     const field = fields[key];
+    const showHighlight = !manuallyReviewedFieldKeys.has(key) && Array.isArray(field.chars);
+
+    const container = document.createElement("div");
+    container.className = "screenshot-value-review";
+
+    const valueRow = document.createElement("div");
+    valueRow.className = "screenshot-value-row";
+
+    const valueDisplay = document.createElement("span");
+    valueDisplay.className = "screenshot-value-editable";
+    valueDisplay.title = "Zum Bearbeiten anklicken";
+    if (!field.value) {
+      valueDisplay.appendChild(document.createTextNode("—"));
+    } else if (showHighlight) {
+      for (const { char, uncertain } of field.chars) {
+        const charSpan = document.createElement("span");
+        charSpan.textContent = char;
+        if (uncertain) charSpan.className = "screenshot-char-uncertain";
+        valueDisplay.appendChild(charSpan);
+      }
+    } else {
+      valueDisplay.appendChild(document.createTextNode(displayValueForKey(key, field.value)));
+    }
+    valueDisplay.addEventListener("click", () => openEditMode(fields, key, valueCell, statusCell));
+    valueRow.appendChild(valueDisplay);
+
+    const correctBtn = document.createElement("button");
+    correctBtn.type = "button";
+    correctBtn.className = "screenshot-correct-btn";
+    const correctIcon = document.createElement("span");
+    correctIcon.className = "screenshot-correct-icon";
+    correctIcon.setAttribute("aria-hidden", "true");
+    correctIcon.textContent = "✎";
+    correctBtn.appendChild(correctIcon);
+    correctBtn.appendChild(document.createTextNode("Korrigieren"));
+    correctBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditMode(fields, key, valueCell, statusCell);
+    });
+    valueRow.appendChild(correctBtn);
+
+    container.appendChild(valueRow);
+
+    if (showHighlight) {
+      container.appendChild(buildCompareHint());
+    }
+
+    appendFieldCropIfAvailable(container, field);
+    valueCell.appendChild(container);
+  }
+
+  // Bearbeitungsmodus: Eingabefeld, Vergleichs-/Unsicherheitshinweis
+  // und Originalausschnitt bleiben gemeinsam sichtbar (in dieser
+  // Reihenfolge) — der Nutzer muss sich das zu prüfende Zeichen nicht
+  // merken. Endet ausschließlich über die bewussten Aktionen
+  // "Änderung übernehmen"/"Abbrechen" (bzw. Enter/Escape) — nie durch
+  // bloßen Fokusverlust, damit ein Klick auf den Ausschnitt/die
+  // Lightbox die Bearbeitung nicht versehentlich beendet.
+  function renderEditMode(valueCell, statusCell, fields, key) {
+    const field = fields[key];
+    const initialChars = initialFieldChars.get(key);
+
+    const container = document.createElement("div");
+    container.className = "screenshot-value-review screenshot-value-review-editing";
+
     const input = document.createElement("input");
     input.type = "text";
     input.className = "screenshot-value-edit-input";
     input.value = field.value;
+    container.appendChild(input);
 
-    const finishEditing = () => {
+    container.appendChild(buildCompareHint());
+
+    const uncertainHintText = buildUncertainCharacterHint(initialChars);
+    if (uncertainHintText) {
+      const uncertainHint = document.createElement("p");
+      uncertainHint.className = "screenshot-value-review-hint screenshot-value-review-hint-uncertain";
+      uncertainHint.textContent = uncertainHintText;
+      container.appendChild(uncertainHint);
+    }
+
+    appendFieldCropIfAvailable(container, field);
+
+    const actions = document.createElement("div");
+    actions.className = "screenshot-edit-actions";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "screenshot-edit-confirm";
+    confirmBtn.textContent = "Änderung übernehmen";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "screenshot-edit-cancel";
+    cancelBtn.textContent = "Abbrechen";
+
+    const commitEdit = () => {
       field.value = input.value.trim();
       manuallyReviewedFieldKeys.add(key);
+      activeEditingKey = null;
       renderValueCell(valueCell, statusCell, fields, key);
       renderStatusBadge(statusCell, key, field.status);
+      updateApplyButtonState();
     };
 
-    input.addEventListener("blur", finishEditing);
+    const cancelEdit = () => {
+      activeEditingKey = null;
+      renderValueCell(valueCell, statusCell, fields, key);
+      renderStatusBadge(statusCell, key, field.status);
+      updateApplyButtonState();
+    };
+
+    confirmBtn.addEventListener("click", commitEdit);
+    cancelBtn.addEventListener("click", cancelEdit);
+
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        input.blur();
+        commitEdit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        cancelEdit();
       }
     });
 
-    valueCell.innerHTML = "";
-    valueCell.classList.remove("screenshot-value-editable");
-    valueCell.appendChild(input);
+    actions.appendChild(confirmBtn);
+    actions.appendChild(cancelBtn);
+    container.appendChild(actions);
+
+    valueCell.appendChild(container);
+
     input.focus();
-    input.select();
+    const uncertainIndex = firstUncertainCharacterIndex(initialChars);
+    if (uncertainIndex !== -1 && uncertainIndex < input.value.length) {
+      input.setSelectionRange(uncertainIndex, uncertainIndex + 1);
+    } else {
+      input.select();
+    }
+  }
+
+  function openEditMode(fields, key, valueCell, statusCell) {
+    if (activeEditingKey !== null) return;
+    activeEditingKey = key;
+    renderValueCell(valueCell, statusCell, fields, key);
+    updateApplyButtonState();
   }
 
   function renderScreenshotPreview(fields) {
     screenshotPreviewBody.innerHTML = "";
     manuallyReviewedFieldKeys = new Set();
+    initialFieldChars = new Map();
+    activeEditingKey = null;
+
+    for (const key of Object.keys(SCREENSHOT_FIELD_LABELS)) {
+      const field = fields[key];
+      if (!field) continue;
+      const chars = fieldCharsForKey(fields, key);
+      if (Array.isArray(chars)) initialFieldChars.set(key, chars);
+    }
 
     for (const key of Object.keys(SCREENSHOT_FIELD_LABELS)) {
       const field = fields[key];
@@ -595,6 +743,7 @@ export function initGenerator() {
       screenshotPreviewBody.appendChild(row);
     }
 
+    updateApplyButtonState();
     screenshotImportPreview.hidden = false;
   }
 
@@ -669,6 +818,11 @@ export function initGenerator() {
 
   function handleApplyScreenshotFields() {
     if (!lastExtractionFields) return;
+    // Zusätzliche, defensive Absicherung — der Button ist während einer
+    // offenen Korrektur bereits deaktiviert (`updateApplyButtonState`),
+    // damit eine noch unbestätigte Änderung nie stillschweigend
+    // übernommen wird.
+    if (activeEditingKey !== null) return;
 
     if (formHasExistingData()) {
       const confirmed = window.confirm(
@@ -728,6 +882,7 @@ export function initGenerator() {
     if (!ifkIdInput.value.trim() && isApplyable("ifkId", fields.ifkId)) {
       ifkIdInput.value = fields.ifkId.value;
       markFieldAsImported("ifkId");
+      updateIfkIdGenerateBtnEmphasis();
     }
 
     if (isApplyable("paypalUrl", fields.paypalUrl)) {
@@ -848,11 +1003,35 @@ export function initGenerator() {
     }
   }
 
+  function updateIfkIdGenerateBtnEmphasis() {
+    ifkIdGenerateBtn.classList.toggle("ifk-id-generate-btn--secondary", ifkIdInput.value.trim().length > 0);
+  }
+
   ifkIdGenerateBtn.addEventListener("click", () => {
+    // Eine bereits vorhandene IFK-ID (manuell eingetragen oder aus dem
+    // Screenshot übernommen) wird nie ohne Rückfrage überschrieben.
+    if (ifkIdInput.value.trim()) {
+      const confirmed = window.confirm(
+        "Es ist bereits eine IFK-ID eingetragen. Soll sie durch eine neu generierte ID ersetzt werden?"
+      );
+      if (!confirmed) return;
+    }
     ifkIdInput.value = generateIfkId();
+    updateIfkIdGenerateBtnEmphasis();
   });
 
+  ifkIdInput.addEventListener("input", updateIfkIdGenerateBtnEmphasis);
+  updateIfkIdGenerateBtnEmphasis();
+
   screenshotSelectBtn.addEventListener("click", () => screenshotFileInput.click());
+
+  // Die gesamte Dropzone soll als Upload-Ziel klickbar sein, nicht nur
+  // der Button — ein Klick auf den Button selbst darf den Dateidialog
+  // aber nicht doppelt öffnen.
+  screenshotDropzone.addEventListener("click", (event) => {
+    if (event.target === screenshotSelectBtn) return;
+    screenshotFileInput.click();
+  });
 
   screenshotFileInput.addEventListener("change", () => {
     handleScreenshotFile(screenshotFileInput.files && screenshotFileInput.files[0]);

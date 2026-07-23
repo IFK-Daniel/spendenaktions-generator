@@ -43,8 +43,14 @@ const LANG_PATH = "/tesseract/lang-data";
  * annotateLowConfidenceCharacters.js`), genau dieses eine Zeichen statt
  * des gesamten Werts als unsicher zu markieren.
  *
+ * Die vollständige Wort-Bounding-Box (`x0`/`y0`/`x1`/`y1`) wird
+ * zusätzlich mitgeführt, damit die UI für prüfbedürftige Felder einen
+ * vergrößerten Bildausschnitt der jeweiligen Originalzeile anzeigen
+ * kann (`core/screenshot/computeCropRectangle.js`), statt nur des
+ * erkannten Texts.
+ *
  * @param {File | Blob} file
- * @returns {Promise<{ lines: { text: string, confidence: number, words: { text: string, confidence: number, x0: number, x1: number, symbols: { text: string, confidence: number }[] }[] }[] }>}
+ * @returns {Promise<{ lines: { text: string, confidence: number, words: { text: string, confidence: number, x0: number, y0: number, x1: number, y1: number, symbols: { text: string, confidence: number }[] }[] }[] }>}
  */
 export async function runScreenshotOcr(file) {
   const { createWorker, OEM } = await import("tesseract.js");
@@ -69,6 +75,8 @@ export async function runScreenshotOcr(file) {
           confidence: word.confidence,
           x0: word.bbox.x0,
           x1: word.bbox.x1,
+          y0: word.bbox.y0,
+          y1: word.bbox.y1,
           symbols: (word.symbols || []).map((symbol) => ({
             text: symbol.text,
             confidence: symbol.confidence,

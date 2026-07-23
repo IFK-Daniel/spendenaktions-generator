@@ -68,9 +68,10 @@ test("fehlendes Label liefert null für dieses Feld", () => {
   assert.equal(rawFields.lastName, null);
 });
 
-test("Label direkt gefolgt von einer weiteren Beschriftung gilt als leer", () => {
+test("Label direkt gefolgt von einer weiteren Beschriftung gilt als bestätigt leer", () => {
   const rawFields = extractRawFieldsFromOcrLines(lines("IFK-ID", "Mail-Adresse", "daniel@beispiel.de"));
-  assert.equal(rawFields.ifkId, null);
+  assert.equal(rawFields.ifkId.text, "");
+  assert.equal(rawFields.ifkId.confirmedEmpty, true);
   assert.equal(rawFields.regularEmail.text, "daniel@beispiel.de");
 });
 
@@ -171,7 +172,8 @@ test("mehrere eng aufeinanderfolgende Wertwörter bleiben vollständig erhalten"
 
 test("führendes Störzeichen vor einer Beschriftung wird toleriert", () => {
   const rawFields = extractRawFieldsFromOcrLines(lines(", IFK-ID", "Mail-Adresse", "daniel@beispiel.de"));
-  assert.equal(rawFields.ifkId, null);
+  assert.equal(rawFields.ifkId.text, "");
+  assert.equal(rawFields.ifkId.confirmedEmpty, true);
   assert.equal(rawFields.regularEmail.text, "daniel@beispiel.de");
 });
 
@@ -203,4 +205,18 @@ test("umgebrochene PayPal-URL wird anhand der Wertespalte mit der Folgezeile zus
     rawFields.paypalUrl.text,
     "https://www.paypal.com/donate/?hosted_button_id=BNQCRNKW8HMJW"
   );
+});
+
+test("Bounding-Box wird als Vereinigung der beitragenden Wörter berechnet", () => {
+  const rawFields = extractRawFieldsFromOcrLines([
+    {
+      text: "Nachname Feigenbutz",
+      confidence: 92,
+      words: [
+        { text: "Nachname", x0: 83, y0: 200, x1: 172, y1: 220, confidence: 96 },
+        { text: "Feigenbutz", x0: 299, y0: 198, x1: 385, y1: 222, confidence: 91 },
+      ],
+    },
+  ]);
+  assert.deepEqual(rawFields.lastName.bbox, { x0: 299, y0: 198, x1: 385, y1: 222 });
 });

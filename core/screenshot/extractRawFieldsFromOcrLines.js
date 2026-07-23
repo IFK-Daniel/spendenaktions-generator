@@ -19,6 +19,20 @@ import { isLabelEcho } from "./isLabelEcho.js";
 const NOISE_GAP_MULTIPLIER = 3;
 const NOISE_EDGE_ZONE_RATIO = 0.85;
 
+function boundingBoxOfWords(words) {
+  const withBox = words.filter(
+    (w) => typeof w.x0 === "number" && typeof w.y0 === "number" && typeof w.x1 === "number" && typeof w.y1 === "number"
+  );
+  if (withBox.length === 0) return undefined;
+
+  return {
+    x0: Math.min(...withBox.map((w) => w.x0)),
+    y0: Math.min(...withBox.map((w) => w.y0)),
+    x1: Math.max(...withBox.map((w) => w.x1)),
+    y1: Math.max(...withBox.map((w) => w.y1)),
+  };
+}
+
 function stripLeadingNoise(text) {
   return text.replace(/^[^\p{L}\p{N}]+/u, "");
 }
@@ -105,6 +119,7 @@ function reconstructValueFromWords(words, valueStartIndex, referenceGap, edgeZon
     text: kept.map((w) => w.text).join(" ").trim(),
     confidence: Math.min(...kept.map((w) => w.confidence)),
     symbols: kept.every((w) => Array.isArray(w.symbols)) ? kept.flatMap((w) => w.symbols) : undefined,
+    bbox: boundingBoxOfWords(kept),
   };
 }
 
@@ -187,7 +202,7 @@ function findPaypalUrlByPattern(lines, edgeZoneStartX) {
       ? contributingWords.flatMap((w) => w.symbols)
       : undefined;
 
-    return { text, confidence: Math.min(...confidences), symbols };
+    return { text, confidence: Math.min(...confidences), symbols, bbox: boundingBoxOfWords(contributingWords) };
   }
 
   return null;
@@ -221,13 +236,27 @@ function findFieldValue(lines, labelVariants, edgeZoneStartX) {
         const reconstructed = reconstructValueFromWords(next.words, 0, referenceGap, edgeZoneStartX);
         if (reconstructed) return reconstructed;
       }
-      if (Array.isArray(next.words) && next.words.length === 1 && Array.isArray(next.words[0].symbols)) {
-        return { text: next.text, confidence: next.confidence, symbols: next.words[0].symbols };
+      if (Array.isArray(next.words) && next.words.length === 1) {
+        const word = next.words[0];
+        return {
+          text: next.text,
+          confidence: next.confidence,
+          symbols: Array.isArray(word.symbols) ? word.symbols : undefined,
+          bbox: boundingBoxOfWords([word]),
+        };
       }
       return { text: next.text, confidence: next.confidence };
     }
 
-    return null;
+    // Die Beschriftung wurde eindeutig erkannt, aber es folgt kein
+    // plausibler Wert (Zeile endet hier, oder die nächste Zeile ist
+    // selbst wieder eine bekannte Beschriftung) — das Feld gilt damit
+    // als im Screenshot bestätigt leer, nicht bloß "nicht gefunden".
+    // Nur für Felder relevant, die diese Unterscheidung auswerten
+    // (aktuell die IFK-ID, siehe `core/screenshot/
+    // buildExtractionFields.js`); für alle anderen Felder verhält
+    // sich das wie zuvor (leerer Text → `not_recognized`).
+    return { text: "", confidence: line.confidence, confirmedEmpty: true };
   }
 
   return null;
@@ -237,12 +266,20 @@ function findFieldValue(lines, labelVariants, edgeZoneStartX) {
  * Ordnet die von der OCR erkannten Textzeilen den zehn benötigten
  * Feldern des festen humbee-Vorgangstyps zu — rein regelbasiert über
  * feste Feldbeschriftungen (`core/screenshot/ocrLabels.js`), keine
- * generative Interpretation. Liefert für jedes Feld entweder
- * `{ text, confidence }` (Rohwert vor Validierung) oder `null`, wenn
- * keine passende Beschriftung mit Wert gefunden wurde.
+ * generative Interpretation. Liefert für jedes Feld eines von drei
+ * Ergebnissen:
+ * - `null` — die Beschriftung wurde nirgends gefunden (unbekannt, ob
+ *   das Feld im Screenshot existiert).
+ * - `{ text: "", confirmedEmpty: true, confidence }` — die
+ *   Beschriftung wurde eindeutig gefunden, ihr folgt aber kein
+ *   plausibler Wert (bestätigt leeres Feld).
+ * - `{ text, confidence, symbols?, bbox? }` — ein gefundener Rohwert
+ *   vor Validierung; `bbox` (Vereinigung der beitragenden Wort-Boxen)
+ *   ist nur vorhanden, wenn alle beitragenden Wörter aus Tesseract
+ *   Positionsdaten hatten.
  *
- * @param {{ text: string, confidence?: number, words?: { text: string, confidence: number, x0: number, x1: number, symbols?: { text: string, confidence: number }[] }[] }[]} lines
- * @returns {Record<string, { text: string, confidence?: number, symbols?: { text: string, confidence: number }[] } | null>}
+ * @param {{ text: string, confidence?: number, words?: { text: string, confidence: number, x0: number, y0: number, x1: number, y1: number, symbols?: { text: string, confidence: number }[] }[] }[]} lines
+ * @returns {Record<string, { text: string, confidence?: number, symbols?: { text: string, confidence: number }[], bbox?: { x0: number, y0: number, x1: number, y1: number }, confirmedEmpty?: boolean } | null>}
  */
 export function extractRawFieldsFromOcrLines(lines) {
   const normalizedLines = (Array.isArray(lines) ? lines : [])

@@ -216,9 +216,116 @@
   color: #1b5f9e;
 }
 
+.screenshot-preview-status.confirmed_empty {
+  background: #eef1f5;
+  color: #4a5568;
+}
+
 .screenshot-char-uncertain {
-  background: #fff3b0;
-  border-radius: 2px;
+  background: #ffe28a;
+  border: 1.5px solid #d98c00;
+  border-radius: 3px;
+  padding: 0 1px;
+  color: #4a3200;
+  font-weight: 600;
+}
+
+.screenshot-review-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.screenshot-original-preview {
+  position: sticky;
+  top: 12px;
+}
+
+.screenshot-original-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.screenshot-original-img-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.screenshot-original-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 5px;
+}
+
+.screenshot-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(20, 20, 20, 0.88);
+  cursor: zoom-out;
+}
+
+.screenshot-lightbox[hidden] {
+  display: none;
+}
+
+.screenshot-lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.screenshot-lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  line-height: 1;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.screenshot-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.screenshot-field-crop {
+  display: block;
+  margin-top: 6px;
+  max-width: 260px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+@media (max-width: 700px) {
+  .screenshot-review-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .screenshot-original-preview {
+    position: static;
+  }
 }
 
 .screenshot-value-editable {
@@ -273,6 +380,13 @@
 
 .field-source-badge[hidden] {
   display: none;
+}
+
+.field-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .person-fields {

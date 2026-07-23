@@ -25,7 +25,7 @@ test("vollständiger Screenshot: alle Felder werden korrekt erkannt", () => {
   assert.deepEqual(fields.firstName, { value: "Daniel", status: "recognized" });
   assert.deepEqual(fields.lastName, { value: "Feigenbutz", status: "recognized" });
   assert.deepEqual(fields.gender, { value: "male", status: "recognized" });
-  assert.deepEqual(fields.phone, { value: "+49 152 33795099", status: "recognized" });
+  assert.deepEqual(fields.phone, { value: "0152 33795099", status: "recognized" });
   assert.deepEqual(fields.federalState, { value: "NRW", status: "recognized" });
   assert.deepEqual(fields.region, { value: "Düsseldorf", status: "recognized" });
   assert.deepEqual(fields.ifkEmail, { value: "d.feigenbutz@its-for-kids.de", status: "recognized" });
@@ -66,6 +66,27 @@ test("fehlende IFK-ID bleibt leer", () => {
 test("ungültige IFK-ID wird nicht übernommen", () => {
   const fields = buildExtractionFields({ ...FULL_RAW, ifkId: raw("ABC123") });
   assert.deepEqual(fields.ifkId, { value: "", status: "needs_review" });
+});
+
+test("eindeutig gefundene, aber leere IFK-ID gilt als bestätigt leer statt prüfbedürftig", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    ifkId: { text: "", confidence: 90, confirmedEmpty: true },
+  });
+  assert.deepEqual(fields.ifkId, { value: "", status: "confirmed_empty" });
+});
+
+test("Bedienelement-Rauschen als vermeintlicher IFK-ID-Wert gilt ebenfalls als bestätigt leer", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    ifkId: raw('Mail "Willkommen als Repräsentant"'),
+  });
+  assert.deepEqual(fields.ifkId, { value: "", status: "confirmed_empty" });
+});
+
+test("nicht gefundene IFK-ID-Zeile bleibt schlicht nicht erkannt (kein bestätigt leer)", () => {
+  const fields = buildExtractionFields({ ...FULL_RAW, ifkId: null });
+  assert.deepEqual(fields.ifkId, { value: "", status: "not_recognized" });
 });
 
 test("Geschlecht männlich/weiblich wird korrekt normalisiert", () => {
@@ -186,4 +207,46 @@ test("ohne zeichengenaue Symboldaten bleibt die bisherige grobe Konfidenzbewertu
   });
   assert.equal(fields.paypalUrl.status, "needs_review");
   assert.equal(fields.paypalUrl.chars, undefined);
+});
+
+// Telefonnummer-Normalisierung (+49/0049 → 0…) und Österreich-Ausnahme.
+
+test("deutsche internationale Vorwahl +49 wird auf Inlandsschreibweise umgestellt", () => {
+  const fields = buildExtractionFields({ ...FULL_RAW, phone: raw("+49 1523 3795099") });
+  assert.equal(fields.phone.value, "01523 3795099");
+});
+
+test("deutsche internationale Vorwahl 0049 wird auf Inlandsschreibweise umgestellt", () => {
+  const fields = buildExtractionFields({ ...FULL_RAW, phone: raw("0049 2103 986670") });
+  assert.equal(fields.phone.value, "02103 986670");
+});
+
+test("österreichisches Bundesland: Telefonnummer mit +49-ähnlichem Muster bleibt dennoch unverändert, wenn kein deutsches Muster vorliegt", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    federalState: raw("Wien"),
+    phone: raw("+43 664 1234567"),
+  });
+  assert.equal(fields.phone.value, "+43 664 1234567");
+});
+
+test("erkanntes österreichisches Bundesland unterdrückt die deutsche Telefonnummer-Umschreibung", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    federalState: raw("Tirol"),
+    phone: raw("+49 664 1234567"),
+  });
+  // Die Umschreibung wird bewusst unterdrückt, sobald ein
+  // österreichisches Bundesland erkannt wurde — auch wenn die Nummer
+  // selbst zufällig einem deutschen Muster entspricht.
+  assert.equal(fields.phone.value, "+49 664 1234567");
+});
+
+test("deutsches Bundesland: +49-Vorwahl wird normal umgeschrieben", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    federalState: raw("Bayern"),
+    phone: raw("+49 1523 3795099"),
+  });
+  assert.equal(fields.phone.value, "01523 3795099");
 });

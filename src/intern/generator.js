@@ -17,6 +17,8 @@ import {
   extractRepresentativeDataFromScreenshot,
 } from "../../core/screenshot/extractRepresentativeDataFromScreenshot.js";
 import { runScreenshotOcr } from "../../core/screenshot/runScreenshotOcr.js";
+import { genderDisplayLabel } from "../../core/screenshot/genderDisplayLabel.js";
+import { computeCropRectangle } from "../../core/screenshot/computeCropRectangle.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
@@ -41,6 +43,7 @@ const SCREENSHOT_STATUS_LABELS = {
   recognized: "erkannt",
   not_recognized: "nicht erkannt",
   needs_review: "prüfbedürftig",
+  confirmed_empty: "Neu generieren",
 };
 
 const SCREENSHOT_EXTRACTION_ERROR_MESSAGES = {
@@ -87,6 +90,11 @@ export function initGenerator() {
   const screenshotImportPreview = document.getElementById("screenshot-import-preview");
   const screenshotPreviewBody = document.getElementById("screenshot-preview-body");
   const screenshotApplyBtn = document.getElementById("screenshot-apply-btn");
+  const screenshotOriginalImgBtn = document.getElementById("screenshot-original-img-btn");
+  const screenshotOriginalImg = document.getElementById("screenshot-original-img");
+  const screenshotLightbox = document.getElementById("screenshot-lightbox");
+  const screenshotLightboxImg = document.getElementById("screenshot-lightbox-img");
+  const screenshotLightboxClose = document.getElementById("screenshot-lightbox-close");
 
   const genderRadios = Array.from(document.querySelectorAll('input[name="gender"]'));
   const fieldBadges = new Map(
@@ -119,6 +127,7 @@ export function initGenerator() {
   let lastExtractionFields = null;
   let isExtractingScreenshot = false;
   let manuallyReviewedFieldKeys = new Set();
+  let lastScreenshotObjectUrl = null;
 
   function showError(message) {
     errorMessage.textContent = message;
@@ -333,9 +342,81 @@ export function initGenerator() {
     screenshotImportStatus.className = "screenshot-import-status";
   }
 
+  function openLightbox(src) {
+    screenshotLightboxImg.src = src;
+    screenshotLightbox.hidden = false;
+  }
+
+  function closeLightbox() {
+    screenshotLightbox.hidden = true;
+    screenshotLightboxImg.src = "";
+  }
+
+  function clearOriginalScreenshot() {
+    if (lastScreenshotObjectUrl) {
+      URL.revokeObjectURL(lastScreenshotObjectUrl);
+      lastScreenshotObjectUrl = null;
+    }
+    screenshotOriginalImg.src = "";
+  }
+
+  // Zeigt den hochgeladenen Screenshot dauerhaft neben der
+  // Importvorschau an (Original bleibt ausschließlich im Browser —
+  // keine Speicherung, keine Übertragung). Löst erst auf, sobald das
+  // Bild geladen ist, damit `naturalWidth`/`naturalHeight` für die
+  // Bildausschnitte (siehe `cropFieldRegion`) zuverlässig verfügbar
+  // sind. Ein zuvor erzeugtes Object-URL wird vor dem Erstellen eines
+  // neuen sauber freigegeben.
+  function showOriginalScreenshot(file) {
+    return new Promise((resolve) => {
+      clearOriginalScreenshot();
+      const objectUrl = URL.createObjectURL(file);
+      lastScreenshotObjectUrl = objectUrl;
+
+      screenshotOriginalImg.onload = () => resolve();
+      screenshotOriginalImg.onerror = () => resolve();
+      screenshotOriginalImg.src = objectUrl;
+    });
+  }
+
+  // Erzeugt für ein prüfbedürftiges Feld mit bekannter Bounding-Box
+  // einen vergrößerten Bildausschnitt der zugehörigen Originalzeile
+  // (mit etwas Rand) aus dem bereits geladenen Original-Screenshot —
+  // rein clientseitig über Canvas, keine erneute Bildübertragung.
+  // Liefert `null`, wenn keine verlässliche Bounding-Box vorliegt
+  // (siehe `core/screenshot/computeCropRectangle.js`); dann wird
+  // bewusst kein künstlicher Ausschnitt erzeugt.
+  function cropFieldRegion(bbox) {
+    if (!screenshotOriginalImg.naturalWidth || !screenshotOriginalImg.naturalHeight) return null;
+
+    const rect = computeCropRectangle(bbox, screenshotOriginalImg.naturalWidth, screenshotOriginalImg.naturalHeight);
+    if (!rect) return null;
+
+    const scale = Math.min(4, Math.max(1, 220 / rect.width));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(rect.width * scale);
+    canvas.height = Math.round(rect.height * scale);
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(
+      screenshotOriginalImg,
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    return canvas.toDataURL("image/png");
+  }
+
   function clearScreenshotPreview() {
     screenshotImportPreview.hidden = true;
     screenshotPreviewBody.innerHTML = "";
+    clearOriginalScreenshot();
   }
 
   function fieldCharsForKey(fields, key) {
@@ -366,30 +447,51 @@ export function initGenerator() {
     statusCell.appendChild(statusBadge);
   }
 
+  function displayValueForKey(key, value) {
+    return key === "gender" ? genderDisplayLabel(value) : value;
+  }
+
+  function appendFieldCropIfAvailable(valueCell, field) {
+    if (field.status !== "needs_review" || !field.bbox) return;
+
+    const dataUrl = cropFieldRegion(field.bbox);
+    if (!dataUrl) return;
+
+    const crop = document.createElement("img");
+    crop.className = "screenshot-field-crop";
+    crop.src = dataUrl;
+    crop.alt = "Vergrößerter Ausschnitt der Originalzeile";
+    valueCell.appendChild(crop);
+  }
+
   function renderValueCell(valueCell, statusCell, fields, key) {
     const field = fields[key];
     const chars = manuallyReviewedFieldKeys.has(key) ? undefined : fieldCharsForKey(fields, key);
     valueCell.innerHTML = "";
 
     if (!field.value) {
-      valueCell.textContent = "—";
+      valueCell.appendChild(document.createTextNode("—"));
       return;
     }
 
     if (!chars) {
-      valueCell.textContent = field.value;
+      valueCell.appendChild(document.createTextNode(displayValueForKey(key, field.value)));
+      appendFieldCropIfAvailable(valueCell, field);
       return;
     }
 
-    valueCell.classList.add("screenshot-value-editable");
-    valueCell.title = "Klicken, um das unsichere Zeichen zu korrigieren";
+    const charsContainer = document.createElement("span");
+    charsContainer.className = "screenshot-value-editable";
+    charsContainer.title = "Klicken, um das unsichere Zeichen zu korrigieren";
     for (const { char, uncertain } of chars) {
       const charSpan = document.createElement("span");
       charSpan.textContent = char;
       if (uncertain) charSpan.className = "screenshot-char-uncertain";
-      valueCell.appendChild(charSpan);
+      charsContainer.appendChild(charSpan);
     }
-    valueCell.addEventListener("click", () => startEditingValueCell(valueCell, statusCell, fields, key));
+    charsContainer.addEventListener("click", () => startEditingValueCell(valueCell, statusCell, fields, key));
+    valueCell.appendChild(charsContainer);
+    appendFieldCropIfAvailable(valueCell, field);
   }
 
   function startEditingValueCell(valueCell, statusCell, fields, key) {
@@ -494,6 +596,7 @@ export function initGenerator() {
 
       if (result.ok) {
         lastExtractionFields = result.fields;
+        await showOriginalScreenshot(file);
         showScreenshotStatus("Screenshot erfolgreich ausgewertet. Bitte erkannte Daten prüfen.", "success");
         renderScreenshotPreview(result.fields);
       } else {
@@ -727,6 +830,18 @@ export function initGenerator() {
   });
 
   screenshotApplyBtn.addEventListener("click", handleApplyScreenshotFields);
+
+  screenshotOriginalImgBtn.addEventListener("click", () => {
+    if (screenshotOriginalImg.src) openLightbox(screenshotOriginalImg.src);
+  });
+
+  screenshotLightboxClose.addEventListener("click", closeLightbox);
+  screenshotLightbox.addEventListener("click", (event) => {
+    if (event.target === screenshotLightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !screenshotLightbox.hidden) closeLightbox();
+  });
 
   for (const radio of deliveryTargetRadios) {
     radio.addEventListener("change", () => {

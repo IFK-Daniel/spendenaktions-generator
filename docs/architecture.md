@@ -1378,3 +1378,106 @@ automatischer Abgleich der erkannten IFK-ID gegen
 `core/id/reserveIfkId.js` (sobald implementiert), Bildvorverarbeitung
 (Kontrast/Zuschnitt) zur Verbesserung der OCR-Genauigkeit — bewusst
 nicht Teil dieses Schritts.
+
+## 12. UX-Feinschliff der Screenshot-Importvorschau
+
+Ergänzt Abschnitt 11 um sieben gezielte Verbesserungen, alle rein auf
+Basis der bereits vorhandenen Tesseract.js-Daten (keine neue
+KI-/OCR-Abhängigkeit):
+
+**Kontrastreichere Zeichen-Hervorhebung**: `.screenshot-char-uncertain`
+in `src/intern/style.css` nutzt jetzt gelben Hintergrund, orangefarbenen
+Rand und dunkle, fett hervorgehobene Schrift statt der zuvor kaum
+sichtbaren reinen Hintergrundfarbe.
+
+**Deutsche Geschlecht-Anzeige**: `core/screenshot/genderDisplayLabel.js`
+übersetzt den internen Wert (`"male"`/`"female"`) ausschließlich für
+die Anzeige in der Importvorschau nach "männlich"/"weiblich". Der
+interne Wert bleibt überall unverändert (Formular-Radios,
+`buildMaterialManifest`).
+
+**IFK-ID: bestätigt leer statt prüfbedürftig**: `core/screenshot/
+extractRawFieldsFromOcrLines.js` unterscheidet jetzt drei Fälle statt
+zwei — `null` (Beschriftung nirgends gefunden, keine Aussage über
+Existenz möglich), `{ confirmedEmpty: true }` (Beschriftung eindeutig
+gefunden, kein Wert folgt) und ein gefundener Rohwert. `core/screenshot/
+buildExtractionFields.js` (`ifkIdField`) nutzt dies für den neuen
+Status `EXTRACTION_STATUS.CONFIRMED_EMPTY`: sowohl bei eindeutig
+bestätigt leerer Zeile als auch bei einem gefundenen "Wert", der
+offensichtlich kein plausibles IFK-ID-Token ist (mehrere Wörter/
+Anführungszeichen — typisch für ein versehentlich aufgegriffenes
+Bedienelement einer Nachbarzeile, `PLAUSIBLE_IFK_ID_CANDIDATE`-Regex).
+`src/intern/generator.js` zeigt dafür "Neu generieren" statt
+"prüfbedürftig" (`SCREENSHOT_STATUS_LABELS.confirmed_empty`, eigene,
+neutrale Badge-Farbe). Das Formularfeld selbst trägt zusätzlich den
+Hinweis "(sofern bereits in humbee hinterlegt)" (`.field-hint` in
+`intern/index.html`).
+
+**Original-Screenshot dauerhaft sichtbar**: `src/intern/generator.js`
+zeigt den hochgeladenen Screenshot nach erfolgreicher Auswertung
+dauerhaft neben der Importvorschau an (`showOriginalScreenshot()`) —
+zweispaltiges Layout auf Desktop (`.screenshot-review-layout`, Original
+links, Vorschau rechts), untereinander auf Mobile (`@media (max-width:
+700px)`, gleicher Breakpoint wie die Personenfelder). Das Bild bleibt
+ausschließlich als `URL.createObjectURL(file)` im Browser-Speicher,
+keine Speicherung, keine Übertragung. Ein Klick öffnet eine Lightbox
+(`#screenshot-lightbox`, Vollbild-Overlay, schließbar per Klick auf den
+Hintergrund, den Schließen-Button oder Escape). Object-URLs werden vor
+dem Anzeigen eines neuen Screenshots sauber freigegeben
+(`clearOriginalScreenshot()` → `URL.revokeObjectURL`), verifiziert per
+Browsertest (genau ein `revokeObjectURL`-Aufruf pro erneutem Import).
+
+**Bildausschnitt für prüfbedürftige Felder**: `core/screenshot/
+runScreenshotOcr.js` liefert nun zusätzlich `y0`/`y1` je Wort;
+`extractRawFieldsFromOcrLines.js` berechnet daraus für jeden
+rekonstruierten Wert eine `bbox` (Vereinigung der beitragenden
+Wort-Boxen). `core/screenshot/computeCropRectangle.js` (reine,
+DOM-freie Geometrie-Funktion) vergrößert diese Box um einen Rand und
+klammert sie an die Bilddimensionen — liefert `null`, wenn keine
+verlässliche Bounding-Box vorliegt, damit bewusst **kein** künstlicher
+Ausschnitt erzeugt wird. `src/intern/generator.js`
+(`cropFieldRegion()`) zeichnet den Ausschnitt bei Bedarf per Canvas aus
+dem bereits geladenen Original-Bild vergrößert nach und zeigt ihn nur
+für Felder mit Status `needs_review` und vorhandener `bbox` unter dem
+erkannten Wert an (`.screenshot-field-crop`).
+
+**Telefonnummer-Normalisierung**: `core/screenshot/
+normalizeGermanPhoneNumber.js` schreibt eine deutsche internationale
+Vorwahl (`+49…`/`0049…`) auf die inländische `0…`-Schreibweise um
+(reine Präfixerkennung, z. B. `"+49 1523 3795099"` →
+`"01523 3795099"`). Andere Vorwahlen (z. B. `+43`, `+41`) matchen das
+Muster nicht und bleiben unverändert — keine Sonderbehandlung nötig.
+Eingebunden in `buildExtractionFields.js` (`phoneField`).
+
+**Österreich-Erkennung (Vorbereitung)**: `core/screenshot/
+detectAustrianFederalState.js` (`isAustrianFederalState()`) erkennt
+die neun österreichischen Bundesländer sowie das Kürzel "AT"
+(case-insensitiv). `buildExtractionFields.js` nutzt dies, um bei einem
+erkannten österreichischen Bundesland die deutsche
+Telefonnummer-Umschreibung gezielt zu unterdrücken — auch wenn die
+Nummer zufällig einem `+49…`-ähnlichen Muster entspricht. Eine
+sichtbare "Land"-Angabe im Formular ist bewusst nicht Teil dieses
+Schritts (Vorbereitung, kein neues Formularfeld).
+
+**Core-Module (neu)**: `core/screenshot/genderDisplayLabel.js`,
+`core/screenshot/normalizeGermanPhoneNumber.js`, `core/screenshot/
+detectAustrianFederalState.js`, `core/screenshot/
+computeCropRectangle.js` — alle rein, DOM-frei und einzeln getestet.
+
+**Tests**: `genderDisplayLabel.test.js`, `normalizeGermanPhoneNumber.test.js`
+(+49/0049-Umschreibung, +43/+41 bleiben unverändert),
+`detectAustrianFederalState.test.js` (alle neun Bundesländer + "AT"),
+`computeCropRectangle.test.js` (Randklammerung, fehlende/unvollständige
+Bounding-Box, ungültige Bilddimensionen), sowie ergänzte Fälle in
+`buildExtractionFields.test.js` (bestätigt leere IFK-ID,
+Bedienelement-Rauschen als IFK-ID-Wert, Telefonnummer-Normalisierung
+inkl. Österreich-Ausnahme) und `extractRawFieldsFromOcrLines.test.js`
+(bestätigt-leer-Markierung, Bounding-Box-Vereinigung). Bildvorschau,
+Lightbox und Bildausschnitt sind reines DOM-Wiring in
+`src/intern/generator.js` und damit — wie der Rest der Datei —
+bewusst ungetestet; per Browsertest mit einem echten humbee-Screenshot
+verifiziert.
+
+**Bewusst nicht Teil dieses Schritts**: sichtbares "Land"-Formularfeld,
+Unterstützung weiterer Länder über Österreich hinaus, automatische
+Bildvorverarbeitung (Kontrast/Schärfung) zur OCR-Verbesserung.

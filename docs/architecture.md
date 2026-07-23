@@ -1225,12 +1225,34 @@ zuständig.
    `core/screenshot/normalizeGender.js`,
    `core/screenshot/normalizePhone.js`,
    `core/screenshot/validateExtractedPaypalUrl.js`) und bezieht dabei
-   zusätzlich die OCR-Konfidenz der jeweiligen Zeile ein: ein an sich
-   formal gültiger, aber mit niedriger Konfidenz (< 60) erkannter Wert
-   wird von `recognized` auf `needs_review` herabgestuft, statt
-   unsicher übernommen zu werden. `core/screenshot/isLabelEcho.js`
-   verhindert zusätzlich, dass eine falsch zugeordnete Beschriftung
-   selbst als Wert landet.
+   zusätzlich die OCR-Konfidenz ein — **zeichengenau, wo möglich**
+   (`core/screenshot/annotateLowConfidenceCharacters.js`): Tesseract.js
+   liefert neben der Wort- auch eine Zeichen-Konfidenz je erkanntem
+   Zeichen (`word.symbols[].confidence`). Die Wort-Konfidenz allein ist
+   dabei kein verlässliches Signal für einzelne Zeichenfehler — sie
+   bezieht ein Sprachmodell mit ein und kann bei einem an sich korrekt,
+   aber unplausibel wirkenden Wert (z. B. einem Teil einer
+   PayPal-Vorgangs-ID) stark abfallen, obwohl fast alle Zeichen mit
+   hoher Konfidenz gelesen wurden. Liegen Zeichen-Konfidenzwerte vor,
+   wird deshalb nicht mehr pauschal der gesamte Wert auf
+   `needs_review` herabgestuft, sobald irgendein Signal niedrig ist —
+   stattdessen werden ausschließlich Zeichen mit einer Konfidenz unter
+   90 % (Schwelle empirisch aus einem echten humbee-Test-Screenshot
+   abgeleitet: korrekt gelesene Zeichen lagen durchgehend bei 94–99 %,
+   ein tatsächlich falsch gelesenes Zeichen sichtbar darunter bei 87 %)
+   als unsicher markiert (`field.chars`); enthält der Wert kein
+   unsicheres Zeichen, bleibt er trotz niedriger Wort-Konfidenz
+   `recognized`. Reiner Zahlenvergleich mit von Tesseract selbst
+   gelieferten Werten — keine Zeichen-Verwechslungstabelle (z. B.
+   "U ↔ J"), kein Raten, welches Zeichen korrekt wäre, keine KI. Liegen
+   keine zeichengenauen Daten vor (z. B. bei einwortigen Werten ohne
+   Positionsrekonstruktion), bleibt es bei der bisherigen, groben
+   Schwelle auf Basis der Wort-/Zeilen-Konfidenz (< 60 →
+   `needs_review`). Für das Geschlecht (Klassifizierung, keine
+   zeichengetreue Wiedergabe des erkannten Worts) gilt weiterhin
+   ausschließlich die grobe Schwelle. `core/screenshot/
+   isLabelEcho.js` verhindert zusätzlich, dass eine falsch zugeordnete
+   Beschriftung selbst als Wert landet.
 4. `core/screenshot/extractRepresentativeDataFromScreenshot.js`
    orchestriert die drei Schritte (inkl. 30-Sekunden-Timeout) und
    nimmt die OCR-Funktion injizierbar entgegen (`runOcr`), damit Tests
@@ -1254,6 +1276,23 @@ verschwindet automatisch beim nächsten manuellen Bearbeiten des
 jeweiligen Felds (`once`-Event-Listener in `src/intern/generator.js`,
 keine Persistenz der Herkunftsmarkierung).
 
+**Zeichengenaue Markierung in der Importvorschau**: Trägt ein Feld
+`chars` (siehe oben), rendert `renderValueCell()` in
+`src/intern/generator.js` jedes Zeichen einzeln; unsichere Zeichen
+erhalten die Klasse `screenshot-char-uncertain` (dezent gelber
+Hintergrund), sichere Zeichen bleiben unauffällig. Die
+E-Mail-für-Formular-Zeile spiegelt dabei die Zeichen-Markierung des
+tatsächlich ausgewählten Quellfelds (IFK-Mailadresse oder normale
+Mail-Adresse), da sie exakt dessen Wert übernimmt. Ein Klick auf eine
+solche Wertzelle blendet ein Eingabefeld ein (`startEditingValueCell()`);
+nach dem Verlassen (Blur/Enter) wird der bearbeitete Wert direkt im
+Vorschau-Objekt übernommen, der Status wechselt sichtbar auf "manuell
+geprüft" (`manuallyReviewedFieldKeys`, nur clientseitiger
+Sitzungszustand ohne Persistenz) und die Zeichen-Hervorhebung
+entfällt. Beim Klick auf "Erkannte Daten ins Formular übernehmen"
+gelten manuell geprüfte Felder als ebenso übernehmbar wie automatisch
+mit `recognized` erkannte (`isApplyable()`).
+
 **Fehlerkategorien** (`core/screenshot/classifyExtractionException.js`
 und direkte Reason-Codes aus
 `extractRepresentativeDataFromScreenshot.js`): `invalid_image`,
@@ -1271,9 +1310,14 @@ verständliche deutsche Fehlermeldung.
   `normalizePhone.js`, `validateExtractedPaypalUrl.js`,
   `pickEmailForForm.js` — Einzelprüfungen.
 - `core/screenshot/extractRawFieldsFromOcrLines.js` — regelbasierte
-  Zuordnung OCR-Zeilen → Rohfelder.
+  Zuordnung OCR-Zeilen → Rohfelder, inkl. Rand-Rauschen-Filterung
+  anhand der Wortposition und PayPal-URL-Fallback.
+- `core/screenshot/annotateLowConfidenceCharacters.js` — ordnet
+  einem OCR-Wert anhand vorhandener Zeichen-Konfidenzwerte zu, welche
+  einzelnen Zeichen unsicher sind, statt den gesamten Wert pauschal zu
+  bewerten.
 - `core/screenshot/buildExtractionFields.js` — Aggregation aller
-  Feldprüfungen inkl. Konfidenz-Herabstufung.
+  Feldprüfungen inkl. (möglichst zeichengenauer) Konfidenz-Herabstufung.
 - `core/screenshot/classifyExtractionException.js` — Ausnahme →
   Fehlerkategorie.
 - `core/screenshot/extractRepresentativeDataFromScreenshot.js` —
@@ -1301,6 +1345,13 @@ abgeschnittene PayPal-URL, Feldbeschriftungen als (nicht übernommener)
 OCR-Wert, niedrige OCR-Konfidenz führt zur Herabstufung auf
 `needs_review` statt ungeprüfter Übernahme, ungültiger Dateityp,
 fehlendes Bild, Timeout, OCR-Fehler. `core/screenshot/
+annotateLowConfidenceCharacters.test.js` und die entsprechenden
+Fälle in `buildExtractionFields.test.js` decken zusätzlich ab: nur
+tatsächlich unsichere Zeichen werden markiert (reales Beispiel
+"HMUW" statt "HMJW"), ein Wert mit niedriger Wort- aber durchgehend
+hoher Zeichen-Konfidenz bleibt `recognized`, nicht übereinstimmende
+Zeichen-/Symbolanzahl sowie fehlende Symboldaten fallen sauber auf die
+bisherige grobe Bewertung zurück. `core/screenshot/
 runScreenshotOcr.js` ist analog zu den bestehenden Browser-API-Wrappern
 bewusst ungetestet (reiner Tesseract.js-Aufruf ohne eigene Logik) — in
 allen Tests wird die OCR über den injizierbaren `runOcr`-Parameter

@@ -118,6 +118,7 @@ export function initGenerator() {
   let isSending = false;
   let lastExtractionFields = null;
   let isExtractingScreenshot = false;
+  let manuallyReviewedFieldKeys = new Set();
 
   function showError(message) {
     errorMessage.textContent = message;
@@ -337,8 +338,92 @@ export function initGenerator() {
     screenshotPreviewBody.innerHTML = "";
   }
 
+  function fieldCharsForKey(fields, key) {
+    const field = fields[key];
+    if (!field) return undefined;
+    if (Array.isArray(field.chars)) return field.chars;
+    // Die E-Mail-für-Formular-Zeile übernimmt unverändert den Wert des
+    // ausgewählten Quellfelds (IFK-Mailadresse oder normale
+    // Mail-Adresse) — Zeichen-Markierungen werden entsprechend
+    // gespiegelt, damit auch dort nur die tatsächlich unsicheren
+    // Zeichen hervorgehoben werden.
+    if (key === "emailForForm" && field.source) {
+      const sourceField = fields[field.source];
+      if (sourceField && Array.isArray(sourceField.chars) && sourceField.value === field.value) {
+        return sourceField.chars;
+      }
+    }
+    return undefined;
+  }
+
+  function renderStatusBadge(statusCell, key, statusValue) {
+    statusCell.innerHTML = "";
+    const statusBadge = document.createElement("span");
+    const displayStatus = manuallyReviewedFieldKeys.has(key) ? "manual" : statusValue;
+    statusBadge.className = `screenshot-preview-status ${displayStatus}`;
+    statusBadge.textContent =
+      displayStatus === "manual" ? "manuell geprüft" : SCREENSHOT_STATUS_LABELS[statusValue] || statusValue;
+    statusCell.appendChild(statusBadge);
+  }
+
+  function renderValueCell(valueCell, statusCell, fields, key) {
+    const field = fields[key];
+    const chars = manuallyReviewedFieldKeys.has(key) ? undefined : fieldCharsForKey(fields, key);
+    valueCell.innerHTML = "";
+
+    if (!field.value) {
+      valueCell.textContent = "—";
+      return;
+    }
+
+    if (!chars) {
+      valueCell.textContent = field.value;
+      return;
+    }
+
+    valueCell.classList.add("screenshot-value-editable");
+    valueCell.title = "Klicken, um das unsichere Zeichen zu korrigieren";
+    for (const { char, uncertain } of chars) {
+      const charSpan = document.createElement("span");
+      charSpan.textContent = char;
+      if (uncertain) charSpan.className = "screenshot-char-uncertain";
+      valueCell.appendChild(charSpan);
+    }
+    valueCell.addEventListener("click", () => startEditingValueCell(valueCell, statusCell, fields, key));
+  }
+
+  function startEditingValueCell(valueCell, statusCell, fields, key) {
+    const field = fields[key];
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "screenshot-value-edit-input";
+    input.value = field.value;
+
+    const finishEditing = () => {
+      field.value = input.value.trim();
+      manuallyReviewedFieldKeys.add(key);
+      renderValueCell(valueCell, statusCell, fields, key);
+      renderStatusBadge(statusCell, key, field.status);
+    };
+
+    input.addEventListener("blur", finishEditing);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+
+    valueCell.innerHTML = "";
+    valueCell.classList.remove("screenshot-value-editable");
+    valueCell.appendChild(input);
+    input.focus();
+    input.select();
+  }
+
   function renderScreenshotPreview(fields) {
     screenshotPreviewBody.innerHTML = "";
+    manuallyReviewedFieldKeys = new Set();
 
     for (const key of Object.keys(SCREENSHOT_FIELD_LABELS)) {
       const field = fields[key];
@@ -351,15 +436,13 @@ export function initGenerator() {
       row.appendChild(labelCell);
 
       const valueCell = document.createElement("td");
-      valueCell.textContent = field.value || "—";
-      row.appendChild(valueCell);
-
       const statusCell = document.createElement("td");
+
       const statusValue = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
-      const statusBadge = document.createElement("span");
-      statusBadge.className = `screenshot-preview-status ${statusValue}`;
-      statusBadge.textContent = SCREENSHOT_STATUS_LABELS[statusValue] || statusValue;
-      statusCell.appendChild(statusBadge);
+      renderValueCell(valueCell, statusCell, fields, key);
+      renderStatusBadge(statusCell, key, statusValue);
+
+      row.appendChild(valueCell);
       row.appendChild(statusCell);
 
       screenshotPreviewBody.appendChild(row);
@@ -448,34 +531,39 @@ export function initGenerator() {
 
     const fields = lastExtractionFields;
 
-    if (fields.firstName.status === "recognized") {
+    // Ein per Klick-Korrektur manuell geprüftes Feld gilt als ebenso
+    // übernehmbar wie ein automatisch mit hoher Konfidenz erkanntes —
+    // der Wert wurde bereits bewusst von einer Person bestätigt.
+    const isApplyable = (key, field) => field.status === "recognized" || manuallyReviewedFieldKeys.has(key);
+
+    if (isApplyable("firstName", fields.firstName)) {
       firstNameInput.value = fields.firstName.value;
       markFieldAsImported("firstName");
     }
 
-    if (fields.lastName.status === "recognized") {
+    if (isApplyable("lastName", fields.lastName)) {
       lastNameInput.value = fields.lastName.value;
       markFieldAsImported("lastName");
     }
 
-    if (fields.gender.status === "recognized") {
+    if (isApplyable("gender", fields.gender)) {
       for (const radio of genderRadios) {
         radio.checked = radio.value === fields.gender.value;
       }
       markFieldAsImported("gender");
     }
 
-    if (fields.phone.status === "recognized") {
+    if (isApplyable("phone", fields.phone)) {
       phoneInput.value = fields.phone.value;
       markFieldAsImported("phone");
     }
 
-    if (fields.federalState.status === "recognized") {
+    if (isApplyable("federalState", fields.federalState)) {
       federalStateInput.value = fields.federalState.value;
       markFieldAsImported("federalState");
     }
 
-    if (fields.region.status === "recognized") {
+    if (isApplyable("region", fields.region)) {
       regionInput.value = fields.region.value;
       markFieldAsImported("region");
     }
@@ -489,12 +577,12 @@ export function initGenerator() {
     // stillschweigend überschrieben; eine neue IFK-ID wird hier nie
     // automatisch erzeugt (dafür bleibt bewusst nur der bestehende
     // "Neu generieren"-Button zuständig).
-    if (!ifkIdInput.value.trim() && fields.ifkId.status === "recognized") {
+    if (!ifkIdInput.value.trim() && isApplyable("ifkId", fields.ifkId)) {
       ifkIdInput.value = fields.ifkId.value;
       markFieldAsImported("ifkId");
     }
 
-    if (fields.paypalUrl.status === "recognized") {
+    if (isApplyable("paypalUrl", fields.paypalUrl)) {
       paypalInput.value = fields.paypalUrl.value;
       markFieldAsImported("paypalUrl");
     }

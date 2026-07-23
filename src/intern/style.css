@@ -211,6 +211,38 @@
   color: #8a5a00;
 }
 
+.screenshot-preview-status.manual {
+  background: #e6f0fa;
+  color: #1b5f9e;
+}
+
+.screenshot-char-uncertain {
+  background: #fff3b0;
+  border-radius: 2px;
+}
+
+.screenshot-value-editable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
+.screenshot-value-editable:hover {
+  background: var(--field-bg);
+}
+
+.screenshot-value-edit-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--ifk-green);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+}
+
 #screenshot-apply-btn {
   display: block;
   margin: 16px auto 0;

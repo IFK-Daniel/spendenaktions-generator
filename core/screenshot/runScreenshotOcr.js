@@ -31,8 +31,20 @@ const LANG_PATH = "/tesseract/lang-data";
  * ein Konfidenzwert allein, da diese Bedienelemente von Tesseract oft
  * mit hoher Konfidenz (aber falschem Kontext) gelesen werden.
  *
+ * Liefert je Wort zusätzlich die einzelnen erkannten Zeichen
+ * (`symbols`) mit eigener Konfidenz. Tesseract berechnet die
+ * Wort-Konfidenz nicht als reinen Durchschnitt der Zeichen-Konfidenzen,
+ * sondern bezieht ein Sprachmodell mit ein — ein an sich korrekt (mit
+ * hoher Einzelkonfidenz) gelesenes, aber unbekanntes/unplausibles Wort
+ * (z. B. ein Teil einer PayPal-Vorgangs-ID) kann dadurch eine
+ * niedrige Wort-Konfidenz erhalten, obwohl nur ein einzelnes Zeichen
+ * tatsächlich unsicher war. Die Zeichenebene erlaubt es der
+ * DOM-freien Auswertung (`core/screenshot/
+ * annotateLowConfidenceCharacters.js`), genau dieses eine Zeichen statt
+ * des gesamten Werts als unsicher zu markieren.
+ *
  * @param {File | Blob} file
- * @returns {Promise<{ lines: { text: string, confidence: number, words: { text: string, confidence: number, x0: number, x1: number }[] }[] }>}
+ * @returns {Promise<{ lines: { text: string, confidence: number, words: { text: string, confidence: number, x0: number, x1: number, symbols: { text: string, confidence: number }[] }[] }[] }>}
  */
 export async function runScreenshotOcr(file) {
   const { createWorker, OEM } = await import("tesseract.js");
@@ -57,6 +69,10 @@ export async function runScreenshotOcr(file) {
           confidence: word.confidence,
           x0: word.bbox.x0,
           x1: word.bbox.x1,
+          symbols: (word.symbols || []).map((symbol) => ({
+            text: symbol.text,
+            confidence: symbol.confidence,
+          })),
         })),
       }))
       .filter((line) => line.text);

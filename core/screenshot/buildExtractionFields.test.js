@@ -135,3 +135,55 @@ test("fehlende Konfidenzangabe führt zu keiner Herabstufung", () => {
   const fields = buildExtractionFields({ ...FULL_RAW, firstName: { text: "Daniel" } });
   assert.deepEqual(fields.firstName, { value: "Daniel", status: "recognized" });
 });
+
+// Zeichengenaue Konfidenzbewertung — reales Beobachtungsmuster: eine
+// niedrige Wort-Konfidenz (Sprachmodell hält den Wert für kein
+// plausibles Wort) bedeutet nicht, dass jedes einzelne Zeichen
+// unsicher gelesen wurde.
+function symbol(text, confidence) {
+  return { text, confidence };
+}
+
+test("niedrige Wort-Konfidenz, aber alle Zeichen sicher: Wert bleibt recognized", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    paypalUrl: {
+      text: "https://www.paypal.com/donate/?hosted_button_id=BNQCRNKW",
+      confidence: 14,
+      symbols: "https://www.paypal.com/donate/?hosted_button_id=BNQCRNKW"
+        .split("")
+        .map((c) => symbol(c, 98)),
+    },
+  });
+  assert.equal(fields.paypalUrl.status, "recognized");
+  assert.equal(fields.paypalUrl.chars, undefined);
+});
+
+test("nur das tatsächlich unsichere Zeichen macht den Wert prüfbedürftig, nicht der gesamte Wert", () => {
+  const url = "https://www.paypal.com/donate/?hosted_button_id=BNQCRNKW8HMUW";
+  const symbols = url.split("").map((c) => symbol(c, 98));
+  // Position des "U" in "...HMUW" (das tatsächlich falsch gelesene Zeichen).
+  const uIndex = url.lastIndexOf("U");
+  symbols[uIndex] = symbol("U", 87);
+
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    paypalUrl: { text: url, confidence: 14, symbols },
+  });
+
+  assert.equal(fields.paypalUrl.status, "needs_review");
+  assert.ok(Array.isArray(fields.paypalUrl.chars));
+  assert.equal(fields.paypalUrl.chars.length, url.length);
+  assert.equal(fields.paypalUrl.chars.filter((c) => c.uncertain).length, 1);
+  assert.equal(fields.paypalUrl.chars[uIndex].char, "U");
+  assert.equal(fields.paypalUrl.chars[uIndex].uncertain, true);
+});
+
+test("ohne zeichengenaue Symboldaten bleibt die bisherige grobe Konfidenzbewertung bestehen", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    paypalUrl: raw("https://www.paypal.com/donate/?hosted_button_id=BNQCRNKW8HMUW", 14),
+  });
+  assert.equal(fields.paypalUrl.status, "needs_review");
+  assert.equal(fields.paypalUrl.chars, undefined);
+});

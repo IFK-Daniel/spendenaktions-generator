@@ -104,6 +104,7 @@ function reconstructValueFromWords(words, valueStartIndex, referenceGap, edgeZon
   return {
     text: kept.map((w) => w.text).join(" ").trim(),
     confidence: Math.min(...kept.map((w) => w.confidence)),
+    symbols: kept.every((w) => Array.isArray(w.symbols)) ? kept.flatMap((w) => w.symbols) : undefined,
   };
 }
 
@@ -165,6 +166,7 @@ function findPaypalUrlByPattern(lines, edgeZoneStartX) {
 
     let text = urlWord.text;
     const confidences = [urlWord.confidence];
+    const contributingWords = [urlWord];
 
     const next = lines[i + 1];
     if (next && Array.isArray(next.words) && !isLabelEcho(next.text)) {
@@ -174,10 +176,18 @@ function findPaypalUrlByPattern(lines, edgeZoneStartX) {
       if (continuationWord) {
         text += continuationWord.text;
         confidences.push(continuationWord.confidence);
+        contributingWords.push(continuationWord);
       }
     }
 
-    return { text, confidence: Math.min(...confidences) };
+    // Zeichenweise Konfidenz nur, wenn sie für ALLE beitragenden
+    // Wörter vorliegt — sonst würde `text` und `symbols` nicht mehr
+    // Zeichen für Zeichen übereinstimmen.
+    const symbols = contributingWords.every((w) => Array.isArray(w.symbols))
+      ? contributingWords.flatMap((w) => w.symbols)
+      : undefined;
+
+    return { text, confidence: Math.min(...confidences), symbols };
   }
 
   return null;
@@ -211,6 +221,9 @@ function findFieldValue(lines, labelVariants, edgeZoneStartX) {
         const reconstructed = reconstructValueFromWords(next.words, 0, referenceGap, edgeZoneStartX);
         if (reconstructed) return reconstructed;
       }
+      if (Array.isArray(next.words) && next.words.length === 1 && Array.isArray(next.words[0].symbols)) {
+        return { text: next.text, confidence: next.confidence, symbols: next.words[0].symbols };
+      }
       return { text: next.text, confidence: next.confidence };
     }
 
@@ -228,8 +241,8 @@ function findFieldValue(lines, labelVariants, edgeZoneStartX) {
  * `{ text, confidence }` (Rohwert vor Validierung) oder `null`, wenn
  * keine passende Beschriftung mit Wert gefunden wurde.
  *
- * @param {{ text: string, confidence?: number, words?: { text: string, confidence: number, x0: number, x1: number }[] }[]} lines
- * @returns {Record<string, { text: string, confidence?: number } | null>}
+ * @param {{ text: string, confidence?: number, words?: { text: string, confidence: number, x0: number, x1: number, symbols?: { text: string, confidence: number }[] }[] }[]} lines
+ * @returns {Record<string, { text: string, confidence?: number, symbols?: { text: string, confidence: number }[] } | null>}
  */
 export function extractRawFieldsFromOcrLines(lines) {
   const normalizedLines = (Array.isArray(lines) ? lines : [])

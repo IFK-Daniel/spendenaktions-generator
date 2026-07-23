@@ -4,6 +4,7 @@ import { normalizeGender } from "./normalizeGender.js";
 import { normalizePhone } from "./normalizePhone.js";
 import { validateExtractedPaypalUrl } from "./validateExtractedPaypalUrl.js";
 import { pickEmailForForm } from "./pickEmailForForm.js";
+import { annotateLowConfidenceCharacters } from "./annotateLowConfidenceCharacters.js";
 import { isValidEmail } from "../mail/validateEmail.js";
 import { validateIfkId } from "../id/validateIfkId.js";
 
@@ -14,6 +15,34 @@ function degradeIfLowConfidence(field, confidence) {
   if (typeof confidence !== "number") return field;
   if (confidence >= CONFIDENCE_THRESHOLD) return field;
   return { ...field, status: EXTRACTION_STATUS.NEEDS_REVIEW };
+}
+
+/**
+ * Bewertet einen bereits als formal gültig erkannten Wert anhand der
+ * OCR-Konfidenz — möglichst zeichengenau statt pauschal. Liegen
+ * zeichengenaue Konfidenzwerte vor (`raw.symbols`, siehe
+ * `core/screenshot/runScreenshotOcr.js`), werden ausschließlich die
+ * tatsächlich unsicheren Zeichen markiert (`chars`), während der
+ * restliche Wert als sicher gilt — der Status wird nur dann auf
+ * `needs_review` herabgestuft, wenn mindestens ein Zeichen unsicher
+ * ist. Ohne zeichengenaue Daten bleibt unverändert die bisherige,
+ * grobkörnige Bewertung anhand der Gesamt-Konfidenz bestehen.
+ */
+function applyConfidenceAssessment(field, raw) {
+  if (field.status !== EXTRACTION_STATUS.RECOGNIZED || !raw) {
+    return field;
+  }
+
+  const chars = annotateLowConfidenceCharacters(field.value, raw.symbols);
+  if (!chars) {
+    return degradeIfLowConfidence(field, raw.confidence);
+  }
+
+  if (!chars.some((c) => c.uncertain)) {
+    return field;
+  }
+
+  return { ...field, status: EXTRACTION_STATUS.NEEDS_REVIEW, chars };
 }
 
 function textField(raw) {
@@ -27,7 +56,7 @@ function textField(raw) {
     return { value: "", status: EXTRACTION_STATUS.NOT_RECOGNIZED };
   }
 
-  return degradeIfLowConfidence({ value: trimmed, status: EXTRACTION_STATUS.RECOGNIZED }, raw.confidence);
+  return applyConfidenceAssessment({ value: trimmed, status: EXTRACTION_STATUS.RECOGNIZED }, raw);
 }
 
 function emailField(raw) {
@@ -45,7 +74,7 @@ function emailField(raw) {
     return { value: trimmed, status: EXTRACTION_STATUS.NEEDS_REVIEW };
   }
 
-  return degradeIfLowConfidence({ value: trimmed, status: EXTRACTION_STATUS.RECOGNIZED }, raw.confidence);
+  return applyConfidenceAssessment({ value: trimmed, status: EXTRACTION_STATUS.RECOGNIZED }, raw);
 }
 
 function ifkIdField(raw) {
@@ -67,7 +96,7 @@ function ifkIdField(raw) {
     return { value: "", status: EXTRACTION_STATUS.NEEDS_REVIEW };
   }
 
-  return degradeIfLowConfidence({ value: check.normalized, status: EXTRACTION_STATUS.RECOGNIZED }, raw.confidence);
+  return applyConfidenceAssessment({ value: check.normalized, status: EXTRACTION_STATUS.RECOGNIZED }, raw);
 }
 
 function phoneField(raw) {
@@ -80,17 +109,21 @@ function phoneField(raw) {
     return { value: "", status: EXTRACTION_STATUS.NOT_RECOGNIZED };
   }
 
-  return degradeIfLowConfidence({ value: normalized, status: EXTRACTION_STATUS.RECOGNIZED }, raw.confidence);
+  return applyConfidenceAssessment({ value: normalized, status: EXTRACTION_STATUS.RECOGNIZED }, raw);
 }
 
 function genderField(raw) {
+  // Der Wert ("male"/"female") ist eine Klassifizierung des erkannten
+  // Worts, keine zeichengetreue Wiedergabe — eine zeichengenaue
+  // Zuordnung zu den OCR-Symbolen ist hier nicht sinnvoll möglich,
+  // daher bleibt es bei der groben Konfidenzbewertung.
   const result = normalizeGender(raw ? raw.text : "");
   return degradeIfLowConfidence(result, raw ? raw.confidence : undefined);
 }
 
 function paypalUrlField(raw) {
   const result = validateExtractedPaypalUrl(raw ? raw.text : "");
-  return degradeIfLowConfidence(result, raw ? raw.confidence : undefined);
+  return applyConfidenceAssessment(result, raw);
 }
 
 /**
@@ -98,11 +131,12 @@ function paypalUrlField(raw) {
  * (`core/screenshot/extractRawFieldsFromOcrLines.js`) gegen das
  * strikte interne Schema — mit denselben Core-Funktionen wie bei
  * manueller Formulareingabe. OCR-Konfidenzwerte fließen zusätzlich in
- * die Statusbewertung ein: ein an sich gültiger, aber mit niedriger
- * Konfidenz erkannter Wert wird von `recognized` auf `needs_review`
- * herabgestuft, statt unsicher übernommen zu werden.
+ * die Statusbewertung ein: liegen zeichengenaue Konfidenzwerte vor,
+ * wird nur bei tatsächlich unsicheren Zeichen auf `needs_review`
+ * herabgestuft (siehe `applyConfidenceAssessment`); andernfalls gilt
+ * weiterhin die grobe Gesamt-Konfidenz-Schwelle.
  *
- * @param {Record<string, { text: string, confidence?: number } | null>} rawFields
+ * @param {Record<string, { text: string, confidence?: number, symbols?: { text: string, confidence: number }[] } | null>} rawFields
  * @returns {object} Struktur gemäß dem in der Anforderung beschriebenen
  *   internen Ergebnisformat.
  */

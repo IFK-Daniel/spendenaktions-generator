@@ -76,26 +76,24 @@
           <div class="screenshot-import-status" id="screenshot-import-status" hidden></div>
 
           <div class="screenshot-import-preview" id="screenshot-import-preview" hidden>
-            <div class="screenshot-review-layout">
-              <div class="screenshot-original-preview">
-                <p class="screenshot-original-label">Original-Screenshot</p>
-                <button type="button" class="screenshot-original-img-btn" id="screenshot-original-img-btn">
-                  <img class="screenshot-original-img" id="screenshot-original-img" alt="Hochgeladener humbee-Screenshot — zum Vergrößern klicken" />
-                </button>
-              </div>
+            <button type="button" class="screenshot-show-original-btn" id="screenshot-show-original-btn">
+              Original-Screenshot anzeigen
+            </button>
 
-              <div class="screenshot-preview-table-wrap">
-                <table class="screenshot-preview-table">
-                  <thead>
-                    <tr>
-                      <th>Feld</th>
-                      <th>Erkannter Wert</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="screenshot-preview-body"></tbody>
-                </table>
-              </div>
+            <!-- Dient ausschließlich als Quelle für Lightbox/Bildausschnitte; wird nicht dauerhaft groß angezeigt. -->
+            <img class="screenshot-source-img" id="screenshot-source-img" alt="" hidden />
+
+            <div class="screenshot-preview-table-wrap">
+              <table class="screenshot-preview-table">
+                <thead>
+                  <tr>
+                    <th>Feld</th>
+                    <th>Erkannter Wert</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="screenshot-preview-body"></tbody>
+              </table>
             </div>
             <button type="button" id="screenshot-apply-btn">Erkannte Daten ins Formular übernehmen</button>
           </div>
@@ -105,7 +103,7 @@
           <button type="button" class="screenshot-lightbox-close" id="screenshot-lightbox-close" aria-label="Schließen">
             ×
           </button>
-          <img class="screenshot-lightbox-img" id="screenshot-lightbox-img" alt="Original-Screenshot, vergrößert" />
+          <img class="screenshot-lightbox-img" id="screenshot-lightbox-img" alt="Screenshot, vergrößert" />
         </div>
 
         <div class="person-fields">
@@ -133,14 +131,14 @@
               </label>
             </div>
           </fieldset>
-          <div class="person-field">
-            <label class="field-label" for="ifk-id-input">IFK-ID</label>
-            <span class="field-hint">(sofern bereits in humbee hinterlegt)</span>
-            <span class="field-source-badge" data-field-badge="ifkId" hidden>Aus Screenshot übernommen</span>
-            <div class="ifk-id-row">
-              <input type="text" id="ifk-id-input" placeholder="z. B. IFK7QX" maxlength="6" />
-              <button type="button" id="ifk-id-generate-btn">Neu generieren</button>
+          <div class="person-field ifk-id-field">
+            <div class="field-label-row">
+              <label class="field-label" for="ifk-id-input">IFK-ID</label>
+              <span class="field-hint">sofern bereits in humbee hinterlegt</span>
             </div>
+            <span class="field-source-badge" data-field-badge="ifkId" hidden>Aus Screenshot übernommen</span>
+            <input type="text" id="ifk-id-input" placeholder="z. B. IFK7QX" maxlength="6" />
+            <button type="button" id="ifk-id-generate-btn" class="ifk-id-generate-btn">Neu generieren</button>
           </div>
           <div class="person-field">
             <label class="field-label" for="email-input">E-Mail-Adresse</label>

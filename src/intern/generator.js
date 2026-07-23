@@ -19,6 +19,7 @@ import {
 import { runScreenshotOcr } from "../../core/screenshot/runScreenshotOcr.js";
 import { genderDisplayLabel } from "../../core/screenshot/genderDisplayLabel.js";
 import { computeCropRectangle } from "../../core/screenshot/computeCropRectangle.js";
+import { shouldShowFieldCrop } from "../../core/screenshot/shouldShowFieldCrop.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
@@ -90,8 +91,8 @@ export function initGenerator() {
   const screenshotImportPreview = document.getElementById("screenshot-import-preview");
   const screenshotPreviewBody = document.getElementById("screenshot-preview-body");
   const screenshotApplyBtn = document.getElementById("screenshot-apply-btn");
-  const screenshotOriginalImgBtn = document.getElementById("screenshot-original-img-btn");
-  const screenshotOriginalImg = document.getElementById("screenshot-original-img");
+  const screenshotShowOriginalBtn = document.getElementById("screenshot-show-original-btn");
+  const screenshotSourceImg = document.getElementById("screenshot-source-img");
   const screenshotLightbox = document.getElementById("screenshot-lightbox");
   const screenshotLightboxImg = document.getElementById("screenshot-lightbox-img");
   const screenshotLightboxClose = document.getElementById("screenshot-lightbox-close");
@@ -342,12 +343,17 @@ export function initGenerator() {
     screenshotImportStatus.className = "screenshot-import-status";
   }
 
+  // `isLightboxClosing`/aktueller `hidden`-Zustand verhindern, dass ein
+  // Klick, der gleichzeitig auf Bild UND Hintergrund "trifft" (Bubbling),
+  // `closeLightbox` mehrfach auslöst — jeder Handler prüft, ob die
+  // Lightbox überhaupt noch offen ist, bevor er reagiert.
   function openLightbox(src) {
     screenshotLightboxImg.src = src;
     screenshotLightbox.hidden = false;
   }
 
   function closeLightbox() {
+    if (screenshotLightbox.hidden) return;
     screenshotLightbox.hidden = true;
     screenshotLightboxImg.src = "";
   }
@@ -357,49 +363,54 @@ export function initGenerator() {
       URL.revokeObjectURL(lastScreenshotObjectUrl);
       lastScreenshotObjectUrl = null;
     }
-    screenshotOriginalImg.src = "";
+    screenshotSourceImg.src = "";
   }
 
-  // Zeigt den hochgeladenen Screenshot dauerhaft neben der
-  // Importvorschau an (Original bleibt ausschließlich im Browser —
-  // keine Speicherung, keine Übertragung). Löst erst auf, sobald das
-  // Bild geladen ist, damit `naturalWidth`/`naturalHeight` für die
+  // Lädt den hochgeladenen Screenshot ausschließlich als Quelle für
+  // Lightbox und Bildausschnitte (Original bleibt lokal im Browser —
+  // keine Speicherung, keine Übertragung). Wird standardmäßig NICHT
+  // groß angezeigt; nur über den Button "Original-Screenshot anzeigen"
+  // oder einen Feld-Ausschnitt sichtbar gemacht. Löst erst auf, sobald
+  // das Bild geladen ist, damit `naturalWidth`/`naturalHeight` für die
   // Bildausschnitte (siehe `cropFieldRegion`) zuverlässig verfügbar
   // sind. Ein zuvor erzeugtes Object-URL wird vor dem Erstellen eines
   // neuen sauber freigegeben.
-  function showOriginalScreenshot(file) {
+  function loadScreenshotSource(file) {
     return new Promise((resolve) => {
       clearOriginalScreenshot();
       const objectUrl = URL.createObjectURL(file);
       lastScreenshotObjectUrl = objectUrl;
 
-      screenshotOriginalImg.onload = () => resolve();
-      screenshotOriginalImg.onerror = () => resolve();
-      screenshotOriginalImg.src = objectUrl;
+      screenshotSourceImg.onload = () => resolve();
+      screenshotSourceImg.onerror = () => resolve();
+      screenshotSourceImg.src = objectUrl;
     });
   }
 
   // Erzeugt für ein prüfbedürftiges Feld mit bekannter Bounding-Box
-  // einen vergrößerten Bildausschnitt der zugehörigen Originalzeile
-  // (mit etwas Rand) aus dem bereits geladenen Original-Screenshot —
-  // rein clientseitig über Canvas, keine erneute Bildübertragung.
-  // Liefert `null`, wenn keine verlässliche Bounding-Box vorliegt
-  // (siehe `core/screenshot/computeCropRectangle.js`); dann wird
-  // bewusst kein künstlicher Ausschnitt erzeugt.
-  function cropFieldRegion(bbox) {
-    if (!screenshotOriginalImg.naturalWidth || !screenshotOriginalImg.naturalHeight) return null;
+  // einen deutlich vergrößerten Bildausschnitt der zugehörigen
+  // Originalzeile (mit etwas Rand) aus dem bereits geladenen
+  // Original-Screenshot — rein clientseitig über Canvas, keine erneute
+  // Bildübertragung. `targetWidth` orientiert sich an der verfügbaren
+  // Wertespalten-Breite, damit die Originalschrift gut lesbar ist,
+  // ohne die Tabellenstruktur zu sprengen. Liefert `null`, wenn keine
+  // verlässliche Bounding-Box vorliegt (siehe `core/screenshot/
+  // computeCropRectangle.js`); dann wird bewusst kein künstlicher
+  // Ausschnitt erzeugt.
+  function cropFieldRegion(bbox, targetWidth = 480) {
+    if (!screenshotSourceImg.naturalWidth || !screenshotSourceImg.naturalHeight) return null;
 
-    const rect = computeCropRectangle(bbox, screenshotOriginalImg.naturalWidth, screenshotOriginalImg.naturalHeight);
+    const rect = computeCropRectangle(bbox, screenshotSourceImg.naturalWidth, screenshotSourceImg.naturalHeight);
     if (!rect) return null;
 
-    const scale = Math.min(4, Math.max(1, 220 / rect.width));
+    const scale = Math.min(8, Math.max(1, targetWidth / rect.width));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(rect.width * scale);
     canvas.height = Math.round(rect.height * scale);
 
     const ctx = canvas.getContext("2d");
     ctx.drawImage(
-      screenshotOriginalImg,
+      screenshotSourceImg,
       rect.x,
       rect.y,
       rect.width,
@@ -451,17 +462,36 @@ export function initGenerator() {
     return key === "gender" ? genderDisplayLabel(value) : value;
   }
 
-  function appendFieldCropIfAvailable(valueCell, field) {
-    if (field.status !== "needs_review" || !field.bbox) return;
+  // Fügt für ein prüfbedürftiges Feld mit verlässlicher Bounding-Box
+  // einen deutlich vergrößerten, anklickbaren Bildausschnitt an —
+  // ausschließlich für `needs_review` (siehe `shouldShowFieldCrop`):
+  // erkannte Felder und "Neu generieren" (`confirmed_empty`) erhalten
+  // bewusst keinen Ausschnitt, da nichts zu prüfen ist. Ein Klick auf
+  // den Ausschnitt öffnet genau diesen (nicht den vollständigen
+  // Screenshot) groß in der Lightbox.
+  function appendFieldCropIfAvailable(container, field) {
+    if (!shouldShowFieldCrop(field)) return;
 
     const dataUrl = cropFieldRegion(field.bbox);
     if (!dataUrl) return;
+
+    const cropBtn = document.createElement("button");
+    cropBtn.type = "button";
+    cropBtn.className = "screenshot-field-crop-btn";
+    cropBtn.title = "Ausschnitt vergrößern";
 
     const crop = document.createElement("img");
     crop.className = "screenshot-field-crop";
     crop.src = dataUrl;
     crop.alt = "Vergrößerter Ausschnitt der Originalzeile";
-    valueCell.appendChild(crop);
+    cropBtn.appendChild(crop);
+
+    cropBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openLightbox(dataUrl);
+    });
+
+    container.appendChild(cropBtn);
   }
 
   function renderValueCell(valueCell, statusCell, fields, key) {
@@ -480,6 +510,12 @@ export function initGenerator() {
       return;
     }
 
+    // Prüfbedürftiger Wert mit zeichengenauer Markierung: Wert,
+    // Hinweistext und (falls verfügbar) großer Ausschnitt klar
+    // untereinander statt gedrängt in einer Zeile.
+    const review = document.createElement("div");
+    review.className = "screenshot-value-review";
+
     const charsContainer = document.createElement("span");
     charsContainer.className = "screenshot-value-editable";
     charsContainer.title = "Klicken, um das unsichere Zeichen zu korrigieren";
@@ -490,8 +526,15 @@ export function initGenerator() {
       charsContainer.appendChild(charSpan);
     }
     charsContainer.addEventListener("click", () => startEditingValueCell(valueCell, statusCell, fields, key));
-    valueCell.appendChild(charsContainer);
-    appendFieldCropIfAvailable(valueCell, field);
+    review.appendChild(charsContainer);
+
+    const hint = document.createElement("p");
+    hint.className = "screenshot-value-review-hint";
+    hint.textContent = "Bitte markiertes Zeichen mit dem Original vergleichen.";
+    review.appendChild(hint);
+
+    appendFieldCropIfAvailable(review, field);
+    valueCell.appendChild(review);
   }
 
   function startEditingValueCell(valueCell, statusCell, fields, key) {
@@ -538,7 +581,9 @@ export function initGenerator() {
       row.appendChild(labelCell);
 
       const valueCell = document.createElement("td");
+      valueCell.dataset.label = "Erkannter Wert";
       const statusCell = document.createElement("td");
+      statusCell.dataset.label = "Status";
 
       const statusValue = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
       renderValueCell(valueCell, statusCell, fields, key);
@@ -596,7 +641,7 @@ export function initGenerator() {
 
       if (result.ok) {
         lastExtractionFields = result.fields;
-        await showOriginalScreenshot(file);
+        await loadScreenshotSource(file);
         showScreenshotStatus("Screenshot erfolgreich ausgewertet. Bitte erkannte Daten prüfen.", "success");
         renderScreenshotPreview(result.fields);
       } else {
@@ -831,14 +876,25 @@ export function initGenerator() {
 
   screenshotApplyBtn.addEventListener("click", handleApplyScreenshotFields);
 
-  screenshotOriginalImgBtn.addEventListener("click", () => {
-    if (screenshotOriginalImg.src) openLightbox(screenshotOriginalImg.src);
+  screenshotShowOriginalBtn.addEventListener("click", () => {
+    if (screenshotSourceImg.src) openLightbox(screenshotSourceImg.src);
   });
 
-  screenshotLightboxClose.addEventListener("click", closeLightbox);
-  screenshotLightbox.addEventListener("click", (event) => {
-    if (event.target === screenshotLightbox) closeLightbox();
+  // Die Lightbox lässt sich auf vier Wegen schließen: X-Button, Klick
+  // auf das vergrößerte Bild selbst, Klick auf den dunklen Hintergrund
+  // und Escape. `closeLightbox()` ist bewusst idempotent (früher
+  // Ausstieg, falls bereits geschlossen) und jeder Bild-/Button-Klick
+  // stoppt die Propagation zum Hintergrund-Handler — so löst ein
+  // einzelner Klick nie mehrfach ein Schließen aus.
+  screenshotLightboxClose.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeLightbox();
   });
+  screenshotLightboxImg.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closeLightbox();
+  });
+  screenshotLightbox.addEventListener("click", () => closeLightbox());
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !screenshotLightbox.hidden) closeLightbox();
   });

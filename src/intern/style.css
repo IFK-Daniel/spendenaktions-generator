@@ -186,6 +186,58 @@
   padding: 8px 10px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+/* Kartenansicht auf kleinen Bildschirmen: die Tabelle mit fest
+   verdrahteter Spaltenbreite ist dort schwer lesbar, insbesondere für
+   Zeilen mit großem Bildausschnitt. Statt horizontal zu scrollen,
+   wird jede Zeile zu einer eigenständigen Karte mit beschrifteten
+   Werten (`data-label`, in `src/intern/generator.js` gesetzt). */
+@media (max-width: 640px) {
+  .screenshot-preview-table-wrap {
+    overflow-x: visible;
+  }
+
+  .screenshot-preview-table {
+    min-width: 0;
+  }
+
+  .screenshot-preview-table thead {
+    display: none;
+  }
+
+  .screenshot-preview-table,
+  .screenshot-preview-table tbody,
+  .screenshot-preview-table tr,
+  .screenshot-preview-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .screenshot-preview-table tr {
+    margin-bottom: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .screenshot-preview-table td {
+    padding: 4px 0;
+    border-bottom: none;
+  }
+
+  .screenshot-preview-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .screenshot-field-crop-btn {
+    max-width: 100%;
+  }
 }
 
 .screenshot-preview-status {
@@ -230,41 +282,28 @@
   font-weight: 600;
 }
 
-.screenshot-review-layout {
-  display: grid;
-  grid-template-columns: minmax(180px, 300px) 1fr;
-  gap: 20px;
-  align-items: start;
-  margin-bottom: 16px;
+.screenshot-show-original-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ifk-green-dark);
+  background: none;
+  border: 1px solid var(--ifk-green);
+  border-radius: 9999px;
+  cursor: pointer;
 }
 
-.screenshot-original-preview {
-  position: sticky;
-  top: 12px;
+.screenshot-show-original-btn:hover {
+  background: var(--ifk-green);
+  color: #ffffff;
 }
 
-.screenshot-original-label {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.screenshot-original-img-btn {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--field-bg);
-  cursor: zoom-in;
-  overflow: hidden;
-}
-
-.screenshot-original-img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 5px;
+.screenshot-source-img {
+  display: none;
 }
 
 .screenshot-lightbox {
@@ -310,22 +349,38 @@
   background: rgba(255, 255, 255, 0.24);
 }
 
-.screenshot-field-crop {
-  display: block;
-  margin-top: 6px;
-  max-width: 260px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.screenshot-value-review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
 }
 
-@media (max-width: 700px) {
-  .screenshot-review-layout {
-    grid-template-columns: 1fr;
-  }
+.screenshot-value-review-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
-  .screenshot-original-preview {
-    position: static;
-  }
+.screenshot-field-crop-btn {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.screenshot-field-crop {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 64px;
+  object-fit: contain;
+  border-radius: 5px;
 }
 
 .screenshot-value-editable {
@@ -386,7 +441,20 @@
   margin-left: 8px;
   font-size: 12px;
   font-weight: 400;
+  font-style: italic;
   color: var(--text-muted);
+}
+
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.field-label-row .field-label {
+  margin-bottom: 0;
 }
 
 .person-fields {
@@ -452,21 +520,14 @@
   box-shadow: 0 0 0 3px rgba(140, 193, 64, 0.18);
 }
 
-.ifk-id-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ifk-id-row input {
-  flex: 1 1 140px;
-  min-width: 140px;
+.ifk-id-field #ifk-id-input {
   text-transform: uppercase;
 }
 
-#ifk-id-generate-btn {
-  flex: 0 0 auto;
-  padding: 0 16px;
+.ifk-id-generate-btn {
+  display: block;
+  margin-top: 10px;
+  padding: 8px 18px;
   font-size: 13px;
   font-family: inherit;
   color: var(--ifk-green-dark);
@@ -477,7 +538,7 @@
   white-space: nowrap;
 }
 
-#ifk-id-generate-btn:hover {
+.ifk-id-generate-btn:hover {
   background: var(--ifk-green);
   color: #ffffff;
 }

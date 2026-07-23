@@ -1481,3 +1481,92 @@ verifiziert.
 **Bewusst nicht Teil dieses Schritts**: sichtbares "Land"-Formularfeld,
 Unterstützung weiterer Länder über Österreich hinaus, automatische
 Bildvorverarbeitung (Kontrast/Schärfung) zur OCR-Verbesserung.
+
+## 13. Layout-Feinschliff: Screenshot-Prüfung und IFK-ID-Feld
+
+Reiner Layout-/UX-Schritt auf Basis der bereits korrekten fachlichen
+Logik aus Abschnitt 11/12 — keine neuen Core-Berechnungen, nur
+Darstellung.
+
+**Original-Screenshot nicht mehr dauerhaft groß**: Das permanente
+zweispaltige Layout (Original links, Tabelle rechts) aus Abschnitt 12
+ist entfallen. Der hochgeladene Screenshot wird nur noch unsichtbar
+als Quelle für Lightbox/Bildausschnitte geladen
+(`#screenshot-source-img`, `display: none`). Oberhalb der Tabelle
+steht stattdessen ein kleiner, unaufdringlicher Button "Original-
+Screenshot anzeigen" (`#screenshot-show-original-btn`), der den
+vollständigen Screenshot bei Bedarf in der Lightbox öffnet.
+
+**Lightbox mit mehreren Schließwegen**: `src/intern/generator.js`
+verdrahtet Klick auf das vergrößerte Bild, Klick auf den dunklen
+Hintergrund, den X-Button und Escape — alle rufen dieselbe, bewusst
+idempotente `closeLightbox()` auf (früher Ausstieg, falls bereits
+geschlossen). Bild- und Button-Klicks stoppen zusätzlich die
+Event-Propagation zum Hintergrund-Handler, damit ein einzelner Klick
+nie mehrfach ein Schließen auslöst.
+
+**Deutlich größerer, anklickbarer Bildausschnitt**: `cropFieldRegion()`
+zielt jetzt auf eine Breite von 480px (zuvor 220px) und erlaubt einen
+höheren Skalierungsfaktor (bis 8×), sodass die Originalschrift gut
+lesbar ist, ohne die Wertespalte zu sprengen (`.screenshot-field-crop`,
+`max-width: 480px`, Seitenverhältnis über `object-fit: contain`
+erhalten). Der Ausschnitt ist in einen eigenen Button gewrappt
+(`.screenshot-field-crop-btn`); ein Klick öffnet **genau diesen**
+Ausschnitt (nicht den vollständigen Screenshot) groß in der Lightbox.
+
+**Klare Entscheidung, wann ein Ausschnitt erscheint**: Die reine
+Entscheidungslogik ist als eigenes, DOM-freies Modul ausgelagert —
+`core/screenshot/shouldShowFieldCrop.js` (`status === "needs_review"
+&& bbox vorhanden`) — und wird sowohl in `appendFieldCropIfAvailable()`
+als auch in den zugehörigen Tests verwendet. Erkannte Felder,
+`confirmed_empty` ("Neu generieren") und `needs_review` ohne
+verlässliche Bounding-Box zeigen bewusst keinen Ausschnitt.
+
+**Klar strukturierte Prüfzelle**: Für Werte mit zeichengenauer
+Markierung (`field.chars`) baut `renderValueCell()` jetzt einen
+`.screenshot-value-review`-Container mit drei klar getrennten
+Blöcken: Wert (mit Zeichen-Hervorhebung), Hinweistext "Bitte
+markiertes Zeichen mit dem Original vergleichen." und — falls
+vorhanden — der große Ausschnitt-Button. `max-width` und
+`object-fit: contain` verhindern, dass der Ausschnitt in die
+Statusspalte hineinragt oder die Tabellenstruktur verzerrt.
+
+**Kartenansicht auf kleinen Bildschirmen**: Ab `max-width: 640px`
+wandelt sich `.screenshot-preview-table` per CSS in eine vertikale
+Kartenansicht (Tabellenkopf ausgeblendet, jede Zeile eine Karte mit
+`data-label`-Beschriftungen vor Wert/Status über `::before { content:
+attr(data-label) }`) — `valueCell`/`statusCell` erhalten dafür in
+`renderScreenshotPreview()` das Attribut `data-label`. Sauberer als
+horizontales Scrollen bei den jetzt breiteren Bildausschnitten.
+
+**IFK-ID-Feld neu strukturiert**: `.ifk-id-row` (Eingabefeld und
+Button nebeneinander) ist entfallen. Die neue Struktur in
+`intern/index.html`: Labelzeile mit Label und Hinweistext nebeneinander
+(`.field-label-row`, `sofern bereits in humbee hinterlegt` als
+`.field-hint`, kursiv/dezent gesetzt), darunter das Eingabefeld in
+gleicher Breite/Höhe wie die übrigen Formularfelder (nutzt dieselben
+`.person-field input[type="text"]`-Regeln wie alle anderen Felder),
+darunter mit sauberem Abstand (`margin-top: 10px`) der Button "Neu
+generieren" (`.ifk-id-generate-btn`, jetzt block-level statt
+inline-flex neben dem Eingabefeld).
+
+**Core-Module (neu)**: `core/screenshot/shouldShowFieldCrop.js` —
+rein, DOM-frei, einzeln getestet.
+
+**Tests**: `shouldShowFieldCrop.test.js` deckt alle vier
+Statuskombinationen ab (needs_review+bbox → true;
+recognized/confirmed_empty/not_recognized bzw. needs_review ohne bbox
+→ false). Die interaktiven DOM-Verhaltensweisen (Button zeigt/öffnet
+Lightbox, Schließen per Bild-/Hintergrund-Klick/Escape, Crop öffnet
+die passende Ansicht, Kartenansicht auf Mobile, IFK-ID-Feldstruktur)
+sind — wie der gesamte DOM-Wiring-Teil von `src/intern/generator.js`
+durchgehend in diesem Projekt (siehe Abschnitte 7–12) — bewusst nicht
+Teil der Node-Testsuite, da dieses Projekt keine Browser-/DOM-
+Testumgebung (kein jsdom o. Ä.) einsetzt; sie wurden stattdessen
+gezielt per Browsertest mit einem echten humbee-Screenshot verifiziert
+(Desktop 1280px und Mobile 375px, inkl. Prüfung auf horizontales
+Überlaufen und Mehrfachauslösung beim Schließen der Lightbox).
+
+**Bewusst nicht Teil dieses Schritts**: Einführung einer
+JS-DOM-Testbibliothek, Änderungen an der fachlichen OCR-/
+Validierungslogik (Abschnitte 11/12 bleiben unverändert).

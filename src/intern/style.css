@@ -534,19 +534,19 @@
   display: none;
 }
 
-.field-source-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 9999px;
-  font-size: 11px;
-  background: #eafaf1;
-  color: #1e7e42;
-  vertical-align: middle;
-}
-
-.field-source-badge[hidden] {
-  display: none;
+/* Automatisch aus dem Screenshot übernommene Felder (Zustand
+   "imported", siehe `src/intern/generator.js`) erhalten statt eines
+   Text-Badges eine dezente grüne Hintergrundfläche — Padding/negativer
+   Margin gleichen sich aus, damit sich die Feldgröße dadurch nicht
+   ändert (kein Layoutversatz). Leere, manuell geänderte und
+   prüfbedürftige Felder erhalten diese Klasse bewusst nie (siehe
+   `markFieldAsImported`/`isAutoRecognized`). Attribut-Selektor sorgt
+   für ausreichend Spezifität gegenüber z. B. `.gender-fieldset`. */
+[data-field-container].field-imported {
+  background: rgba(140, 193, 64, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+  margin: -10px;
 }
 
 .field-hint {

@@ -9,10 +9,11 @@ const EXPECTED_ORDER = [
   "QR_PAYPAL_BLACK",
   "QR_GIRO_GREEN",
   "QR_GIRO_BLACK",
+  "CERTIFICATE_REPRESENTATIVE",
 ];
 
-test("genau sechs Materialtypen sind vorhanden", () => {
-  assert.equal(MATERIAL_TYPES.length, 6);
+test("genau sieben Materialtypen sind vorhanden", () => {
+  assert.equal(MATERIAL_TYPES.length, 7);
 });
 
 test("alle erwarteten Schlüssel sind vorhanden", () => {
@@ -34,6 +35,12 @@ test("jeder Materialtyp enthält die erwarteten Metadaten", () => {
     QR_PAYPAL_BLACK: { label: "PayPal QR schwarz", category: "qr", format: "png", extension: "png" },
     QR_GIRO_GREEN: { label: "GiroCode grün", category: "qr", format: "png", extension: "png" },
     QR_GIRO_BLACK: { label: "GiroCode schwarz", category: "qr", format: "png", extension: "png" },
+    CERTIFICATE_REPRESENTATIVE: {
+      label: "Repräsentantenurkunde",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
   };
 
   for (const [key, meta] of Object.entries(expected)) {
@@ -69,5 +76,5 @@ test("die Definition kann von außen nicht verändert werden", () => {
   }, TypeError);
 
   assert.equal(MATERIAL_TYPES[0].label, "Flyer Druckerei");
-  assert.equal(MATERIAL_TYPES.length, 6);
+  assert.equal(MATERIAL_TYPES.length, 7);
 });

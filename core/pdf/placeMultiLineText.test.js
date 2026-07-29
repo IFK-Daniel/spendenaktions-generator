@@ -64,3 +64,81 @@ test("priorisiert Auto-Shrink vor Umbruch: bei ausreichend Höhe bleibt möglich
   assert.equal(result.lines.length, 1);
   assert.ok(result.sizePt < 12);
 });
+
+// Monospace-Fake mit fester Aufstiegshöhe, unabhängig von `page.drawText` —
+// erlaubt es, die tatsächlich gezeichnete Y-Position zu prüfen (reines
+// pdf-lib-`PDFPage` liefert dafür keine einfache Introspektion).
+function fakeFontWithAscent(ascentPt) {
+  return {
+    widthOfTextAtSize: (text, size) => text.length * size * 0.5,
+    heightAtSize: () => ascentPt,
+  };
+}
+
+function fakePage(drawCalls) {
+  return { drawText: (text, opts) => drawCalls.push({ text, ...opts }) };
+}
+
+test("verticalAlign 'top' (Default) verhält sich wie bisher: Textblock beginnt an der Oberkante", () => {
+  const font = fakeFontWithAscent(10);
+  const drawCalls = [];
+  const page = fakePage(drawCalls);
+  placeMultiLineText({
+    page,
+    font,
+    text: "Kurz",
+    xPt: 0,
+    yPt: 100,
+    maxWidthPt: 200,
+    maxHeightPt: 50,
+    startSizePt: 12,
+    minSizePt: 12,
+    color: { r: 0, g: 0, b: 0 },
+  });
+  assert.equal(drawCalls.length, 1);
+  // baselineYPt = yPt - ascentPt - 0*lineHeightPt = 100 - 10 = 90
+  assert.equal(drawCalls[0].y, 90);
+});
+
+test("verticalAlign 'middle' zentriert den Textblock vertikal in maxHeightPt", () => {
+  const font = fakeFontWithAscent(10);
+  const drawCalls = [];
+  const page = fakePage(drawCalls);
+  // Eine Zeile bei size=12, lineHeightFactor=1.2 -> lineHeightPt=14.4, blockHeightPt=14.4.
+  placeMultiLineText({
+    page,
+    font,
+    text: "Kurz",
+    xPt: 0,
+    yPt: 100,
+    maxWidthPt: 200,
+    maxHeightPt: 50,
+    startSizePt: 12,
+    minSizePt: 12,
+    color: { r: 0, g: 0, b: 0 },
+    verticalAlign: "middle",
+  });
+  // blockTopYPt = yPt - (maxHeightPt - blockHeightPt)/2 = 100 - (50-14.4)/2 = 100 - 17.8 = 82.2
+  // baselineYPt = blockTopYPt - ascentPt = 82.2 - 10 = 72.2
+  assert.equal(drawCalls.length, 1);
+  assert.ok(Math.abs(drawCalls[0].y - 72.2) < 1e-9);
+});
+
+test("verticalAlign 'middle' ohne endliche maxHeightPt verhält sich wie 'top'", () => {
+  const font = fakeFontWithAscent(10);
+  const drawCalls = [];
+  const page = fakePage(drawCalls);
+  placeMultiLineText({
+    page,
+    font,
+    text: "Kurz",
+    xPt: 0,
+    yPt: 100,
+    maxWidthPt: 200,
+    startSizePt: 12,
+    minSizePt: 12,
+    color: { r: 0, g: 0, b: 0 },
+    verticalAlign: "middle",
+  });
+  assert.equal(drawCalls[0].y, 90);
+});

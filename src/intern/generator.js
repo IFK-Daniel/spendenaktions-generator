@@ -8,6 +8,7 @@ import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
 import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
+import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
 import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
@@ -19,6 +20,8 @@ import { initPhotoCropEditor } from "./photoCropEditor.js";
 import { loadTemplateAssetsBrowser } from "../../core/pdf/loadTemplateAssetsBrowser.js";
 import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
+import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
+import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import {
   ALLOWED_SCREENSHOT_MIME_TYPES,
   extractRepresentativeDataFromScreenshot,
@@ -33,6 +36,7 @@ import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncerta
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
+const CERTIFICATE_KEYS = new Set([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]);
 
 const FLYER_TEMPLATES_BY_KEY = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: flyerPrintFrontTemplate,
@@ -42,6 +46,15 @@ const FLYER_TEMPLATES_BY_KEY = Object.freeze({
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: "Druck-PDF herunterladen",
   [MATERIAL_TYPE_KEYS.FLYER_HOME]: "PDF herunterladen",
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]: "Urkunde herunterladen",
+});
+
+// Urkunden-Vorlage wird ausschließlich anhand des Geschlechts gewählt
+// (siehe Vorgabe) — der Renderer (`renderFlyer.js`) selbst kennt kein
+// Geschlecht, die Auswahl passiert vollständig hier, vor dem Rendern.
+const CERTIFICATE_TEMPLATE_BY_GENDER = Object.freeze({
+  male: certificateRepresentativeMaleTemplate,
+  female: certificateRepresentativeFemaleTemplate,
 });
 
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
@@ -124,10 +137,10 @@ export function initGenerator() {
   const screenshotLightboxClose = document.getElementById("screenshot-lightbox-close");
 
   const genderRadios = Array.from(document.querySelectorAll('input[name="gender"]'));
-  const fieldBadges = new Map(
-    Array.from(document.querySelectorAll("[data-field-badge]")).map((el) => [el.dataset.fieldBadge, el])
+  const fieldContainers = new Map(
+    Array.from(document.querySelectorAll("[data-field-container]")).map((el) => [el.dataset.fieldContainer, el])
   );
-  const fieldBadgeSourceElements = {
+  const fieldImportSourceElements = {
     firstName: [firstNameInput],
     lastName: [lastNameInput],
     gender: genderRadios,
@@ -398,8 +411,8 @@ export function initGenerator() {
       block.appendChild(heading);
 
       if (file.format === "pdf") {
-        // Flyer-Ergebnisse (aktuell die einzigen PDF-Materialien) nehmen
-        // im Ergebnisraster doppelt so viel Breite ein wie eine QR-Karte
+        // PDF-Ergebnisse (Flyer, Repräsentantenurkunde) nehmen im
+        // Ergebnisraster doppelt so viel Breite ein wie eine QR-Karte
         // (siehe `#result-grid`/`.result-block--flyer` in style.css) —
         // rein layoutbezogen, ändert nichts an Erzeugung oder Download.
         block.classList.add("result-block--flyer");
@@ -931,17 +944,37 @@ export function initGenerator() {
     screenshotImportPreview.hidden = false;
   }
 
-  function markFieldAsImported(fieldKey) {
-    const badge = fieldBadges.get(fieldKey);
-    if (!badge) return;
+  // Setzt/entfernt den Zustand "imported" (dezente grüne Hervorhebung,
+  // siehe `.field-imported` in style.css) für ein Formularfeld.
+  function setFieldImportedState(fieldKey, imported) {
+    const container = fieldContainers.get(fieldKey);
+    if (!container) return;
+    container.classList.toggle("field-imported", imported);
+  }
 
-    badge.hidden = false;
+  // Markiert ein Feld als automatisch übernommen — NIEMALS für leere
+  // Werte (siehe Vorgabe: leere Felder bleiben neutral). Die
+  // Hervorhebung verschwindet automatisch, sobald der Nutzer das Feld
+  // danach manuell ändert (einmaliger Listener je Aufruf).
+  function markFieldAsImported(fieldKey, value) {
+    if (typeof value === "string" && value.trim() === "") return;
 
-    const sourceElements = fieldBadgeSourceElements[fieldKey] || [];
+    setFieldImportedState(fieldKey, true);
+
+    const sourceElements = fieldImportSourceElements[fieldKey] || [];
     for (const el of sourceElements) {
       const eventName = el.type === "radio" ? "change" : "input";
-      el.addEventListener(eventName, () => { badge.hidden = true; }, { once: true });
+      el.addEventListener(eventName, () => setFieldImportedState(fieldKey, false), { once: true });
     }
+  }
+
+  // Ein Feld gilt nur dann als "automatisch übernommen" (grün), wenn es
+  // tatsächlich mit hoher Konfidenz erkannt wurde UND nicht zuvor über
+  // die Korrektur-Tabelle manuell bearbeitet wurde — manuell geänderte
+  // und prüfbedürftige Felder bleiben bewusst neutral (siehe Vorgabe).
+  function isAutoRecognized(key, field) {
+    const status = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
+    return status === "recognized" && !manuallyReviewedFieldKeys.has(key);
   }
 
   async function handleScreenshotFile(file) {
@@ -1024,39 +1057,40 @@ export function initGenerator() {
 
     if (isApplyable("firstName", fields.firstName)) {
       firstNameInput.value = fields.firstName.value;
-      markFieldAsImported("firstName");
+      if (isAutoRecognized("firstName", fields.firstName)) markFieldAsImported("firstName", fields.firstName.value);
     }
 
     if (isApplyable("lastName", fields.lastName)) {
       lastNameInput.value = fields.lastName.value;
-      markFieldAsImported("lastName");
+      if (isAutoRecognized("lastName", fields.lastName)) markFieldAsImported("lastName", fields.lastName.value);
     }
 
     if (isApplyable("gender", fields.gender)) {
       for (const radio of genderRadios) {
         radio.checked = radio.value === fields.gender.value;
       }
-      markFieldAsImported("gender");
+      if (isAutoRecognized("gender", fields.gender)) markFieldAsImported("gender", fields.gender.value);
     }
 
     if (isApplyable("phone", fields.phone)) {
       phoneInput.value = fields.phone.value;
-      markFieldAsImported("phone");
+      if (isAutoRecognized("phone", fields.phone)) markFieldAsImported("phone", fields.phone.value);
     }
 
     if (isApplyable("federalState", fields.federalState)) {
       federalStateInput.value = fields.federalState.value;
-      markFieldAsImported("federalState");
+      if (isAutoRecognized("federalState", fields.federalState))
+        markFieldAsImported("federalState", fields.federalState.value);
     }
 
     if (isApplyable("region", fields.region)) {
       regionInput.value = fields.region.value;
-      markFieldAsImported("region");
+      if (isAutoRecognized("region", fields.region)) markFieldAsImported("region", fields.region.value);
     }
 
     if (fields.emailForForm.value) {
       emailInput.value = fields.emailForForm.value;
-      markFieldAsImported("email");
+      if (isAutoRecognized("emailForForm", fields.emailForForm)) markFieldAsImported("email", fields.emailForForm.value);
     }
 
     // Eine bereits manuell eingetragene IFK-ID wird vor dem Import nie
@@ -1065,13 +1099,13 @@ export function initGenerator() {
     // "Neu generieren"-Button zuständig).
     if (!ifkIdInput.value.trim() && isApplyable("ifkId", fields.ifkId)) {
       ifkIdInput.value = fields.ifkId.value;
-      markFieldAsImported("ifkId");
+      if (isAutoRecognized("ifkId", fields.ifkId)) markFieldAsImported("ifkId", fields.ifkId.value);
       updateIfkIdGenerateBtnEmphasis();
     }
 
     if (isApplyable("paypalUrl", fields.paypalUrl)) {
       paypalInput.value = fields.paypalUrl.value;
-      markFieldAsImported("paypalUrl");
+      if (isAutoRecognized("paypalUrl", fields.paypalUrl)) markFieldAsImported("paypalUrl", fields.paypalUrl.value);
     }
 
     showScreenshotStatus("Erkannte Daten wurden ins Formular übernommen.", "success");
@@ -1093,12 +1127,6 @@ export function initGenerator() {
     const lastName = lastNameInput.value.trim();
     if (!firstName || !lastName) {
       showError("Bitte Vor- und Nachname eintragen.");
-      return;
-    }
-
-    const genderInput = document.querySelector('input[name="gender"]:checked');
-    if (!genderInput) {
-      showError("Bitte ein Geschlecht auswählen.");
       return;
     }
 
@@ -1142,6 +1170,17 @@ export function initGenerator() {
     const needsFlyer = materialKeys.some((key) => FLYER_KEYS.has(key));
     const needsPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key)) || needsFlyer;
     const needsGiro = materialKeys.some((key) => GIRO_KEYS.has(key)) || needsFlyer;
+    const needsCertificate = materialKeys.some((key) => CERTIFICATE_KEYS.has(key));
+
+    // Geschlecht ist ausschließlich Pflicht, wenn die Repräsentanten-
+    // urkunde ausgewählt ist (Vorlagenauswahl männlich/weiblich) — für
+    // alle anderen Materialien bleibt das Feld optional. Fehlt es, wird
+    // NUR die Urkunde übersprungen (kein blockierender `return`) — die
+    // übrigen ausgewählten Materialien werden trotzdem erzeugt (siehe
+    // Vorgabe).
+    const genderInput = document.querySelector('input[name="gender"]:checked');
+    const certificateBlockedMessage =
+      needsCertificate && !genderInput ? "Bitte wähle für die Urkunde das Geschlecht aus." : null;
 
     // Foto ist ausschließlich Pflicht, wenn mindestens ein fotobasiertes
     // Material (aktuell: einer der beiden Flyer) ausgewählt ist — für
@@ -1208,7 +1247,7 @@ export function initGenerator() {
       firstName,
       lastName,
       ifkId: ifkIdCheck.normalized,
-      gender: genderInput.value,
+      gender: genderInput ? genderInput.value : undefined,
       email,
       phone,
       photoUrl: photoUrl || undefined,
@@ -1280,7 +1319,37 @@ export function initGenerator() {
         }
       }
 
+      // Urkunde: nur, wenn ausgewählt UND ein Geschlecht vorliegt (siehe
+      // Prüfung weiter oben) — beeinflusst keine anderen Materialien.
+      if (needsCertificate && genderInput) {
+        const certificateEntry = manifest.materials.find((entry) => CERTIFICATE_KEYS.has(entry.key));
+        const certificateFile = await generateCertificateMaterial({
+          entry: certificateEntry,
+          templateConfig: CERTIFICATE_TEMPLATE_BY_GENDER[genderInput.value],
+          person: manifest.person,
+          deps: { loadTemplateAssets: loadTemplateAssetsBrowser },
+        });
+        files.push(certificateFile);
+      }
+
+      if (certificateBlockedMessage && files.length === 0) {
+        // Einziges ausgewähltes Material war die Urkunde, die mangels
+        // Geschlecht nicht erzeugt werden konnte — nichts zum Anzeigen,
+        // daher blockierender Hinweis (wie bei anderen Pflichtfeldern).
+        showError(certificateBlockedMessage);
+        return;
+      }
+
       renderResults(manifest.person, files);
+
+      if (certificateBlockedMessage) {
+        // Nicht blockierend: die übrigen ausgewählten Materialien wurden
+        // trotzdem erzeugt und bleiben sichtbar (siehe Vorgabe) — nur
+        // die Urkunde fehlt, daher kein `showError()` (das würde
+        // `results` wieder verstecken).
+        errorMessage.textContent = certificateBlockedMessage;
+        errorMessage.hidden = false;
+      }
 
       lastManifest = manifest;
       lastFiles = files;
@@ -1316,6 +1385,10 @@ export function initGenerator() {
     }
     ifkIdInput.value = generateIfkId();
     updateIfkIdGenerateBtnEmphasis();
+    // Eine neu generierte IFK-ID wurde nie automatisch übernommen — eine
+    // zuvor grün hervorgehobene, aus dem Screenshot übernommene ID darf
+    // nach dem Ersetzen nicht mehr als "importiert" markiert bleiben.
+    setFieldImportedState("ifkId", false);
   });
 
   ifkIdInput.addEventListener("input", updateIfkIdGenerateBtnEmphasis);

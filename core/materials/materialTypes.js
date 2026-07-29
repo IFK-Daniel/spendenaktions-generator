@@ -9,7 +9,7 @@
  *
  * Reihenfolge ist bewusst fest und reproduzierbar (siehe
  * `buildMaterialList.js`): Flyer Druckerei, Flyer Home, PayPal QR grün,
- * PayPal QR schwarz, GiroCode grün, GiroCode schwarz.
+ * PayPal QR schwarz, GiroCode grün, GiroCode schwarz, Repräsentantenurkunde.
  */
 
 /** Eindeutige technische Schlüssel der sechs Materialtypen. */
@@ -20,10 +20,11 @@ export const MATERIAL_TYPE_KEYS = Object.freeze({
   QR_PAYPAL_BLACK: "QR_PAYPAL_BLACK",
   QR_GIRO_GREEN: "QR_GIRO_GREEN",
   QR_GIRO_BLACK: "QR_GIRO_BLACK",
+  CERTIFICATE_REPRESENTATIVE: "CERTIFICATE_REPRESENTATIVE",
 });
 
 /**
- * Die sechs Materialtypen in fester Reihenfolge, jeweils mit
+ * Die sieben Materialtypen in fester Reihenfolge, jeweils mit
  * `{ key, label, category, format, extension }`. Jedes Objekt sowie das
  * äußere Array sind mit `Object.freeze` eingefroren, damit die
  * Definition von außen nicht versehentlich verändert werden kann.
@@ -70,6 +71,13 @@ export const MATERIAL_TYPES = Object.freeze([
     category: "qr",
     format: "png",
     extension: "png",
+  }),
+  Object.freeze({
+    key: MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
+    label: "Repräsentantenurkunde",
+    category: "certificate",
+    format: "pdf",
+    extension: "pdf",
   }),
 ]);
 

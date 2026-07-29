@@ -14,6 +14,7 @@ const FILENAME_SUFFIX_BY_KEY = Object.freeze({
   QR_PAYPAL_BLACK: "PayPal_QR_schwarz",
   QR_GIRO_GREEN: "GiroCode_gruen",
   QR_GIRO_BLACK: "GiroCode_schwarz",
+  CERTIFICATE_REPRESENTATIVE: "Urkunde",
 });
 
 const FILESYSTEM_UNSAFE_CHARS = /[\\/:*?"<>|]/g;

@@ -25,6 +25,10 @@ import { wrapText } from "./wrapText.js";
  * @param {number} [params.lineHeightFactor=1.2]
  * @param {{r: number, g: number, b: number}} params.color
  * @param {"left"|"center"|"right"} [params.align="left"]
+ * @param {"top"|"middle"} [params.verticalAlign="top"] Bei `"middle"` wird
+ *   der gesamte Textblock (alle Zeilen zusammen) vertikal in `maxHeightPt`
+ *   zentriert, statt (wie bisher) an der Oberkante der Fläche zu beginnen.
+ *   Ohne Wirkung, wenn `maxHeightPt` nicht angegeben ist (`Infinity`).
  * @returns {{sizePt: number, lines: string[]}}
  */
 export function placeMultiLineText({
@@ -40,6 +44,7 @@ export function placeMultiLineText({
   lineHeightFactor = 1.2,
   color,
   align = "left",
+  verticalAlign = "top",
   stepPt = 0.5,
 }) {
   const exceedsMaxWidth = (candidateLines, candidateSize) =>
@@ -57,6 +62,12 @@ export function placeMultiLineText({
 
   const ascentPt = font.heightAtSize(size, { descender: false });
 
+  let blockTopYPt = yPt;
+  if (verticalAlign === "middle" && Number.isFinite(maxHeightPt)) {
+    const blockHeightPt = lines.length * lineHeightPt;
+    blockTopYPt = yPt - (maxHeightPt - blockHeightPt) / 2;
+  }
+
   lines.forEach((line, index) => {
     const lineWidthPt = font.widthOfTextAtSize(line, size);
     let drawXPt = xPt;
@@ -65,7 +76,7 @@ export function placeMultiLineText({
     } else if (align === "right") {
       drawXPt = xPt + (maxWidthPt - lineWidthPt);
     }
-    const baselineYPt = yPt - ascentPt - index * lineHeightPt;
+    const baselineYPt = blockTopYPt - ascentPt - index * lineHeightPt;
     page.drawText(line, { x: drawXPt, y: baselineYPt, size, font, color });
   });
 

@@ -35,9 +35,10 @@ const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
  * @param {"male" | "female"} [params.gender] Optional. Wird, sofern
  *   angegeben, gegen `GENDER_VALUES` geprüft und unverändert im
  *   Manifest mitgeführt. Ohne Angabe enthält `person` kein
- *   `gender`-Feld (kein Default). Aktuell von keiner Funktion
- *   ausgewertet — reine Vorbereitung für eine künftige
- *   Flyer-Generierung.
+ *   `gender`-Feld (kein Default). Wird für die Auswahl der
+ *   Urkunden-Vorlage ausgewertet (siehe
+ *   `core/materials/generateCertificateMaterial.js`) — für alle
+ *   anderen Materialien weiterhin ohne Wirkung.
  * @param {string} [params.email] Optional. Wird, sofern angegeben,
  *   getrimmt und als gültige E-Mail-Adresse geprüft (siehe
  *   `core/mail/validateEmail.js`). Aktuell von keiner Funktion

@@ -17,7 +17,7 @@ test("liefert ein vollständiges Manifest mit Version, Person und allen Material
     lastName: "Mustermann",
     ifkId: "IFK7QX",
   });
-  assert.equal(manifest.materials.length, 6);
+  assert.equal(manifest.materials.length, 7);
 });
 
 test("Personendaten sind korrekt, inklusive normalisierter IFK-ID", () => {
@@ -50,6 +50,7 @@ test("Materialreihenfolge im Manifest entspricht der festen Reihenfolge", () => 
       "QR_PAYPAL_BLACK",
       "QR_GIRO_GREEN",
       "QR_GIRO_BLACK",
+      "CERTIFICATE_REPRESENTATIVE",
     ]
   );
 });

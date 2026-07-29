@@ -27,9 +27,10 @@ const COLOR_BY_KEY = Object.freeze({
  * `core/qr/generateQr.js` (über `generateMaterial.js`), `core/girocode/
  * buildGirocodePayload.js`, `core/branding/loadImage.js`,
  * `core/config/colors.js` und `core/config/girocodeDefaults.js` werden
- * direkt wiederverwendet. Flyer-Einträge im Manifest werden ignoriert
- * und führen nicht zu einem Fehler; enthält das Manifest ausschließlich
- * Flyer, wird ein leeres Array zurückgegeben.
+ * direkt wiederverwendet. Nicht-QR-Einträge im Manifest (Flyer,
+ * Urkunde, …) werden ignoriert und führen nicht zu einem Fehler;
+ * enthält das Manifest keine QR-Materialien, wird ein leeres Array
+ * zurückgegeben.
  *
  * @param {object} params
  * @param {{
@@ -119,8 +120,9 @@ function resolveQrMaterials(materials) {
     }
     if (HANDLED_QR_KEYS.has(entry.key)) {
       result.push(entry);
-    } else if (entry.category === "flyer") {
-      // Flyer werden aktuell nicht erzeugt und führen bewusst zu keinem Fehler.
+    } else if (entry.category !== "qr") {
+      // Nicht-QR-Materialien (Flyer, Urkunde, …) werden hier nicht erzeugt
+      // und führen bewusst zu keinem Fehler.
     } else {
       throw new Error(`generateQrMaterials: unbekannter QR-Materialtyp "${entry.key}".`);
     }

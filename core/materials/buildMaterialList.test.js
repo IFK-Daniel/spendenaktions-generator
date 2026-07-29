@@ -10,18 +10,19 @@ const ALL_KEYS_IN_ORDER = [
   "QR_PAYPAL_BLACK",
   "QR_GIRO_GREEN",
   "QR_GIRO_BLACK",
+  "CERTIFICATE_REPRESENTATIVE",
 ];
 
 function keysOf(list) {
   return list.map((type) => type.key);
 }
 
-test("ohne Optionen werden alle sechs Materialien geliefert", () => {
+test("ohne Optionen werden alle sieben Materialien geliefert", () => {
   const result = buildMaterialList();
   assert.deepEqual(keysOf(result), ALL_KEYS_IN_ORDER);
 });
 
-test("ohne Argument (undefined) werden ebenfalls alle sechs geliefert", () => {
+test("ohne Argument (undefined) werden ebenfalls alle sieben geliefert", () => {
   const result = buildMaterialList(undefined);
   assert.deepEqual(keysOf(result), ALL_KEYS_IN_ORDER);
 });
@@ -42,6 +43,7 @@ test("exclude entfernt Materialien aus der Auswahl", () => {
     "FLYER_HOME",
     "QR_PAYPAL_GREEN",
     "QR_PAYPAL_BLACK",
+    "CERTIFICATE_REPRESENTATIVE",
   ]);
 });
 

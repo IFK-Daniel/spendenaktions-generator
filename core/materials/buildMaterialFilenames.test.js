@@ -4,7 +4,7 @@ import { buildMaterialFilenames } from "./buildMaterialFilenames.js";
 
 const VALID_IFK_ID = "IFK7QX";
 
-test("liefert die korrekten Dateinamen für alle sechs Materialtypen", () => {
+test("liefert die korrekten Dateinamen für alle sieben Materialtypen", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
@@ -19,6 +19,7 @@ test("liefert die korrekten Dateinamen für alle sechs Materialtypen", () => {
   assert.equal(filenames.QR_PAYPAL_BLACK, "IFK_Max_Mustermann_PayPal_QR_schwarz.png");
   assert.equal(filenames.QR_GIRO_GREEN, "IFK_Max_Mustermann_GiroCode_gruen.png");
   assert.equal(filenames.QR_GIRO_BLACK, "IFK_Max_Mustermann_GiroCode_schwarz.png");
+  assert.equal(filenames.CERTIFICATE_REPRESENTATIVE, "IFK_Max_Mustermann_Urkunde.pdf");
 
   for (const entry of result) {
     assert.equal(entry.ifkId, "IFK7QX");
@@ -112,13 +113,13 @@ test("unbekannter Materialtyp wirft einen Fehler", () => {
   );
 });
 
-test("ohne 'materials' werden alle sechs Dateinamen erzeugt", () => {
+test("ohne 'materials' werden alle sieben Dateinamen erzeugt", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
     ifkId: VALID_IFK_ID,
   });
-  assert.equal(result.length, 6);
+  assert.equal(result.length, 7);
 });
 
 test("'materials' akzeptiert auch das Ergebnis von buildMaterialList", async () => {

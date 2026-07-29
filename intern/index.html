@@ -48,8 +48,9 @@
               Personendaten und PayPal-Link eintragen, Materialien auswählen und erzeugen.
             </p>
             <p class="intern-notice">
-              Nur für den internen Gebrauch. Flyer-PDFs folgen, sobald der Grafikentwurf
-              vorliegt.
+              Nur für den internen Gebrauch. Die Flyer-Erzeugung ist ein technischer
+              Prototyp: Hintergrund-PDF und Schriften sind vorläufige Übergangslösungen,
+              siehe Hinweis nach der Vorschau.
             </p>
           </div>
         </div>
@@ -163,9 +164,11 @@
             <span class="field-source-badge" data-field-badge="region" hidden>Aus Screenshot übernommen</span>
             <input type="text" id="region-input" placeholder="z. B. München" />
           </div>
-          <div class="person-field person-field-full">
+          <div class="person-field person-field-full" id="photo-url-field">
             <label class="field-label" for="photo-url-input">Foto-Link</label>
+            <span class="field-hint">Pflicht bei Auswahl eines Flyer-Materials</span>
             <input type="url" id="photo-url-input" placeholder="z. B. https://beispiel.de/foto.jpg" />
+            <p class="field-error-hint" id="photo-url-error-hint" hidden></p>
           </div>
         </div>
 
@@ -182,15 +185,15 @@
         <fieldset class="material-fieldset">
           <legend class="field-label">Materialien auswählen</legend>
           <div class="material-list">
-            <label class="material-item material-item-disabled">
-              <input type="checkbox" data-material-key="FLYER_DRUCKEREI" disabled />
-              Flyer Druckerei
-              <span class="material-item-hint">wartet auf Grafikentwurf</span>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
+              Flyer – Druckerei
+              <span class="material-item-hint">Prototyp, Foto nötig</span>
             </label>
-            <label class="material-item material-item-disabled">
-              <input type="checkbox" data-material-key="FLYER_HOME" disabled />
-              Flyer Home
-              <span class="material-item-hint">wartet auf Grafikentwurf</span>
+            <label class="material-item">
+              <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
+              Flyer – Home
+              <span class="material-item-hint">Prototyp, Foto nötig</span>
             </label>
             <label class="material-item">
               <input type="checkbox" data-material-key="QR_PAYPAL_GREEN" checked />

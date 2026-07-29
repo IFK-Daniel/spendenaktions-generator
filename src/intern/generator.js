@@ -7,11 +7,16 @@ import { buildMaterialManifest } from "../../core/materials/buildMaterialManifes
 import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
 import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
+import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
 import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
+import { normalizePhotoToPng } from "../../core/photo/normalizePhotoToPng.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
+import { loadTemplateAssetsBrowser } from "../../core/pdf/loadTemplateAssetsBrowser.js";
+import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
+import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
 import {
   ALLOWED_SCREENSHOT_MIME_TYPES,
   extractRepresentativeDataFromScreenshot,
@@ -25,6 +30,17 @@ import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncerta
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
+const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
+
+const FLYER_TEMPLATES_BY_KEY = Object.freeze({
+  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: flyerPrintFrontTemplate,
+  [MATERIAL_TYPE_KEYS.FLYER_HOME]: flyerHomeFrontTemplate,
+});
+
+const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
+  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: "Druck-PDF herunterladen",
+  [MATERIAL_TYPE_KEYS.FLYER_HOME]: "PDF herunterladen",
+});
 
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
@@ -73,6 +89,8 @@ export function initGenerator() {
   const emailInput = document.getElementById("email-input");
   const phoneInput = document.getElementById("phone-input");
   const photoUrlInput = document.getElementById("photo-url-input");
+  const photoUrlField = document.getElementById("photo-url-field");
+  const photoUrlErrorHint = document.getElementById("photo-url-error-hint");
   const federalStateInput = document.getElementById("federal-state-input");
   const regionInput = document.getElementById("region-input");
   const paypalInput = document.getElementById("paypal-input");
@@ -128,6 +146,11 @@ export function initGenerator() {
   let lastFiles = null;
   let lastPhoto = null;
   let isSending = false;
+  let isGenerating = false;
+  // Alle Object-URLs, die für die aktuell angezeigten Ergebnisse (Bild-
+  // und PDF-Vorschauen) erzeugt wurden — werden vor jeder Neuerzeugung
+  // und beim Verlassen der Seite freigegeben (siehe `revokeActiveObjectUrls`).
+  let activeObjectUrls = [];
   let lastExtractionFields = null;
   let isExtractingScreenshot = false;
   let manuallyReviewedFieldKeys = new Set();
@@ -154,6 +177,32 @@ export function initGenerator() {
     errorMessage.hidden = true;
     errorMessage.textContent = "";
   }
+
+  function showPhotoFieldError(message) {
+    photoUrlField.classList.add("person-field--invalid");
+    photoUrlErrorHint.textContent = message;
+    photoUrlErrorHint.hidden = false;
+    photoUrlInput.focus();
+    photoUrlInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function clearPhotoFieldError() {
+    photoUrlField.classList.remove("person-field--invalid");
+    photoUrlErrorHint.hidden = true;
+    photoUrlErrorHint.textContent = "";
+  }
+
+  // Gibt alle Object-URLs frei, die für zuvor angezeigte Ergebnisse
+  // (Bild-/PDF-Vorschauen) erzeugt wurden — vor jeder Neuerzeugung und
+  // beim Verlassen der Seite (siehe Aufrufer unten).
+  function revokeActiveObjectUrls() {
+    for (const url of activeObjectUrls) {
+      URL.revokeObjectURL(url);
+    }
+    activeObjectUrls = [];
+  }
+
+  window.addEventListener("beforeunload", revokeActiveObjectUrls);
 
   function showPhotoStatus(message, type) {
     photoStatus.textContent = message;
@@ -245,11 +294,13 @@ export function initGenerator() {
   }
 
   function renderResults(person, files) {
+    revokeActiveObjectUrls();
     resultPersonName.textContent = `${person.firstName} ${person.lastName} (${person.ifkId})`;
     resultGrid.innerHTML = "";
 
     for (const file of files) {
       const objectUrl = URL.createObjectURL(file.content);
+      activeObjectUrls.push(objectUrl);
 
       const block = document.createElement("div");
       block.className = "result-block";
@@ -258,17 +309,51 @@ export function initGenerator() {
       heading.textContent = file.label;
       block.appendChild(heading);
 
-      const img = document.createElement("img");
-      img.src = objectUrl;
-      img.alt = file.label;
-      block.appendChild(img);
+      if (file.format === "pdf") {
+        const preview = document.createElement("iframe");
+        preview.className = "result-pdf-preview";
+        preview.src = objectUrl;
+        preview.title = `Vorschau: ${file.label}`;
+        block.appendChild(preview);
 
-      const downloadLink = document.createElement("a");
-      downloadLink.className = "download-link";
-      downloadLink.href = objectUrl;
-      downloadLink.download = file.filename;
-      downloadLink.textContent = "PNG herunterladen";
-      block.appendChild(downloadLink);
+        if (Array.isArray(file.warnings) && file.warnings.length > 0) {
+          const warningBox = document.createElement("p");
+          warningBox.className = "result-block-warning";
+          warningBox.textContent =
+            "Vorläufig, nicht pixelgenau: " + file.warnings.map((w) => w.reason).join(" ");
+          block.appendChild(warningBox);
+        }
+
+        // Zusätzlich zur eingebetteten Vorschau ein Link zum Öffnen in
+        // einem eigenen Tab — eingebettete PDF-Voransichten verhalten
+        // sich nicht in jedem Browser/jeder Umgebung gleich zuverlässig.
+        const openLink = document.createElement("a");
+        openLink.className = "download-link";
+        openLink.href = objectUrl;
+        openLink.target = "_blank";
+        openLink.rel = "noopener";
+        openLink.textContent = "Vorschau in neuem Tab öffnen";
+        block.appendChild(openLink);
+
+        const downloadLink = document.createElement("a");
+        downloadLink.className = "download-link";
+        downloadLink.href = objectUrl;
+        downloadLink.download = file.filename;
+        downloadLink.textContent = FLYER_DOWNLOAD_LABEL_BY_KEY[file.key] || "PDF herunterladen";
+        block.appendChild(downloadLink);
+      } else {
+        const img = document.createElement("img");
+        img.src = objectUrl;
+        img.alt = file.label;
+        block.appendChild(img);
+
+        const downloadLink = document.createElement("a");
+        downloadLink.className = "download-link";
+        downloadLink.href = objectUrl;
+        downloadLink.download = file.filename;
+        downloadLink.textContent = "PNG herunterladen";
+        block.appendChild(downloadLink);
+      }
 
       resultGrid.appendChild(block);
     }
@@ -894,8 +979,11 @@ export function initGenerator() {
   }
 
   async function handleGenerate() {
+    if (isGenerating) return;
+
     clearError();
     clearPhotoStatus();
+    clearPhotoFieldError();
     deliverySection.hidden = true;
     lastManifest = null;
     lastFiles = null;
@@ -933,12 +1021,6 @@ export function initGenerator() {
       return;
     }
 
-    const photoUrl = photoUrlInput.value.trim();
-    if (!isHttpUrl(photoUrl)) {
-      showError("Bitte einen gültigen Foto-Link (http/https) eintragen.");
-      return;
-    }
-
     const federalState = federalStateInput.value.trim();
     if (!federalState) {
       showError("Bitte ein Bundesland eintragen.");
@@ -957,14 +1039,57 @@ export function initGenerator() {
       return;
     }
 
-    const needsPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key));
-    const needsGiro = materialKeys.some((key) => GIRO_KEYS.has(key));
+    const needsFlyer = materialKeys.some((key) => FLYER_KEYS.has(key));
+    const needsPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key)) || needsFlyer;
+    const needsGiro = materialKeys.some((key) => GIRO_KEYS.has(key)) || needsFlyer;
+
+    // Foto ist ausschließlich Pflicht, wenn mindestens ein fotobasiertes
+    // Material (aktuell: einer der beiden Flyer) ausgewählt ist — für
+    // reine QR-Materialien bleibt das Feld optional (siehe Abschnitt 5
+    // der Vorgabe).
+    const photoUrl = photoUrlInput.value.trim();
+    if (needsFlyer) {
+      if (!isHttpUrl(photoUrl)) {
+        showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
+        showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
+        return;
+      }
+    } else if (photoUrl && !isHttpUrl(photoUrl)) {
+      showError("Der Foto-Link ist ungültig (http/https) — bitte korrigieren oder das Feld leeren.");
+      return;
+    }
 
     let paypalUrl;
     if (needsPaypal) {
       paypalUrl = extractPaypalLink(paypalInput.value.trim());
       if (!paypalUrl) {
         showError("Kein gültiger PayPal-Link gefunden. Bitte einen Link wie z. B. https://www.paypal.com/donate/... einfügen.");
+        return;
+      }
+    }
+
+    let photoAsset = null;
+    if (needsFlyer) {
+      showPhotoStatus("Foto wird geprüft …", "loading");
+      const photoResult = await fetchRepresentativePhoto(photoUrl);
+      if (!photoResult.ok) {
+        lastPhoto = null;
+        showPhotoStatus(getPhotoRetrievalErrorMessage(photoResult.reason), "error");
+        showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
+        showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
+        return;
+      }
+      lastPhoto = photoResult;
+      const sizeKb = Math.max(1, Math.round(photoResult.size / 1024));
+      showPhotoStatus(`Foto erfolgreich geladen (${photoResult.format}, ${sizeKb} KB).`, "success");
+      showPhotoPreview(`data:${photoResult.contentType};base64,${photoResult.content}`);
+      try {
+        photoAsset = await normalizePhotoToPng({
+          dataUrl: `data:${photoResult.contentType};base64,${photoResult.content}`,
+        });
+      } catch {
+        showPhotoFieldError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
+        showError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
         return;
       }
     }
@@ -976,19 +1101,74 @@ export function initGenerator() {
       gender: genderInput.value,
       email,
       phone,
-      photoUrl,
+      photoUrl: photoUrl || undefined,
       federalState,
       region,
       materials: materialKeys,
     });
 
+    isGenerating = true;
+    generateBtn.disabled = true;
+
     try {
-      const files = await generateQrMaterials({
-        manifest,
-        paypalUrl,
-        girocode: needsGiro ? {} : undefined,
-        logo: logoUrl,
-      });
+      // QR-Materialien: alles vom Nutzer ausgewählte, plus (nur intern,
+      // nicht Teil der Ergebnisliste/des Zips) die grünen PayPal-/
+      // GiroCode-Varianten, falls ein Flyer ausgewählt ist und der Nutzer
+      // diese nicht ohnehin schon separat ausgewählt hat — der Flyer
+      // benötigt exakt diese beiden Grafiken zum Einbetten (siehe
+      // `templates/*/template.config.js`, Felder `qrPaypal`/`qrGiro`).
+      const selectedQrKeys = materialKeys.filter((key) => PAYPAL_KEYS.has(key) || GIRO_KEYS.has(key));
+      const extraFlyerQrKeys = needsFlyer
+        ? [MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_GREEN].filter(
+            (key) => !selectedQrKeys.includes(key)
+          )
+        : [];
+      const allQrKeys = [...selectedQrKeys, ...extraFlyerQrKeys];
+
+      let qrResults = [];
+      if (allQrKeys.length > 0) {
+        const qrManifest = buildMaterialManifest({
+          firstName,
+          lastName,
+          ifkId: ifkIdCheck.normalized,
+          materials: allQrKeys,
+        });
+        qrResults = await generateQrMaterials({
+          manifest: qrManifest,
+          paypalUrl,
+          girocode: needsGiro ? {} : undefined,
+          logo: logoUrl,
+        });
+      }
+
+      const files = qrResults.filter((result) => selectedQrKeys.includes(result.key));
+
+      if (needsFlyer) {
+        const qrPaypalResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN);
+        const qrGiroResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_GIRO_GREEN);
+        const qrPaypalAsset = {
+          bytes: new Uint8Array(await qrPaypalResult.content.arrayBuffer()),
+          mimeType: "image/png",
+        };
+        const qrGiroAsset = {
+          bytes: new Uint8Array(await qrGiroResult.content.arrayBuffer()),
+          mimeType: "image/png",
+        };
+
+        const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
+        for (const entry of flyerEntries) {
+          const flyerFile = await generateFlyerMaterial({
+            entry,
+            templateConfig: FLYER_TEMPLATES_BY_KEY[entry.key],
+            person: manifest.person,
+            photoAsset,
+            qrPaypalAsset,
+            qrGiroAsset,
+            deps: { loadTemplateAssets: loadTemplateAssetsBrowser },
+          });
+          files.push(flyerFile);
+        }
+      }
 
       renderResults(manifest.person, files);
 
@@ -997,9 +1177,17 @@ export function initGenerator() {
       resetDeliverySection();
       deliverySection.hidden = false;
 
-      await checkRepresentativePhoto(photoUrl);
+      // Bei rein optionalem Foto (kein Flyer ausgewählt, aber trotzdem
+      // ein Link eingetragen) weiterhin informativ prüfen — nicht
+      // blockierend, da für die ausgewählten Materialien nicht benötigt.
+      if (!needsFlyer && photoUrl) {
+        await checkRepresentativePhoto(photoUrl);
+      }
     } catch (err) {
       showError(err.message || "Beim Erstellen der Materialien ist ein Fehler aufgetreten.");
+    } finally {
+      isGenerating = false;
+      generateBtn.disabled = false;
     }
   }
 
@@ -1083,6 +1271,8 @@ export function initGenerator() {
       alternativeEmailField.hidden = selectedDeliveryTarget() !== "alternative";
     });
   }
+
+  photoUrlInput.addEventListener("input", clearPhotoFieldError);
 
   generateBtn.addEventListener("click", handleGenerate);
   deliverySendBtn.addEventListener("click", handleSendDelivery);

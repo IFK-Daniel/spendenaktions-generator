@@ -1,5 +1,3 @@
-import { StandardFonts } from "pdf-lib";
-
 /**
  * Template-Config "Flyer Druckerei – Vorderseite".
  *
@@ -11,33 +9,61 @@ import { StandardFonts } from "pdf-lib";
  * (InDesign-Konvention). `core/pdf/coordinates.js` rechnet das in
  * pdf-lib-Punkte um.
  *
- * WICHTIG — bekannte Einschränkungen dieser Config (siehe Konversation):
- * - `background.pdf` ist kein leeres Master-Template, sondern das vom
- *   Grafiker gelieferte Beispiel-PDF (bereits mit "Alexandra Mazur"
- *   befüllt). `legacyContentCovers` deckt die vier betroffenen
- *   Textbereiche vor dem Zeichnen der echten Werte mit weißen
- *   Rechtecken ab (Koordinaten aus der tatsächlichen Textposition im
- *   Beispiel-PDF vermessen, nicht aus der Koordinatenliste). Sobald der
- *   Grafiker eine echte leere Vorlage liefert, kann `legacyContentCovers`
- *   auf ein leeres Array reduziert werden.
- * - `fonts` verweist aktuell auf pdf-lib-Standardschriften (Helvetica /
- *   Helvetica-Bold / Times-Roman) als Platzhalter, NICHT auf die im
- *   Flyer tatsächlich verwendeten Schriften "Droid Sans" / "Droid Sans
- *   Bold" / "Droid Serif". Die echten .ttf-Dateien lagen nicht vor und
- *   sind rechtlich nicht zuverlässig automatisiert beschaffbar — bitte
- *   vom Grafiker anfordern und unter `assets/fonts/` ablegen, dann hier
- *   auf `{ type: "file", path: new URL("../../assets/fonts/...ttf",
- *   import.meta.url) }` umstellen.
- * - Das zweite Vorkommen des Regionsnamens im Fließtext ("...in der
- *   Region {Region} zu vertreten...") ist NICHT Teil der ursprünglichen
- *   Koordinatenliste, sondern wurde auf Wunsch als zweites Feld
- *   ergänzt (Koordinate aus dem Beispiel-PDF vermessen). Da der Text
- *   drumherum statisch ist, wird nur das Wort ersetzt, ohne Umbruch —
- *   bei deutlich längeren Regionsnamen als "Hameln" kann es dort eng
- *   werden (Auto-Shrink greift, siehe `minSizePt`).
+ * WICHTIG — bekannte, bewusst dokumentierte Übergangslösungen (Stand:
+ * technischer Prototyp, siehe Konversation):
+ *
+ * 1) ÜBERGANGSLÖSUNG "legacyContentCovers" — NUR FÜR DEN TECHNISCHEN TEST.
+ *    `background.pdf` ist kein leeres Master-Template, sondern das vom
+ *    Grafiker gelieferte Beispiel-PDF (bereits mit "Alexandra Mazur" /
+ *    "Hameln" / Telefonnummer / E-Mail befüllt). `legacyContentCovers`
+ *    deckt genau diese fünf Textbereiche vor dem Zeichnen der echten
+ *    Werte mit weißen Rechtecken ab (Koordinaten aus der tatsächlichen
+ *    Textposition im Beispiel-PDF vermessen, NICHT aus der
+ *    Koordinatenliste des Grafikers). Diese Deckflächen dürfen NICHT im
+ *    Renderer (`core/pdf/renderFlyer.js`) hart codiert oder dort um
+ *    weitere Flächen ergänzt werden — sie gehören ausschließlich hierher.
+ *    TODO(vor Produktion): Sobald der Grafiker ein leeres Master-PDF
+ *    liefert, `background` auf die neue Datei umstellen und
+ *    `legacyContentCovers` auf ein leeres Array (`[]`) reduzieren — an
+ *    `fields` ändert sich dabei nichts.
+ *
+ * 2) ÜBERGANGSLÖSUNG "Ersatzschriften" — Noto Sans / Noto Sans Bold /
+ *    Noto Serif (SIL Open Font License, von Grafiker in `Medien/Noto.zip`
+ *    geliefert, siehe `assets/fonts/README.md`) werden anstelle der im
+ *    Original-Flyer verwendeten Schriften "Droid Sans" / "Droid Sans
+ *    Bold" / "Droid Serif" eingesetzt. Metrisch nicht identisch — bitte
+ *    vom Grafiker folgende Original-Dateien anfordern:
+ *      - Droid Sans Regular (.ttf)
+ *      - Droid Sans Bold (.ttf)
+ *      - Droid Serif Regular (.ttf)
+ *    TODO(vor Produktion): Dateien unter `assets/fonts/` ablegen und in
+ *    `fonts` unten die `path`-Werte austauschen — an der
+ *    Platzierungslogik ändert sich dabei nichts.
+ *
+ * 3) Das zweite Vorkommen des Regionsnamens im Fließtext ("...in der
+ *    Region {Region} zu vertreten...", Feld `regionInParagraph`) ist
+ *    NICHT Teil der ursprünglichen Koordinatenliste, sondern wurde auf
+ *    Wunsch als zweites Feld ergänzt (Koordinate aus dem Beispiel-PDF
+ *    vermessen, siehe `fields.regionInParagraph` unten). Da der Text
+ *    drumherum statisch ist (kein Umbruch möglich, ohne den Satz zu
+ *    verschieben), passt bei deutlich längeren Regionsnamen als
+ *    "Hameln" (z. B. "Landkreis Mecklenburgische Seenplatte") nur
+ *    Auto-Shrink bis `minSizePt` — reicht das nicht, kollidiert der
+ *    Text sichtbar mit dem nachfolgenden Wort "zu". `renderFlyer.js`
+ *    meldet das über den zurückgegebenen `warnings`-Eintrag für dieses
+ *    Feld (`fits: false`); die Oberfläche zeigt darauf einen "vorläufig,
+ *    nicht pixelgenau"-Hinweis. NICHT final pixelgenau, bis ein
+ *    Master-Template mit eigener Textbox für diese Stelle vorliegt.
  */
 
 const BACKGROUND_URL = new URL("./background.pdf", import.meta.url);
+// Bewusst als volle, literale `new URL(...)`-Aufrufe (nicht über eine
+// gemeinsame Verzeichnis-Variable zusammengesetzt) — Vite erkennt das
+// Asset-URL-Muster nur bei einem literalen Pfad-String im selben
+// Aufruf und bündelt die Datei sonst nicht in den Browser-Build.
+const FONT_BOLD_URL = new URL("../../assets/fonts/NotoSans-Bold.ttf", import.meta.url);
+const FONT_REGULAR_URL = new URL("../../assets/fonts/NotoSans-Regular.ttf", import.meta.url);
+const FONT_SERIF_URL = new URL("../../assets/fonts/NotoSerif-Regular.ttf", import.meta.url);
 
 const TRIM_WIDTH_MM = 148;
 const TRIM_HEIGHT_MM = 210;
@@ -57,16 +83,16 @@ export const flyerPrintFrontTemplate = Object.freeze({
     outputBleedMm: OUTPUT_BLEED_MM,
   }),
   fonts: Object.freeze({
-    bold: Object.freeze({ type: "standard", name: StandardFonts.HelveticaBold }),
-    regular: Object.freeze({ type: "standard", name: StandardFonts.Helvetica }),
-    serif: Object.freeze({ type: "standard", name: StandardFonts.TimesRoman }),
+    bold: Object.freeze({ type: "file", path: FONT_BOLD_URL }),
+    regular: Object.freeze({ type: "file", path: FONT_REGULAR_URL }),
+    serif: Object.freeze({ type: "file", path: FONT_SERIF_URL }),
   }),
   // Weiße Deckflächen für die im Beispiel-PDF bereits vorhandenen
   // Textwerte (siehe Hinweis oben). Reihenfolge: Name, Region-Kopfzeile,
   // Region im Fließtext, Telefon, E-Mail.
   legacyContentCovers: Object.freeze([
     Object.freeze({ xMm: 43.5, yMm: 31.01, widthMm: 46.85, heightMm: 9.2, color: "#FFFFFF" }),
-    Object.freeze({ xMm: 63.2, yMm: 47.45, widthMm: 13.55, heightMm: 6.69, color: "#FFFFFF" }),
+    Object.freeze({ xMm: 64.25, yMm: 47.45, widthMm: 12.5, heightMm: 6.69, color: "#FFFFFF" }),
     Object.freeze({ xMm: 115.61, yMm: 55.04, widthMm: 8.83, heightMm: 3.16, color: "#FFFFFF" }),
     Object.freeze({ xMm: 18.5, yMm: 70.45, widthMm: 18.28, heightMm: 3.96, color: "#FFFFFF" }),
     Object.freeze({ xMm: 82.92, yMm: 70.45, widthMm: 30.84, heightMm: 3.96, color: "#FFFFFF" }),
@@ -82,9 +108,14 @@ export const flyerPrintFrontTemplate = Object.freeze({
     }),
     name: Object.freeze({
       type: "text",
+      multiline: true,
       xMm: 44.7,
       yMm: 33.7,
       maxWidthMm: 95.3,
+      // Verfügbare Höhe bis zur nächsten statischen Zeile ("Repräsentant(in)
+      // der Stiftung..."), siehe legacyContentCovers-Herleitung — genug für
+      // ca. 2 Zeilen bei minSizePt, absichtlich knapp bemessen.
+      maxHeightMm: 7.0,
       font: "bold",
       startSizePt: 14,
       minSizePt: 8,
@@ -101,6 +132,11 @@ export const flyerPrintFrontTemplate = Object.freeze({
       minSizePt: 6,
       color: TEXT_DARK_GREY,
       align: "left",
+      // Bleibt rechnerisch innerhalb der Seite (maxWidthMm ist so
+      // gewählt, dass die rechte Kante immer vor der Trim-Kante liegt),
+      // kann bei sehr langen Regionsnamen aber gedrängt wirken — bei
+      // Erreichen von minSizePt ebenfalls als vorläufig markieren.
+      flagShrinkAsProvisional: true,
     }),
     regionInParagraph: Object.freeze({
       type: "text",
@@ -112,6 +148,13 @@ export const flyerPrintFrontTemplate = Object.freeze({
       minSizePt: 4,
       color: TEXT_DARK_GREY,
       align: "left",
+      // Siehe Hinweis 3) oben: statischer Text drumherum kann nicht
+      // umbrechen. Erreicht dieses Feld minSizePt, ist das ein
+      // zuverlässiges Signal für einen riskanten/nicht pixelgenauen
+      // Sitz (mögliche Kollision mit dem folgenden Wort "zu") — auch
+      // wenn `fits` technisch `true` zurückgibt. renderFlyer.js meldet
+      // das dann als `warnings`-Eintrag.
+      flagShrinkAsProvisional: true,
     }),
     phone: Object.freeze({
       type: "text",

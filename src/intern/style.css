@@ -782,6 +782,39 @@
   color: var(--error);
 }
 
+.person-field--invalid input {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
+}
+
+.field-error-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--error);
+}
+
+.field-error-hint[hidden] {
+  display: none;
+}
+
+.result-pdf-preview {
+  width: 100%;
+  height: 360px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.result-block-warning {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fff8e1;
+  color: #8a6d1a;
+  font-size: 12px;
+  text-align: left;
+}
+
 .photo-status {
   max-width: 620px;
   margin: 0 auto 20px;

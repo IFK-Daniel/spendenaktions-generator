@@ -7,7 +7,6 @@ import { placeText } from "./placeText.js";
 import { placeMultiLineText } from "./placeMultiLineText.js";
 import { placeImage } from "./placeImage.js";
 import { hexToRgb } from "./hexToRgb.js";
-import { loadTemplateAssets as defaultLoadTemplateAssets } from "./loadTemplateAssets.js";
 
 /**
  * Rendert eine Template-Config (siehe `templates/*​/template.config.js`)
@@ -30,15 +29,37 @@ import { loadTemplateAssets as defaultLoadTemplateAssets } from "./loadTemplateA
  * @param {Record<string, {bytes: Uint8Array, mimeType: "image/png"|"image/jpeg"}>} [params.imageAssets]
  *   Bildbytes für alle Felder vom Typ `"image"`, indiziert nach
  *   Feldschlüssel.
- * @param {object} [params.deps] Injizierbare Abhängigkeiten für Tests.
- * @param {typeof defaultLoadTemplateAssets} [params.deps.loadTemplateAssets]
- * @returns {Promise<Uint8Array>} Die fertige PDF-Datei als Bytes.
+ * @param {object} params.deps Abhängigkeiten — `loadTemplateAssets` ist
+ *   PFLICHT (keine Node-`fs`-Vorbelegung, siehe unten).
+ * @param {(templateConfig: object) => Promise<{backgroundBytes: Uint8Array, fonts: object}> | {backgroundBytes: Uint8Array, fonts: object}} params.deps.loadTemplateAssets
+ *   Lädt Hintergrund-PDF und Schriftdateien einer Template-Config zu
+ *   Bytes. Bewusst PFLICHT statt mit einem Node-`fs`-Default vorbelegt:
+ *   `renderFlyer.js` läuft sowohl in Node (Tests/Skripte, siehe
+ *   `core/pdf/loadTemplateAssets.js`) als auch im Browser (interner
+ *   Materialgenerator, siehe `core/pdf/loadTemplateAssetsBrowser.js`)
+ *   — ein Node-`fs`-Import als Default hätte den Browser-Build brechen
+ *   lassen, selbst wenn er dort nie aufgerufen wird (Bundler bündeln
+ *   den gesamten Modulgraphen). Jeder Aufrufer wählt daher explizit die
+ *   passende Variante.
+ * @returns {Promise<{bytes: Uint8Array, warnings: Array<{fieldKey: string, sizePt: number, minSizePt: number, reason: string}>}>}
+ *   `warnings` enthält einen Eintrag pro Textfeld, das auch bei
+ *   `minSizePt` nicht vollständig in seine Fläche passt (siehe
+ *   `fitText.js`/`placeMultiLineText.js`, `fits: false`) — z. B. ein
+ *   sehr langer Regionsname im Feld `regionInParagraph`. Ein PDF wird
+ *   trotzdem erzeugt (kein Abschneiden), die Aufrufer-Oberfläche kann
+ *   diese Warnungen nutzen, um das Ergebnis sichtbar als vorläufig zu
+ *   kennzeichnen, statt es fälschlich als pixelgenau auszugeben.
  * @throws {Error} Bei fehlendem Bild-Asset für ein Bildfeld oder
  *   unbekanntem Feldtyp in der Config.
  */
-export async function renderFlyer({ templateConfig, textValues = {}, imageAssets = {}, deps = {} } = {}) {
-  const { loadTemplateAssets = defaultLoadTemplateAssets } = deps;
-  const { backgroundBytes, fonts: fontAssets } = loadTemplateAssets(templateConfig);
+export async function renderFlyer({ templateConfig, textValues = {}, imageAssets = {}, deps } = {}) {
+  if (!deps || typeof deps.loadTemplateAssets !== "function") {
+    throw new Error(
+      "renderFlyer: 'deps.loadTemplateAssets' ist erforderlich (z. B. loadTemplateAssets.js in Node oder loadTemplateAssetsBrowser.js im Browser)."
+    );
+  }
+  const { loadTemplateAssets } = deps;
+  const { backgroundBytes, fonts: fontAssets } = await loadTemplateAssets(templateConfig);
 
   const pdfDoc = await PDFDocument.create();
   if (Object.values(fontAssets).some((font) => font.type === "file")) {
@@ -53,9 +74,34 @@ export async function renderFlyer({ templateConfig, textValues = {}, imageAssets
 
   drawLegacyContentCovers({ page, templateConfig, outputBleedMm, outputHeightMm });
 
+  const warnings = [];
   for (const [fieldKey, field] of Object.entries(templateConfig.fields ?? {})) {
     if (field.type === "text") {
-      await drawTextField({ page, field, fieldKey, textValues, embeddedFonts, outputBleedMm, outputHeightMm });
+      const result = await drawTextField({
+        page,
+        field,
+        fieldKey,
+        textValues,
+        embeddedFonts,
+        outputBleedMm,
+        outputHeightMm,
+      });
+      // Nahe an minSizePt (statt exakt gleich) prüfen, da fitText() in
+      // stepPt-Schritten schrumpft und die Zielgröße dabei knapp über
+      // minSizePt landen kann, ohne dass das am Ergebnis noch etwas ändert.
+      const shrunkNearFloor =
+        field.flagShrinkAsProvisional && result && result.sizePt <= field.minSizePt + 0.5;
+      if (result && (result.fits === false || shrunkNearFloor)) {
+        warnings.push({
+          fieldKey,
+          sizePt: result.sizePt,
+          minSizePt: field.minSizePt,
+          reason:
+            result.fits === false
+              ? "Text passt auch bei minSizePt nicht vollständig in die vorgesehene Fläche (kein Abschneiden, Ergebnis kann überlaufen)."
+              : "Text wurde bis zur Mindestgröße geschrumpft — bei umgebendem statischem Text (siehe Template-Config) kein zuverlässig pixelgenauer Sitz garantiert.",
+        });
+      }
     } else if (field.type === "image") {
       await drawImageField({ pdfDoc, page, field, fieldKey, imageAssets, outputBleedMm, outputHeightMm });
     } else {
@@ -63,7 +109,8 @@ export async function renderFlyer({ templateConfig, textValues = {}, imageAssets
     }
   }
 
-  return pdfDoc.save();
+  const bytes = await pdfDoc.save();
+  return { bytes, warnings };
 }
 
 async function embedFonts(pdfDoc, fontAssets) {
@@ -127,7 +174,7 @@ async function drawTextField({ page, field, fieldKey, textValues, embeddedFonts,
   const color = hexToRgb(field.color);
 
   if (field.multiline) {
-    placeMultiLineText({
+    const { sizePt, lines } = placeMultiLineText({
       page,
       font,
       text,
@@ -140,20 +187,23 @@ async function drawTextField({ page, field, fieldKey, textValues, embeddedFonts,
       color,
       align: field.align,
     });
-  } else {
-    placeText({
-      page,
-      font,
-      text,
-      xPt,
-      yPt,
-      maxWidthPt,
-      startSizePt: field.startSizePt,
-      minSizePt: field.minSizePt,
-      color,
-      align: field.align,
-    });
+    const widestLineWidthPt = Math.max(...lines.map((line) => font.widthOfTextAtSize(line, sizePt)));
+    const fits = widestLineWidthPt <= maxWidthPt;
+    return { sizePt, fits };
   }
+
+  return placeText({
+    page,
+    font,
+    text,
+    xPt,
+    yPt,
+    maxWidthPt,
+    startSizePt: field.startSizePt,
+    minSizePt: field.minSizePt,
+    color,
+    align: field.align,
+  });
 }
 
 async function drawImageField({ pdfDoc, page, field, fieldKey, imageAssets, outputBleedMm, outputHeightMm }) {

@@ -398,6 +398,12 @@ export function initGenerator() {
       block.appendChild(heading);
 
       if (file.format === "pdf") {
+        // Flyer-Ergebnisse (aktuell die einzigen PDF-Materialien) nehmen
+        // im Ergebnisraster doppelt so viel Breite ein wie eine QR-Karte
+        // (siehe `#result-grid`/`.result-block--flyer` in style.css) —
+        // rein layoutbezogen, ändert nichts an Erzeugung oder Download.
+        block.classList.add("result-block--flyer");
+
         const preview = document.createElement("iframe");
         preview.className = "result-pdf-preview";
         preview.src = objectUrl;
@@ -412,6 +418,9 @@ export function initGenerator() {
           block.appendChild(warningBox);
         }
 
+        const actions = document.createElement("div");
+        actions.className = "result-block-actions";
+
         // Zusätzlich zur eingebetteten Vorschau ein Link zum Öffnen in
         // einem eigenen Tab — eingebettete PDF-Voransichten verhalten
         // sich nicht in jedem Browser/jeder Umgebung gleich zuverlässig.
@@ -421,14 +430,16 @@ export function initGenerator() {
         openLink.target = "_blank";
         openLink.rel = "noopener";
         openLink.textContent = "Vorschau in neuem Tab öffnen";
-        block.appendChild(openLink);
+        actions.appendChild(openLink);
 
         const downloadLink = document.createElement("a");
         downloadLink.className = "download-link";
         downloadLink.href = objectUrl;
         downloadLink.download = file.filename;
         downloadLink.textContent = FLYER_DOWNLOAD_LABEL_BY_KEY[file.key] || "PDF herunterladen";
-        block.appendChild(downloadLink);
+        actions.appendChild(downloadLink);
+
+        block.appendChild(actions);
       } else {
         const img = document.createElement("img");
         img.src = objectUrl;

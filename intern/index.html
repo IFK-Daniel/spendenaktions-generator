@@ -169,6 +169,84 @@
             <span class="field-hint">Pflicht bei Auswahl eines Flyer-Materials</span>
             <input type="url" id="photo-url-input" placeholder="z. B. https://beispiel.de/foto.jpg" />
             <p class="field-error-hint" id="photo-url-error-hint" hidden></p>
+            <div class="photo-crop-row">
+              <button type="button" id="photo-crop-open-btn">Fotoausschnitt anpassen</button>
+              <span class="photo-crop-status" id="photo-crop-status" hidden>Fotoausschnitt angepasst</span>
+              <button type="button" class="photo-crop-reset-link" id="photo-crop-reset-btn" hidden>
+                Automatischen Ausschnitt wiederherstellen
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="photo-crop-modal-backdrop" id="photo-crop-modal-backdrop" hidden>
+          <div
+            class="photo-crop-modal"
+            id="photo-crop-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="photo-crop-modal-title"
+          >
+            <div class="photo-crop-modal-header">
+              <h3 id="photo-crop-modal-title">Fotoausschnitt anpassen</h3>
+              <button type="button" class="photo-crop-close-btn" id="photo-crop-close-btn" aria-label="Schließen">
+                ×
+              </button>
+            </div>
+
+            <p class="photo-crop-modal-hint" id="photo-crop-modal-hint">
+              Foto mit Maus oder Finger verschieben und mit dem Regler zoomen. Der grün umrandete Kreis zeigt den
+              späteren Ausschnitt im Flyer.
+            </p>
+
+            <div class="photo-crop-stage" id="photo-crop-stage">
+              <canvas
+                class="photo-crop-canvas"
+                id="photo-crop-canvas"
+                tabindex="0"
+                aria-label="Fotoausschnitt: mit Pfeiltasten verschieben, mit +/- zoomen"
+              ></canvas>
+            </div>
+
+            <div class="photo-crop-nudge">
+              <button type="button" class="photo-crop-nudge-btn" id="photo-crop-nudge-up" aria-label="Ausschnitt nach oben verschieben">▲</button>
+              <div class="photo-crop-nudge-row">
+                <button type="button" class="photo-crop-nudge-btn" id="photo-crop-nudge-left" aria-label="Ausschnitt nach links verschieben">◀</button>
+                <button type="button" class="photo-crop-nudge-btn" id="photo-crop-nudge-right" aria-label="Ausschnitt nach rechts verschieben">▶</button>
+              </div>
+              <button type="button" class="photo-crop-nudge-btn" id="photo-crop-nudge-down" aria-label="Ausschnitt nach unten verschieben">▼</button>
+            </div>
+
+            <div class="photo-crop-zoom-row">
+              <button type="button" class="photo-crop-zoom-btn" id="photo-crop-zoom-out" aria-label="Verkleinern">−</button>
+              <label class="photo-crop-zoom-label" for="photo-crop-zoom-slider">
+                Zoom
+                <input
+                  type="range"
+                  id="photo-crop-zoom-slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="0"
+                  aria-label="Zoom-Stufe"
+                />
+              </label>
+              <button type="button" class="photo-crop-zoom-btn" id="photo-crop-zoom-in" aria-label="Vergrößern">+</button>
+            </div>
+
+            <p class="photo-crop-error" id="photo-crop-error" hidden></p>
+
+            <div class="photo-crop-actions">
+              <button type="button" class="photo-crop-btn photo-crop-btn--secondary" id="photo-crop-reset-modal-btn">
+                Zurücksetzen
+              </button>
+              <button type="button" class="photo-crop-btn photo-crop-btn--secondary" id="photo-crop-cancel-btn">
+                Abbrechen
+              </button>
+              <button type="button" class="photo-crop-btn photo-crop-btn--primary" id="photo-crop-apply-btn">
+                Übernehmen
+              </button>
+            </div>
           </div>
         </div>
 

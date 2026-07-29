@@ -126,3 +126,36 @@ test("ein extrem langer Name erzeugt keine Warnung (Auto-Shrink + 2-zeiliger Umb
   const fieldKeys = warnings.map((w) => w.fieldKey);
   assert.ok(!fieldKeys.includes("name"), `unerwartete Warnung für name: ${JSON.stringify(warnings)}`);
 });
+
+test("ein manueller photoCrop am Bild-Asset wird berücksichtigt (kein Fehler, PDF entsteht weiterhin)", async () => {
+  const assets = tinyImageAssets();
+  assets.photo.crop = { zoom: 2, offsetX: 0.5, offsetY: -0.5 };
+  const { bytes } = await renderFlyer({
+    templateConfig: flyerPrintFrontTemplate,
+    textValues: sampleTextValues(),
+    imageAssets: assets,
+    deps: nodeDeps,
+  });
+  assert.ok(bytes.length > 0);
+});
+
+test("Home- und Druckerei-Vorlage erzeugen mit identischem photoCrop-Asset jeweils gültige PDFs (derselbe Ausschnitt wird durchgereicht)", async () => {
+  const assets = tinyImageAssets();
+  assets.photo.crop = { zoom: 1.8, offsetX: -1, offsetY: 1 };
+
+  const print = await renderFlyer({
+    templateConfig: flyerPrintFrontTemplate,
+    textValues: sampleTextValues(),
+    imageAssets: assets,
+    deps: nodeDeps,
+  });
+  const home = await renderFlyer({
+    templateConfig: flyerHomeFrontTemplate,
+    textValues: sampleTextValues(),
+    imageAssets: assets,
+    deps: nodeDeps,
+  });
+
+  assert.ok(print.bytes.length > 0);
+  assert.ok(home.bytes.length > 0);
+});

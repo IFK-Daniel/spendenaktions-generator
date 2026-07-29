@@ -35,3 +35,19 @@ test("Standard-Shape ist 'rect', wenn nicht angegeben", async () => {
   const bytes = await pdfDoc.save();
   assert.ok(bytes.length > 0);
 });
+
+test("akzeptiert einen manuellen 'crop' ohne zu werfen (Verhalten unverändert ohne 'crop')", async () => {
+  const { pdfDoc, page, image } = await setup();
+  placeImage({
+    page,
+    image,
+    xPt: 10,
+    yPt: 10,
+    widthPt: 50,
+    heightPt: 50,
+    shape: "circle",
+    crop: { zoom: 2, offsetX: 0.5, offsetY: -1 },
+  });
+  const bytes = await pdfDoc.save();
+  assert.ok(bytes.length > 0);
+});

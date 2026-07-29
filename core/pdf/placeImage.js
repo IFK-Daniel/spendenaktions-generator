@@ -8,7 +8,7 @@ import {
   clip,
   endPath,
 } from "pdf-lib";
-import { centerCrop } from "./centerCrop.js";
+import { computePhotoCropLayout } from "./photoCrop.js";
 
 // Kappa-Konstante zur Annäherung eines Kreises durch vier kubische
 // Bézierkurven (Standardwert, siehe z. B. https://spencermortensen.com/articles/bezier-circle/).
@@ -29,13 +29,18 @@ const CIRCLE_KAPPA = 0.5522847498;
  * @param {number} params.widthPt
  * @param {number} params.heightPt
  * @param {"rect"|"circle"} [params.shape="rect"]
+ * @param {{zoom?: number, offsetX?: number, offsetY?: number}} [params.crop]
+ *   Optionaler manueller Bildausschnitt (siehe `photoCrop.js`) — fehlt er,
+ *   verhält sich diese Funktion wie zuvor (automatischer Center-Crop).
+ *   Generisch für jedes Bildfeld, keine Flyer-spezifische Sonderlogik.
  */
-export function placeImage({ page, image, xPt, yPt, widthPt, heightPt, shape = "rect" }) {
-  const { drawWidth, drawHeight, offsetX, offsetY } = centerCrop({
+export function placeImage({ page, image, xPt, yPt, widthPt, heightPt, shape = "rect", crop }) {
+  const { drawWidth, drawHeight, offsetX, offsetY } = computePhotoCropLayout({
     sourceWidth: image.width,
     sourceHeight: image.height,
     targetWidth: widthPt,
     targetHeight: heightPt,
+    photoCrop: crop,
   });
 
   page.pushOperators(pushGraphicsState(), ...buildClipOperators({ shape, xPt, yPt, widthPt, heightPt }));

@@ -12,8 +12,10 @@ import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
 import { normalizePhotoToPng } from "../../core/photo/normalizePhotoToPng.js";
+import { DEFAULT_PHOTO_CROP } from "../../core/pdf/photoCrop.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
+import { initPhotoCropEditor } from "./photoCropEditor.js";
 import { loadTemplateAssetsBrowser } from "../../core/pdf/loadTemplateAssetsBrowser.js";
 import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
@@ -102,6 +104,9 @@ export function initGenerator() {
   const photoStatus = document.getElementById("photo-status");
   const photoPreview = document.getElementById("photo-preview");
   const photoPreviewImg = document.getElementById("photo-preview-img");
+  const photoCropOpenBtn = document.getElementById("photo-crop-open-btn");
+  const photoCropStatusEl = document.getElementById("photo-crop-status");
+  const photoCropResetBtn = document.getElementById("photo-crop-reset-btn");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
 
   const screenshotDropzone = document.getElementById("screenshot-dropzone");
@@ -145,6 +150,17 @@ export function initGenerator() {
   let lastManifest = null;
   let lastFiles = null;
   let lastPhoto = null;
+  // Foto-Link, zu dem `lastPhoto` gehört — erlaubt es, beim Öffnen des
+  // Fotoausschnitt-Editors ein bereits geladenes Foto wiederzuverwenden,
+  // statt es ein zweites Mal abzurufen (siehe `handleOpenPhotoCropEditor`).
+  let lastPhotoUrl = null;
+  // Manueller Fotoausschnitt (siehe `core/pdf/photoCrop.js`) — `null`
+  // bedeutet "automatischer Center-Crop" (bisheriges Verhalten). Wird an
+  // den Foto-Link gebunden, zu dem er gehört (`photoCropSourceUrl`), und
+  // bei jedem Wechsel des Foto-Links verworfen (siehe Punkt 9 der Vorgabe).
+  let photoCrop = null;
+  let photoCropSourceUrl = null;
+  let isPhotoCropEditorOpen = false;
   let isSending = false;
   let isGenerating = false;
   // Alle Object-URLs, die für die aktuell angezeigten Ergebnisse (Bild-
@@ -238,16 +254,88 @@ export function initGenerator() {
 
       if (result.ok) {
         lastPhoto = result;
+        lastPhotoUrl = photoUrl;
         const sizeKb = Math.max(1, Math.round(result.size / 1024));
         showPhotoStatus(`Foto erfolgreich geladen (${result.format}, ${sizeKb} KB).`, "success");
         showPhotoPreview(`data:${result.contentType};base64,${result.content}`);
       } else {
         lastPhoto = null;
+        lastPhotoUrl = null;
         showPhotoStatus(getPhotoRetrievalErrorMessage(result.reason), "error");
       }
     } catch {
       lastPhoto = null;
+      lastPhotoUrl = null;
       showPhotoStatus(getPhotoRetrievalErrorMessage(), "error");
+    }
+  }
+
+  const photoCropEditor = initPhotoCropEditor();
+
+  // Sichtbarer Status im Hauptformular (Punkt 6 der Vorgabe): Buttontext
+  // und Hinweis richten sich danach, ob für den *aktuell eingetragenen*
+  // Foto-Link ein manueller Ausschnitt gespeichert ist.
+  function updatePhotoCropStatusUI() {
+    const hasManualCrop = photoCrop !== null && photoCropSourceUrl === photoUrlInput.value.trim();
+    photoCropOpenBtn.textContent = hasManualCrop ? "Fotoausschnitt erneut anpassen" : "Fotoausschnitt anpassen";
+    photoCropStatusEl.hidden = !hasManualCrop;
+    photoCropResetBtn.hidden = !hasManualCrop;
+  }
+
+  // Verwirft einen gespeicherten manuellen Ausschnitt — bei Wechsel des
+  // Foto-Links (Punkt 9) oder über "Automatischen Ausschnitt
+  // wiederherstellen" (Punkt 6).
+  function resetPhotoCrop() {
+    photoCrop = null;
+    photoCropSourceUrl = null;
+    updatePhotoCropStatusUI();
+  }
+
+  async function handleOpenPhotoCropEditor() {
+    if (isPhotoCropEditorOpen) return;
+
+    clearPhotoFieldError();
+    const photoUrl = photoUrlInput.value.trim();
+    if (!isHttpUrl(photoUrl)) {
+      showPhotoFieldError("Bitte zuerst einen gültigen Foto-Link (http/https) eintragen.");
+      return;
+    }
+
+    isPhotoCropEditorOpen = true;
+    photoCropOpenBtn.disabled = true;
+    const originalLabel = photoCropOpenBtn.textContent;
+    photoCropOpenBtn.textContent = "Foto wird geladen …";
+
+    try {
+      // Bereits geladenes Foto für denselben Link wiederverwenden statt
+      // ein zweites Mal abzurufen — keine parallele Ladelogik, sondern
+      // derselbe `fetchRepresentativePhoto`-Aufruf wie beim Erstellen
+      // der Materialien (siehe `handleGenerate`).
+      if (!lastPhoto || lastPhotoUrl !== photoUrl) {
+        const photoResult = await fetchRepresentativePhoto(photoUrl);
+        if (!photoResult.ok) {
+          showPhotoFieldError(getPhotoRetrievalErrorMessage(photoResult.reason));
+          return;
+        }
+        lastPhoto = photoResult;
+        lastPhotoUrl = photoUrl;
+      }
+
+      const initialCrop = photoCropSourceUrl === photoUrl && photoCrop ? photoCrop : DEFAULT_PHOTO_CROP;
+      const result = await photoCropEditor.open({
+        imageSrc: `data:${lastPhoto.contentType};base64,${lastPhoto.content}`,
+        initialCrop,
+      });
+
+      if (result.applied) {
+        photoCrop = result.crop;
+        photoCropSourceUrl = photoUrl;
+      }
+    } finally {
+      isPhotoCropEditorOpen = false;
+      photoCropOpenBtn.disabled = false;
+      photoCropOpenBtn.textContent = originalLabel;
+      updatePhotoCropStatusUI();
     }
   }
 
@@ -988,6 +1076,7 @@ export function initGenerator() {
     lastManifest = null;
     lastFiles = null;
     lastPhoto = null;
+    lastPhotoUrl = null;
 
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
@@ -1074,12 +1163,14 @@ export function initGenerator() {
       const photoResult = await fetchRepresentativePhoto(photoUrl);
       if (!photoResult.ok) {
         lastPhoto = null;
+        lastPhotoUrl = null;
         showPhotoStatus(getPhotoRetrievalErrorMessage(photoResult.reason), "error");
         showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
         showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
         return;
       }
       lastPhoto = photoResult;
+      lastPhotoUrl = photoUrl;
       const sizeKb = Math.max(1, Math.round(photoResult.size / 1024));
       showPhotoStatus(`Foto erfolgreich geladen (${photoResult.format}, ${sizeKb} KB).`, "success");
       showPhotoPreview(`data:${photoResult.contentType};base64,${photoResult.content}`);
@@ -1091,6 +1182,14 @@ export function initGenerator() {
         showPhotoFieldError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
         showError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
         return;
+      }
+      // Manueller Ausschnitt (siehe Fotoausschnitt-Editor) nur verwenden,
+      // wenn er tatsächlich zu diesem Foto-Link gehört — sonst bleibt es
+      // beim automatischen Center-Crop (siehe `renderFlyer.js`/`placeImage.js`).
+      // Home- und Druckerei-Flyer erhalten weiter unten dasselbe
+      // `photoAsset`-Objekt und damit garantiert denselben Ausschnitt.
+      if (photoCrop && photoCropSourceUrl === photoUrl) {
+        photoAsset.crop = photoCrop;
       }
     }
 
@@ -1272,7 +1371,24 @@ export function initGenerator() {
     });
   }
 
-  photoUrlInput.addEventListener("input", clearPhotoFieldError);
+  photoUrlInput.addEventListener("input", () => {
+    clearPhotoFieldError();
+    // Wechsel des Foto-Links (Punkt 9 der Vorgabe): ein zuvor geladenes
+    // Foto und ein dafür gespeicherter manueller Ausschnitt gehören zum
+    // alten Link und werden verworfen — der nächste Editor-Aufruf oder
+    // die nächste Erzeugung lädt das neue Foto frisch.
+    if (photoUrlInput.value.trim() !== lastPhotoUrl) {
+      lastPhoto = null;
+      lastPhotoUrl = null;
+    }
+    if (photoUrlInput.value.trim() !== photoCropSourceUrl) {
+      resetPhotoCrop();
+    }
+  });
+
+  photoCropOpenBtn.addEventListener("click", handleOpenPhotoCropEditor);
+  photoCropResetBtn.addEventListener("click", resetPhotoCrop);
+  updatePhotoCropStatusUI();
 
   generateBtn.addEventListener("click", handleGenerate);
   deliverySendBtn.addEventListener("click", handleSendDelivery);

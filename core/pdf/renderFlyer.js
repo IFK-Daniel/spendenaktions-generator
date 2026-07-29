@@ -26,9 +26,11 @@ import { hexToRgb } from "./hexToRgb.js";
  *   Wert für ein vorhandenes Textfeld, wird eine leere Zeichenkette
  *   gezeichnet (kein Fehler) — Validierung der Repräsentantendaten
  *   selbst ist nicht Aufgabe dieses Moduls.
- * @param {Record<string, {bytes: Uint8Array, mimeType: "image/png"|"image/jpeg"}>} [params.imageAssets]
+ * @param {Record<string, {bytes: Uint8Array, mimeType: "image/png"|"image/jpeg", crop?: {zoom?: number, offsetX?: number, offsetY?: number}}>} [params.imageAssets]
  *   Bildbytes für alle Felder vom Typ `"image"`, indiziert nach
- *   Feldschlüssel.
+ *   Feldschlüssel. Ein optionales `crop` (siehe `photoCrop.js`) ersetzt
+ *   den automatischen Center-Crop durch einen manuell festgelegten
+ *   Ausschnitt — generisch für jedes Bildfeld, unabhängig vom "Flyer".
  * @param {object} params.deps Abhängigkeiten — `loadTemplateAssets` ist
  *   PFLICHT (keine Node-`fs`-Vorbelegung, siehe unten).
  * @param {(templateConfig: object) => Promise<{backgroundBytes: Uint8Array, fonts: object}> | {backgroundBytes: Uint8Array, fonts: object}} params.deps.loadTemplateAssets
@@ -224,5 +226,14 @@ async function drawImageField({ pdfDoc, page, field, fieldKey, imageAssets, outp
   const widthPt = mmToPt(field.widthMm);
   const heightPt = mmToPt(field.heightMm);
 
-  placeImage({ page, image, xPt, yPt: topPt - heightPt, widthPt, heightPt, shape: field.shape ?? "rect" });
+  placeImage({
+    page,
+    image,
+    xPt,
+    yPt: topPt - heightPt,
+    widthPt,
+    heightPt,
+    shape: field.shape ?? "rect",
+    crop: asset.crop,
+  });
 }

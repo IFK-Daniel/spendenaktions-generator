@@ -141,8 +141,15 @@
             <button type="button" id="ifk-id-generate-btn" class="ifk-id-generate-btn">Neu generieren</button>
           </div>
           <div class="person-field">
-            <label class="field-label" for="email-input">E-Mail-Adresse</label>
-            <input type="email" id="email-input" placeholder="z. B. max@beispiel.de" />
+            <!-- Bewusst "intern-email-input", nicht "email-input": diese
+                 Seite lädt zusätzlich /src/style.css (öffentliche
+                 Spendenseite), die selbst ein Feld mit der ID
+                 "email-input" per ID-Selektor stylt. Eine ID-Regel
+                 schlägt jede Klassen-Regel unabhängig von der
+                 Reihenfolge im Stylesheet — mit dem gleichen Namen hätte
+                 `.field-imported` hier nie gewirkt. -->
+            <label class="field-label" for="intern-email-input">E-Mail-Adresse</label>
+            <input type="email" id="intern-email-input" placeholder="z. B. max@beispiel.de" />
           </div>
           <div class="person-field">
             <label class="field-label" for="phone-input">Telefonnummer</label>

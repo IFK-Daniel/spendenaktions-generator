@@ -32,6 +32,7 @@ import { computeCropRectangle } from "../../core/screenshot/computeCropRectangle
 import { shouldShowFieldCrop } from "../../core/screenshot/shouldShowFieldCrop.js";
 import { buildUncertainCharacterHint } from "../../core/screenshot/buildUncertainCharacterHint.js";
 import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncertainCharacterIndex.js";
+import { isFieldAutoRecognized } from "../../core/screenshot/isFieldAutoRecognized.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
@@ -101,7 +102,10 @@ export function initGenerator() {
   const lastNameInput = document.getElementById("last-name-input");
   const ifkIdInput = document.getElementById("ifk-id-input");
   const ifkIdGenerateBtn = document.getElementById("ifk-id-generate-btn");
-  const emailInput = document.getElementById("email-input");
+  // "intern-email-input", nicht "email-input" — siehe Kommentar in
+  // intern/index.html (Kollision mit der ID-Regel `#email-input` in
+  // der zusätzlich geladenen /src/style.css der öffentlichen Seite).
+  const emailInput = document.getElementById("intern-email-input");
   const phoneInput = document.getElementById("phone-input");
   const photoUrlInput = document.getElementById("photo-url-input");
   const photoUrlField = document.getElementById("photo-url-field");
@@ -196,7 +200,19 @@ export function initGenerator() {
   let activeObjectUrls = [];
   let lastExtractionFields = null;
   let isExtractingScreenshot = false;
+  // Felder, die der Nutzer über die Korrektur-Tabelle bestätigt hat —
+  // UNABHÄNGIG davon, ob sich der Wert dabei tatsächlich geändert hat
+  // (nötig für `isApplyable`: auch ein unverändert bestätigter
+  // "prüfbedürftiger" Wert soll übernommen werden können).
   let manuallyReviewedFieldKeys = new Set();
+  // Teilmenge von `manuallyReviewedFieldKeys`: nur Felder, deren Wert
+  // sich durch die Korrektur TATSÄCHLICH geändert hat (siehe
+  // `commitEdit`) — das ist die für die grüne "importiert"-Markierung
+  // relevante Unterscheidung (siehe `isAutoRecognized`). Ein bloß
+  // bestätigter, unveränderter KI-Vorschlag stammt weiterhin
+  // unverändert aus dem Screenshot und gilt daher als "imported", nicht
+  // als "manually_modified".
+  let manuallyModifiedFieldKeys = new Set();
   let lastScreenshotObjectUrl = null;
   // Zeichengenaue Rohdaten je Feld, einmalig beim Rendern der Vorschau
   // erfasst und danach unverändert — bleibt auch nach einer manuellen
@@ -672,6 +688,7 @@ export function initGenerator() {
     screenshotPreviewBody.innerHTML = "";
     clearOriginalScreenshot();
     manuallyReviewedFieldKeys = new Set();
+    manuallyModifiedFieldKeys = new Set();
     initialFieldChars = new Map();
     activeEditingKey = null;
     updateApplyButtonState();
@@ -884,8 +901,17 @@ export function initGenerator() {
     cancelBtn.textContent = "Abbrechen";
 
     const commitEdit = () => {
-      field.value = input.value.trim();
+      const originalValue = field.value;
+      const newValue = input.value.trim();
+      field.value = newValue;
       manuallyReviewedFieldKeys.add(key);
+      // Nur als "manuell geändert" zählen, wenn sich der Wert durch die
+      // Korrektur tatsächlich unterscheidet — ein bloß bestätigter,
+      // unveränderter KI-Vorschlag bleibt für die grüne "importiert"-
+      // Markierung relevant (siehe `isAutoRecognized`).
+      if (newValue !== originalValue) {
+        manuallyModifiedFieldKeys.add(key);
+      }
       activeEditingKey = null;
       renderValueCell(valueCell, statusCell, fields, key);
       renderStatusBadge(statusCell, key, field.status);
@@ -937,6 +963,7 @@ export function initGenerator() {
   function renderScreenshotPreview(fields) {
     screenshotPreviewBody.innerHTML = "";
     manuallyReviewedFieldKeys = new Set();
+    manuallyModifiedFieldKeys = new Set();
     initialFieldChars = new Map();
     activeEditingKey = null;
 
@@ -1028,9 +1055,18 @@ export function initGenerator() {
   // tatsächlich mit hoher Konfidenz erkannt wurde UND nicht zuvor über
   // die Korrektur-Tabelle manuell bearbeitet wurde — manuell geänderte
   // und prüfbedürftige Felder bleiben bewusst neutral (siehe Vorgabe).
+  // Reine Entscheidungslogik ("automatisch erkannt?") liegt testbar in
+  // `core/screenshot/isFieldAutoRecognized.js` — hier wird nur der
+  // DOM-/Zustands-spezifische Status abgeleitet (u. a. der Sonderfall
+  // `emailForForm`, das keinen eigenen `status` besitzt, siehe
+  // `pickEmailForForm.js`) und an die reine Funktion übergeben.
   function isAutoRecognized(key, field) {
     const status = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
-    return status === "recognized" && !manuallyReviewedFieldKeys.has(key);
+    return isFieldAutoRecognized({
+      status,
+      wasManuallyModified: manuallyModifiedFieldKeys.has(key),
+      wasManuallyReviewed: manuallyReviewedFieldKeys.has(key),
+    });
   }
 
   async function handleScreenshotFile(file) {

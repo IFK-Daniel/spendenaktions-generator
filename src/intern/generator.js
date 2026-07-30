@@ -206,16 +206,12 @@ export function initGenerator() {
   // Felder, die der Nutzer über die Korrektur-Tabelle bestätigt hat —
   // UNABHÄNGIG davon, ob sich der Wert dabei tatsächlich geändert hat
   // (nötig für `isApplyable`: auch ein unverändert bestätigter
-  // "prüfbedürftiger" Wert soll übernommen werden können).
+  // "prüfbedürftiger" Wert soll übernommen werden können). Eine über
+  // diese Tabelle vorgenommene Korrektur eines unsicheren Zeichens gilt
+  // weiterhin als "aus dem Screenshot übernommen" (grün) — sie ist Teil
+  // des vorgesehenen Korrektur-Workflows, keine nachträgliche manuelle
+  // Bearbeitung des fertigen Formularfelds (siehe `isAutoRecognized`).
   let manuallyReviewedFieldKeys = new Set();
-  // Teilmenge von `manuallyReviewedFieldKeys`: nur Felder, deren Wert
-  // sich durch die Korrektur TATSÄCHLICH geändert hat (siehe
-  // `commitEdit`) — das ist die für die grüne "importiert"-Markierung
-  // relevante Unterscheidung (siehe `isAutoRecognized`). Ein bloß
-  // bestätigter, unveränderter KI-Vorschlag stammt weiterhin
-  // unverändert aus dem Screenshot und gilt daher als "imported", nicht
-  // als "manually_modified".
-  let manuallyModifiedFieldKeys = new Set();
   let lastScreenshotObjectUrl = null;
   // Zeichengenaue Rohdaten je Feld, einmalig beim Rendern der Vorschau
   // erfasst und danach unverändert — bleibt auch nach einer manuellen
@@ -694,7 +690,6 @@ export function initGenerator() {
     screenshotPreviewBody.innerHTML = "";
     clearOriginalScreenshot();
     manuallyReviewedFieldKeys = new Set();
-    manuallyModifiedFieldKeys = new Set();
     initialFieldChars = new Map();
     activeEditingKey = null;
     updateApplyButtonState();
@@ -907,17 +902,9 @@ export function initGenerator() {
     cancelBtn.textContent = "Abbrechen";
 
     const commitEdit = () => {
-      const originalValue = field.value;
       const newValue = input.value.trim();
       field.value = newValue;
       manuallyReviewedFieldKeys.add(key);
-      // Nur als "manuell geändert" zählen, wenn sich der Wert durch die
-      // Korrektur tatsächlich unterscheidet — ein bloß bestätigter,
-      // unveränderter KI-Vorschlag bleibt für die grüne "importiert"-
-      // Markierung relevant (siehe `isAutoRecognized`).
-      if (newValue !== originalValue) {
-        manuallyModifiedFieldKeys.add(key);
-      }
       activeEditingKey = null;
       renderValueCell(valueCell, statusCell, fields, key);
       renderStatusBadge(statusCell, key, field.status);
@@ -969,7 +956,6 @@ export function initGenerator() {
   function renderScreenshotPreview(fields) {
     screenshotPreviewBody.innerHTML = "";
     manuallyReviewedFieldKeys = new Set();
-    manuallyModifiedFieldKeys = new Set();
     initialFieldChars = new Map();
     activeEditingKey = null;
 
@@ -1057,10 +1043,13 @@ export function initGenerator() {
     }
   }
 
-  // Ein Feld gilt nur dann als "automatisch übernommen" (grün), wenn es
-  // tatsächlich mit hoher Konfidenz erkannt wurde UND nicht zuvor über
-  // die Korrektur-Tabelle manuell bearbeitet wurde — manuell geänderte
-  // und prüfbedürftige Felder bleiben bewusst neutral (siehe Vorgabe).
+  // Ein Feld gilt als "automatisch übernommen" (grün), wenn es entweder
+  // mit hoher Konfidenz erkannt wurde ODER über die Korrektur-Tabelle
+  // geprüft/korrigiert wurde — auch das Berichtigen eines einzelnen
+  // unsicheren Zeichens gehört zum Screenshot-Import-Workflow und macht
+  // ein Feld nicht zu "manuell erfasst". Erst eine nachträgliche direkte
+  // Bearbeitung des bereits befüllten Formularfelds (siehe
+  // `setFieldImportedState` oben) entfernt die Markierung wieder.
   // Reine Entscheidungslogik ("automatisch erkannt?") liegt testbar in
   // `core/screenshot/isFieldAutoRecognized.js` — hier wird nur der
   // DOM-/Zustands-spezifische Status abgeleitet (u. a. der Sonderfall
@@ -1070,7 +1059,6 @@ export function initGenerator() {
     const status = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
     return isFieldAutoRecognized({
       status,
-      wasManuallyModified: manuallyModifiedFieldKeys.has(key),
       wasManuallyReviewed: manuallyReviewedFieldKeys.has(key),
     });
   }

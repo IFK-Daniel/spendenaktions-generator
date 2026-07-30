@@ -64,9 +64,9 @@ export const certificateRepresentativeMaleTemplate = Object.freeze({
       // ohne Descender, siehe `placeMultiLineText.js`) sitzt bei Noto
       // Sans Bold 40pt spürbar UNTER der optischen Mitte des Balkens.
       // Wert durch tatsächliches Rendern und visuelle Prüfung ermittelt
-      // (nicht rein rechnerisch) — mehrere Kandidaten (2.2/2.6/2.8/3.0/
-      // 3.2mm) wurden mit vier Testnamen als echtes PDF gerendert und
-      // begutachtet:
+      // (nicht rein rechnerisch, Freigabe erfolgte durch visuellen
+      // Vergleich mehrerer Kandidaten: 3.4/3.6/3.8/4.0/4.2mm) mit vier
+      // Testnamen als echtes PDF gerendert und begutachtet:
       //   "Daniel Feigenbutz"                    (mit Unterlänge)
       //   "Kim Yu"                                (ohne Unterlänge)
       //   "Alexandra Mazur"                       (ohne Unterlänge)
@@ -74,11 +74,8 @@ export const certificateRepresentativeMaleTemplate = Object.freeze({
       // Namen mit Unterlängen (g/j/p/q/y) wirken bei jedem festen Wert
       // etwas tiefer als Namen ohne — das ist normales Schriftverhalten
       // (Unterlängen dürfen optisch unter die Mittellinie hinausragen)
-      // und kein Fehler. 3.0mm liefert den saubersten Gesamteindruck:
-      // "Daniel Feigenbutz" sitzt optisch exakt mittig (Versalhöhe über,
-      // Unterlänge des "g" unter der Mittellinie), "Kim Yu"/"Alexandra
-      // Mazur" wirken minimal erhöht, aber nicht auffällig unzentriert.
-      verticalOffsetMm: 3.0,
+      // und kein Fehler.
+      verticalOffsetMm: 3.8,
     }),
   }),
 });

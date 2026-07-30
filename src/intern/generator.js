@@ -1,6 +1,7 @@
 import logoUrl from "../../Medien/IFK Logo nur Zähne.png";
 import { generateIfkId } from "../../core/id/generateIfkId.js";
 import { validateIfkId } from "../../core/id/validateIfkId.js";
+import { isIfkIdComplete } from "../../core/id/isIfkIdComplete.js";
 import { isValidEmail } from "../../core/mail/validateEmail.js";
 import { sendRepresentativeMaterials } from "../../core/mail/sendRepresentativeMaterials.js";
 import { buildMaterialManifest } from "../../core/materials/buildMaterialManifest.js";
@@ -13,6 +14,7 @@ import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
 import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
 import { normalizePhotoToPng } from "../../core/photo/normalizePhotoToPng.js";
+import { isPhotoLinkValidated } from "../../core/photo/isPhotoLinkValidated.js";
 import { DEFAULT_PHOTO_CROP } from "../../core/pdf/photoCrop.js";
 import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
@@ -144,14 +146,16 @@ export function initGenerator() {
   // Ziel-Elemente für die grüne "importiert"-Hervorhebung — bewusst die
   // Eingabeelemente selbst (nicht ihre umgebenden Container/Labels/
   // Formulargruppen), damit nur das tatsächliche Feld grün hinterlegt
-  // wird (siehe `.field-imported` in style.css). `gender` fehlt hier
+  // wird (siehe `.field-complete` in style.css). `gender` fehlt hier
   // bewusst: bei einer Radiogruppe ist "das Feld" keine einzelne feste
   // Element-Referenz, sondern je nach Wert eine von zwei Optionen —
   // siehe `genderOptionLabelFor()`/`setFieldImportedState()` unten.
+  // "ifkId" bewusst NICHT enthalten — das Feld nutzt die separate
+  // Erledigungsstatus-Logik (`updateIfkIdCompletionState()`), keine
+  // Herkunfts-/Import-Markierung (siehe Kommentar dort).
   const fieldTargetElements = new Map([
     ["firstName", firstNameInput],
     ["lastName", lastNameInput],
-    ["ifkId", ifkIdInput],
     ["email", emailInput],
     ["phone", phoneInput],
     ["federalState", federalStateInput],
@@ -162,7 +166,6 @@ export function initGenerator() {
     firstName: [firstNameInput],
     lastName: [lastNameInput],
     gender: genderRadios,
-    ifkId: [ifkIdInput],
     email: [emailInput],
     phone: [phoneInput],
     federalState: [federalStateInput],
@@ -306,9 +309,11 @@ export function initGenerator() {
         lastPhotoUrl = null;
         showPhotoStatus(getPhotoRetrievalErrorMessage(result.reason), "error");
       }
+      updatePhotoLinkCompletionState();
     } catch {
       lastPhoto = null;
       lastPhotoUrl = null;
+      updatePhotoLinkCompletionState();
       showPhotoStatus(getPhotoRetrievalErrorMessage(), "error");
     }
   }
@@ -362,6 +367,7 @@ export function initGenerator() {
         }
         lastPhoto = photoResult;
         lastPhotoUrl = photoUrl;
+        updatePhotoLinkCompletionState();
       }
 
       const initialCrop = photoCropSourceUrl === photoUrl && photoCrop ? photoCrop : DEFAULT_PHOTO_CROP;
@@ -1011,7 +1017,7 @@ export function initGenerator() {
   }
 
   // Setzt/entfernt den Zustand "imported" (dezente grüne Hervorhebung,
-  // siehe `.field-imported` in style.css) direkt auf dem Eingabeelement
+  // siehe `.field-complete` in style.css) direkt auf dem Eingabeelement
   // — bei `gender` auf der Beschriftung der betroffenen Radio-Option,
   // NIE auf umgebenden Containern/Formulargruppen (siehe Vorgabe).
   function setFieldImportedState(fieldKey, imported, value) {
@@ -1021,18 +1027,18 @@ export function initGenerator() {
       // nach einem Wertewechsel beide oder die falsche Option grün bleibt.
       for (const radio of genderRadios) {
         const label = genderOptionLabelFor(radio.value);
-        if (label) label.classList.remove("field-imported");
+        if (label) label.classList.remove("field-complete");
       }
       if (imported) {
         const label = genderOptionLabelFor(value);
-        if (label) label.classList.add("field-imported");
+        if (label) label.classList.add("field-complete");
       }
       return;
     }
 
     const target = fieldTargetElements.get(fieldKey);
     if (!target) return;
-    target.classList.toggle("field-imported", imported);
+    target.classList.toggle("field-complete", imported);
   }
 
   // Markiert ein Feld als automatisch übernommen — NIEMALS für leere
@@ -1067,6 +1073,48 @@ export function initGenerator() {
       wasManuallyModified: manuallyModifiedFieldKeys.has(key),
       wasManuallyReviewed: manuallyReviewedFieldKeys.has(key),
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Zweite, fachlich andere Bedeutung derselben grünen Hervorhebung
+  // (`.field-complete`): "Erledigungsstatus" statt "Herkunft".
+  //
+  // `markFieldAsImported`/`isAutoRecognized` oben beantworten "stammt
+  // dieser Wert unverändert aus dem Screenshot?" — das ist für IFK-ID
+  // und Foto-Link nicht die richtige Frage. Dort soll die Markierung
+  // stattdessen bedeuten "dieses Feld ist vollständig und gültig,
+  // hier fehlt nichts mehr", UNABHÄNGIG davon, ob der Wert importiert,
+  // über "Neu generieren" erzeugt oder manuell eingetippt wurde. Beide
+  // Funktionen unten sind bewusst rein ableitend (kein eigener
+  // Zustand, keine Sets) — sie lesen den aktuellen Feldinhalt bzw.
+  // `lastPhoto`/`lastPhotoUrl` und setzen `.field-complete` exakt
+  // danach, an genau einer Stelle je Feld statt verteilt über einzelne
+  // Wertzuweisungen.
+  // ---------------------------------------------------------------------
+
+  // IFK-ID: grün bei jedem aktuell gültigen, nicht-leeren Wert (siehe
+  // `core/id/isIfkIdComplete.js`) — leere und ungültige Werte bleiben
+  // neutral. Bei jeder Änderung des Feldinhalts neu bewertet (Eingabe,
+  // Screenshot-Übernahme, "Neu generieren").
+  function updateIfkIdCompletionState() {
+    ifkIdInput.classList.toggle("field-complete", isIfkIdComplete(ifkIdInput.value));
+  }
+
+  // Foto-Link: grün nur, wenn der *aktuell im Feld stehende* Link
+  // erfolgreich geprüft wurde (`lastPhoto`/`lastPhotoUrl`, siehe
+  // `checkRepresentativePhoto`/`handleOpenPhotoCropEditor`/
+  // `handleGenerate`) — ein leeres, formal ungültiges, noch nicht
+  // geprüftes oder geändertes (und damit neu zu prüfendes) Feld bleibt
+  // neutral. Kein Fotoausschnitt-Erfordernis: der automatische
+  // Center-Crop reicht, ein manueller Ausschnitt ist keine
+  // Voraussetzung.
+  function updatePhotoLinkCompletionState() {
+    const isValidated = isPhotoLinkValidated({
+      lastPhoto,
+      lastPhotoUrl,
+      currentValue: photoUrlInput.value.trim(),
+    });
+    photoUrlInput.classList.toggle("field-complete", isValidated);
   }
 
   async function handleScreenshotFile(file) {
@@ -1191,8 +1239,8 @@ export function initGenerator() {
     // "Neu generieren"-Button zuständig).
     if (!ifkIdInput.value.trim() && isApplyable("ifkId", fields.ifkId)) {
       ifkIdInput.value = fields.ifkId.value;
-      if (isAutoRecognized("ifkId", fields.ifkId)) markFieldAsImported("ifkId", fields.ifkId.value);
       updateIfkIdGenerateBtnEmphasis();
+      updateIfkIdCompletionState();
     }
 
     if (isApplyable("paypalUrl", fields.paypalUrl)) {
@@ -1214,6 +1262,7 @@ export function initGenerator() {
     lastFiles = null;
     lastPhoto = null;
     lastPhotoUrl = null;
+    updatePhotoLinkCompletionState();
 
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
@@ -1306,6 +1355,7 @@ export function initGenerator() {
       if (!photoResult.ok) {
         lastPhoto = null;
         lastPhotoUrl = null;
+        updatePhotoLinkCompletionState();
         showPhotoStatus(getPhotoRetrievalErrorMessage(photoResult.reason), "error");
         showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
         showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
@@ -1313,6 +1363,7 @@ export function initGenerator() {
       }
       lastPhoto = photoResult;
       lastPhotoUrl = photoUrl;
+      updatePhotoLinkCompletionState();
       const sizeKb = Math.max(1, Math.round(photoResult.size / 1024));
       showPhotoStatus(`Foto erfolgreich geladen (${photoResult.format}, ${sizeKb} KB).`, "success");
       showPhotoPreview(`data:${photoResult.contentType};base64,${photoResult.content}`);
@@ -1477,14 +1528,21 @@ export function initGenerator() {
     }
     ifkIdInput.value = generateIfkId();
     updateIfkIdGenerateBtnEmphasis();
-    // Eine neu generierte IFK-ID wurde nie automatisch übernommen — eine
-    // zuvor grün hervorgehobene, aus dem Screenshot übernommene ID darf
-    // nach dem Ersetzen nicht mehr als "importiert" markiert bleiben.
-    setFieldImportedState("ifkId", false);
+    // Eine neu generierte IFK-ID ist per Definition gültig — gilt daher
+    // ebenso als "erledigt" (grün) wie eine importierte oder manuell
+    // eingetippte gültige ID (siehe `updateIfkIdCompletionState`).
+    updateIfkIdCompletionState();
   });
 
-  ifkIdInput.addEventListener("input", updateIfkIdGenerateBtnEmphasis);
+  ifkIdInput.addEventListener("input", () => {
+    updateIfkIdGenerateBtnEmphasis();
+    // Deckt auch manuell eingetippte gültige IDs ab (siehe
+    // `updateIfkIdCompletionState`: "erledigt" hängt hier nur von der
+    // aktuellen Gültigkeit ab, nicht von der Herkunft des Werts).
+    updateIfkIdCompletionState();
+  });
   updateIfkIdGenerateBtnEmphasis();
+  updateIfkIdCompletionState();
 
   screenshotSelectBtn.addEventListener("click", () => screenshotFileInput.click());
 
@@ -1557,6 +1615,9 @@ export function initGenerator() {
       lastPhoto = null;
       lastPhotoUrl = null;
     }
+    // Geänderter Link muss immer neu geprüft werden, bevor er wieder als
+    // "erledigt" gelten darf (siehe `updatePhotoLinkCompletionState`).
+    updatePhotoLinkCompletionState();
     if (photoUrlInput.value.trim() !== photoCropSourceUrl) {
       resetPhotoCrop();
     }

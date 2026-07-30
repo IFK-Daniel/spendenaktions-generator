@@ -538,7 +538,7 @@
    hier wird stattdessen nur die Beschriftung der betroffenen Option
    (Radio + Text) dezent hervorgehoben, nie die gesamte Formulargruppe
    (siehe `genderOptionLabelFor()` in generator.js). */
-.gender-option.field-imported {
+.gender-option.field-complete {
   background-color: rgba(140, 193, 64, 0.16);
   border-radius: 6px;
   padding: 4px 8px;
@@ -628,9 +628,8 @@
   box-shadow: 0 0 0 3px rgba(140, 193, 64, 0.18);
 }
 
-/* Automatisch aus dem Screenshot übernommene Felder (Zustand
-   "imported", siehe `src/intern/generator.js`) erhalten eine dezente
-   grüne Hintergrundfläche — bewusst NUR auf dem Eingabeelement selbst
+/* Ein Formularfeld gilt als "erledigt" und erhält eine dezente grüne
+   Hintergrundfläche — bewusst NUR auf dem Eingabeelement selbst
    (Input/Textarea), nicht auf Containern, Labels, Hilfetexten oder
    ganzen Formulargruppen. Da die Klasse direkt auf dem ohnehin schon
    umrandeten Feld sitzt (das bereits eine eigene Box mit Padding hat),
@@ -638,11 +637,26 @@
    Hintergrundfarbe ändert sich, die Feldgröße bleibt unverändert.
    Muss nach den obigen `.person-field input[type="..."]`-Regeln
    stehen (gleiche Spezifität, Reihenfolge entscheidet), damit die
-   grüne Fläche deren `background` zuverlässig überschreibt. Leere,
-   manuell geänderte und prüfbedürftige Felder erhalten diese Klasse
-   bewusst nie (siehe `markFieldAsImported`/`isAutoRecognized`). */
-.person-field input.field-imported,
-textarea.field-imported {
+   grüne Fläche deren `background` zuverlässig überschreibt.
+
+   "Erledigt" hat je nach Feld eine von zwei fachlich unterschiedlichen
+   Bedeutungen (siehe `src/intern/generator.js` für die jeweilige
+   Herleitung — dieselbe CSS-Klasse für beide, bewusst identisches
+   visuelles Erscheinungsbild):
+   - Bei den normalen OCR-Feldern (Vorname, Nachname, Telefonnummer,
+     Bundesland, Region, E-Mail, PayPal-Link): "unverändert aus dem
+     Screenshot übernommen" (Herkunft) — siehe
+     `core/screenshot/isFieldAutoRecognized.js`. Leere, manuell
+     geänderte und prüfbedürftige Felder erhalten die Klasse hier
+     bewusst nie.
+   - Bei IFK-ID und Foto-Link: "vollständig und gültig" (Erledigungs-
+     status) — unabhängig davon, ob der Wert importiert, generiert
+     oder manuell eingegeben wurde (siehe `core/id/isIfkIdComplete.js`
+     bzw. die Foto-Validierung in `generator.js`). Leere oder
+     (noch) nicht erfolgreich geprüfte Werte erhalten die Klasse hier
+     bewusst nie. */
+.person-field input.field-complete,
+textarea.field-complete {
   background-color: rgba(140, 193, 64, 0.16);
 }
 

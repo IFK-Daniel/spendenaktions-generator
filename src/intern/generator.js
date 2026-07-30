@@ -137,9 +137,23 @@ export function initGenerator() {
   const screenshotLightboxClose = document.getElementById("screenshot-lightbox-close");
 
   const genderRadios = Array.from(document.querySelectorAll('input[name="gender"]'));
-  const fieldContainers = new Map(
-    Array.from(document.querySelectorAll("[data-field-container]")).map((el) => [el.dataset.fieldContainer, el])
-  );
+  // Ziel-Elemente für die grüne "importiert"-Hervorhebung — bewusst die
+  // Eingabeelemente selbst (nicht ihre umgebenden Container/Labels/
+  // Formulargruppen), damit nur das tatsächliche Feld grün hinterlegt
+  // wird (siehe `.field-imported` in style.css). `gender` fehlt hier
+  // bewusst: bei einer Radiogruppe ist "das Feld" keine einzelne feste
+  // Element-Referenz, sondern je nach Wert eine von zwei Optionen —
+  // siehe `genderOptionLabelFor()`/`setFieldImportedState()` unten.
+  const fieldTargetElements = new Map([
+    ["firstName", firstNameInput],
+    ["lastName", lastNameInput],
+    ["ifkId", ifkIdInput],
+    ["email", emailInput],
+    ["phone", phoneInput],
+    ["federalState", federalStateInput],
+    ["region", regionInput],
+    ["paypalUrl", paypalInput],
+  ]);
   const fieldImportSourceElements = {
     firstName: [firstNameInput],
     lastName: [lastNameInput],
@@ -437,6 +451,24 @@ export function initGenerator() {
         // Zusätzlich zur eingebetteten Vorschau ein Link zum Öffnen in
         // einem eigenen Tab — eingebettete PDF-Voransichten verhalten
         // sich nicht in jedem Browser/jeder Umgebung gleich zuverlässig.
+        //
+        // Bekannte Grenze (Safari/WebKit): `file.content` ist ein
+        // benanntes `File`-Objekt (siehe `buildFileContent.js`), damit
+        // die Object-URL grundsätzlich einen Dateinamen trägt. Klickt
+        // man direkt auf diesen Link (unser eigenes `download`-Attribut
+        // unten), wird der Name in allen getesteten Browsern inkl.
+        // Safari korrekt verwendet. Öffnet man stattdessen NUR diesen
+        // Vorschau-Link und speichert danach über den systemeigenen
+        // Speichern-Button von Safaris eingebautem PDF-Betrachter, wird
+        // der Dateiname von WebKit selbst vergeben — Safari liest dabei
+        // den Namen des `File`-Objekts der Blob-URL nicht aus (bekannte
+        // WebKit-Einschränkung, nicht seitenseitig behebbar; es gibt
+        // keine Web-Plattform-API, die einer bereits navigierten
+        // Blob-URL nachträglich einen Dateinamen mitgeben kann). Ein
+        // erzwungener Workaround (z. B. Einbetten in eine eigene
+        // HTML-Zwischenseite) würde die native Safari-PDF-Ansicht
+        // (Zoomen, Seiten-Navigation, echtes Drucken) ersetzen — dieser
+        // Kompromiss wurde hier bewusst NICHT eingegangen.
         const openLink = document.createElement("a");
         openLink.className = "download-link";
         openLink.href = objectUrl;
@@ -944,12 +976,36 @@ export function initGenerator() {
     screenshotImportPreview.hidden = false;
   }
 
+  // Liefert das `.gender-option`-Label (Radio + Beschriftung) für einen
+  // Geschlechtswert — die Radiogruppe hat keine einzelne feste
+  // Zielreferenz wie die übrigen Felder (siehe `fieldTargetElements`).
+  function genderOptionLabelFor(value) {
+    return document.querySelector(`.gender-option[data-gender-option="${value}"]`);
+  }
+
   // Setzt/entfernt den Zustand "imported" (dezente grüne Hervorhebung,
-  // siehe `.field-imported` in style.css) für ein Formularfeld.
-  function setFieldImportedState(fieldKey, imported) {
-    const container = fieldContainers.get(fieldKey);
-    if (!container) return;
-    container.classList.toggle("field-imported", imported);
+  // siehe `.field-imported` in style.css) direkt auf dem Eingabeelement
+  // — bei `gender` auf der Beschriftung der betroffenen Radio-Option,
+  // NIE auf umgebenden Containern/Formulargruppen (siehe Vorgabe).
+  function setFieldImportedState(fieldKey, imported, value) {
+    if (fieldKey === "gender") {
+      // Immer beide Optionen zurücksetzen, dann ggf. gezielt genau die
+      // markieren, die zum importierten Wert gehört — verhindert, dass
+      // nach einem Wertewechsel beide oder die falsche Option grün bleibt.
+      for (const radio of genderRadios) {
+        const label = genderOptionLabelFor(radio.value);
+        if (label) label.classList.remove("field-imported");
+      }
+      if (imported) {
+        const label = genderOptionLabelFor(value);
+        if (label) label.classList.add("field-imported");
+      }
+      return;
+    }
+
+    const target = fieldTargetElements.get(fieldKey);
+    if (!target) return;
+    target.classList.toggle("field-imported", imported);
   }
 
   // Markiert ein Feld als automatisch übernommen — NIEMALS für leere
@@ -959,7 +1015,7 @@ export function initGenerator() {
   function markFieldAsImported(fieldKey, value) {
     if (typeof value === "string" && value.trim() === "") return;
 
-    setFieldImportedState(fieldKey, true);
+    setFieldImportedState(fieldKey, true, value);
 
     const sourceElements = fieldImportSourceElements[fieldKey] || [];
     for (const el of sourceElements) {

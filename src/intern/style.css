@@ -534,19 +534,15 @@
   display: none;
 }
 
-/* Automatisch aus dem Screenshot übernommene Felder (Zustand
-   "imported", siehe `src/intern/generator.js`) erhalten statt eines
-   Text-Badges eine dezente grüne Hintergrundfläche — Padding/negativer
-   Margin gleichen sich aus, damit sich die Feldgröße dadurch nicht
-   ändert (kein Layoutversatz). Leere, manuell geänderte und
-   prüfbedürftige Felder erhalten diese Klasse bewusst nie (siehe
-   `markFieldAsImported`/`isAutoRecognized`). Attribut-Selektor sorgt
-   für ausreichend Spezifität gegenüber z. B. `.gender-fieldset`. */
-[data-field-container].field-imported {
-  background: rgba(140, 193, 64, 0.16);
-  border-radius: 8px;
-  padding: 10px;
-  margin: -10px;
+/* Geschlecht ist eine Radiogruppe statt eines einzelnen Eingabefelds —
+   hier wird stattdessen nur die Beschriftung der betroffenen Option
+   (Radio + Text) dezent hervorgehoben, nie die gesamte Formulargruppe
+   (siehe `genderOptionLabelFor()` in generator.js). */
+.gender-option.field-imported {
+  background-color: rgba(140, 193, 64, 0.16);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: -4px -8px;
 }
 
 .field-hint {
@@ -630,6 +626,24 @@
   outline: none;
   border-color: var(--ifk-green);
   box-shadow: 0 0 0 3px rgba(140, 193, 64, 0.18);
+}
+
+/* Automatisch aus dem Screenshot übernommene Felder (Zustand
+   "imported", siehe `src/intern/generator.js`) erhalten eine dezente
+   grüne Hintergrundfläche — bewusst NUR auf dem Eingabeelement selbst
+   (Input/Textarea), nicht auf Containern, Labels, Hilfetexten oder
+   ganzen Formulargruppen. Da die Klasse direkt auf dem ohnehin schon
+   umrandeten Feld sitzt (das bereits eine eigene Box mit Padding hat),
+   ist keine Padding-/Negativ-Margin-Kompensation nötig — nur die
+   Hintergrundfarbe ändert sich, die Feldgröße bleibt unverändert.
+   Muss nach den obigen `.person-field input[type="..."]`-Regeln
+   stehen (gleiche Spezifität, Reihenfolge entscheidet), damit die
+   grüne Fläche deren `background` zuverlässig überschreibt. Leere,
+   manuell geänderte und prüfbedürftige Felder erhalten diese Klasse
+   bewusst nie (siehe `markFieldAsImported`/`isAutoRecognized`). */
+.person-field input.field-imported,
+textarea.field-imported {
+  background-color: rgba(140, 193, 64, 0.16);
 }
 
 .ifk-id-field #ifk-id-input {

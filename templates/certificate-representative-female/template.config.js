@@ -10,10 +10,11 @@ import { certificateRepresentativeMaleTemplate } from "../certificate-representa
  * sowie `key`/`label` unterscheiden sich.
  *
  * Enthält damit auch dieselbe optische Y-Korrektur `fields.name.
- * verticalOffsetMm = 2.2` (siehe ausführliche Herleitung dort) — der
+ * verticalOffsetMm = 3.0` (siehe ausführliche Herleitung dort) — der
  * grüne Namensbalken sitzt in `background.pdf` (weiblich) an exakt
  * derselben Position wie in der männlichen Vorlage (geprüft), daher
- * gilt derselbe empirisch ermittelte Korrekturwert unverändert.
+ * gilt derselbe, durch echtes Rendern und visuelle Prüfung ermittelte
+ * Korrekturwert unverändert.
  */
 
 const BACKGROUND_URL = new URL("./background.pdf", import.meta.url);

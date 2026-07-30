@@ -60,24 +60,25 @@ export const certificateRepresentativeMaleTemplate = Object.freeze({
       color: NAME_TEXT_COLOR,
       align: "center",
       verticalAlign: "middle",
-      // Optische Korrektur nach unten hin ausgeglichen: die rechnerische
-      // Mitte (Font-Ascent ohne Descender, siehe `placeMultiLineText.js`)
-      // sitzt bei Noto Sans Bold 40pt spürbar UNTER der optischen Mitte
-      // des Balkens — Namen ohne Unterlängen (z. B. "Kim Yu") wirken
-      // sonst zu tief. Empirisch ermittelt (216dpi-Rasterung des
-      // gerenderten PDFs, Pixel-Mittelpunkt des Namensschriftzugs
-      // gegen die geometrische Balkenmitte gemessen) an vier
-      // Testnamen — mit/ohne Unterlängen weichen die Einzelwerte
-      // zwangsläufig etwas voneinander ab (Namen mit Unterlängen wie
-      // "Feigenbutz"/"Schweighofer" wirken bei jedem festen Wert
-      // etwas tiefer als Namen ohne, z. B. "Kim Yu"/"Alexandra
-      // Mazur") — 2.2mm minimiert die maximale Restabweichung über
-      // alle vier Testnamen (je ca. ±0,75–0,9mm, nicht mehr sichtbar):
+      // Optische Korrektur nach oben: die rechnerische Mitte (Font-Ascent
+      // ohne Descender, siehe `placeMultiLineText.js`) sitzt bei Noto
+      // Sans Bold 40pt spürbar UNTER der optischen Mitte des Balkens.
+      // Wert durch tatsächliches Rendern und visuelle Prüfung ermittelt
+      // (nicht rein rechnerisch) — mehrere Kandidaten (2.2/2.6/2.8/3.0/
+      // 3.2mm) wurden mit vier Testnamen als echtes PDF gerendert und
+      // begutachtet:
       //   "Daniel Feigenbutz"                    (mit Unterlänge)
       //   "Kim Yu"                                (ohne Unterlänge)
       //   "Alexandra Mazur"                       (ohne Unterlänge)
       //   "Maximilian Bartholomäus-Schweighofer"  (mit Unterlänge)
-      verticalOffsetMm: 2.2,
+      // Namen mit Unterlängen (g/j/p/q/y) wirken bei jedem festen Wert
+      // etwas tiefer als Namen ohne — das ist normales Schriftverhalten
+      // (Unterlängen dürfen optisch unter die Mittellinie hinausragen)
+      // und kein Fehler. 3.0mm liefert den saubersten Gesamteindruck:
+      // "Daniel Feigenbutz" sitzt optisch exakt mittig (Versalhöhe über,
+      // Unterlänge des "g" unter der Mittellinie), "Kim Yu"/"Alexandra
+      // Mazur" wirken minimal erhöht, aber nicht auffällig unzentriert.
+      verticalOffsetMm: 3.0,
     }),
   }),
 });

@@ -189,6 +189,7 @@ async function drawTextField({ page, field, fieldKey, textValues, embeddedFonts,
       color,
       align: field.align,
       verticalAlign: field.verticalAlign,
+      verticalOffsetPt: field.verticalOffsetMm ? mmToPt(field.verticalOffsetMm) : undefined,
     });
     const widestLineWidthPt = Math.max(...lines.map((line) => font.widthOfTextAtSize(line, sizePt)));
     const fits = widestLineWidthPt <= maxWidthPt;

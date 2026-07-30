@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFArray, decodePDFRawStream } from "pdf-lib";
 import { renderFlyer } from "./renderFlyer.js";
 import { loadTemplateAssets } from "./loadTemplateAssets.js";
+import { mmToPt } from "./units.js";
 import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
+import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
+import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 
 const nodeDeps = { loadTemplateAssets };
 
@@ -158,4 +161,113 @@ test("Home- und Druckerei-Vorlage erzeugen mit identischem photoCrop-Asset jewei
 
   assert.ok(print.bytes.length > 0);
   assert.ok(home.bytes.length > 0);
+});
+
+// Dekodiert den (ggf. Flate-komprimierten) Content-Stream einer Seite zu
+// PDF-Operatoren als Text — erlaubt es, die tatsächlich geschriebene
+// "Tm"-Textmatrix (u. a. die Y-Position der Baseline) zu prüfen, ohne
+// dafür ein separates PDF-Parsing-Tool einzuführen.
+async function decodePageContent(bytes) {
+  const doc = await PDFDocument.load(bytes);
+  const page = doc.getPage(0);
+  const contentsRef = page.node.Contents();
+  const streamRefs = doc.context.lookup(contentsRef) instanceof PDFArray
+    ? doc.context.lookup(contentsRef).asArray()
+    : [contentsRef];
+
+  let text = "";
+  for (const ref of streamRefs) {
+    const stream = doc.context.lookup(ref);
+    text += Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1") + "\n";
+  }
+  return text;
+}
+
+// Extrahiert die Y-Komponente der letzten "Tm"-Textmatrix vor einem "Tj"
+// im Content-Stream (reicht für die hier getesteten Single-Field-PDFs).
+function extractTextMatrixY(content) {
+  const match = content.match(/1 0 0 1 [\d.]+ ([\d.]+) Tm/);
+  return match ? Number(match[1]) : null;
+}
+
+test("Urkunde: verticalOffsetMm aus der Template-Config verschiebt die Baseline exakt um mmToPt(verticalOffsetMm) nach oben", async () => {
+  const withoutOffset = {
+    ...certificateRepresentativeMaleTemplate,
+    fields: {
+      ...certificateRepresentativeMaleTemplate.fields,
+      name: { ...certificateRepresentativeMaleTemplate.fields.name, verticalOffsetMm: 0 },
+    },
+  };
+
+  const { bytes: bytesWithout } = await renderFlyer({
+    templateConfig: withoutOffset,
+    textValues: { name: "Kim Yu" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+  const { bytes: bytesWith } = await renderFlyer({
+    templateConfig: certificateRepresentativeMaleTemplate,
+    textValues: { name: "Kim Yu" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+
+  const yWithout = extractTextMatrixY(await decodePageContent(bytesWithout));
+  const yWith = extractTextMatrixY(await decodePageContent(bytesWith));
+
+  assert.ok(yWithout !== null && yWith !== null, "Tm-Matrix sollte im Content-Stream gefunden werden");
+  const expectedOffsetPt = mmToPt(certificateRepresentativeMaleTemplate.fields.name.verticalOffsetMm);
+  assert.ok(
+    Math.abs(yWith - yWithout - expectedOffsetPt) < 0.01,
+    `erwarteter Y-Versatz ${expectedOffsetPt}pt, tatsächlich ${yWith - yWithout}pt`
+  );
+});
+
+test("Urkunde: männliche und weibliche Vorlage verwenden denselben verticalOffsetMm-Korrekturwert", () => {
+  assert.equal(
+    certificateRepresentativeFemaleTemplate.fields.name.verticalOffsetMm,
+    certificateRepresentativeMaleTemplate.fields.name.verticalOffsetMm
+  );
+  assert.ok(certificateRepresentativeMaleTemplate.fields.name.verticalOffsetMm > 0);
+});
+
+test("Urkunde: Name bleibt bei allen vier Testnamen horizontal zentriert (align: 'center')", async () => {
+  const names = ["Daniel Feigenbutz", "Kim Yu", "Alexandra Mazur", "Maximilian Bartholomäus-Schweighofer"];
+  for (const name of names) {
+    const { bytes } = await renderFlyer({
+      templateConfig: certificateRepresentativeMaleTemplate,
+      textValues: { name },
+      imageAssets: {},
+      deps: nodeDeps,
+    });
+    const content = await decodePageContent(bytes);
+    // Bei align:"center" hängt die gezeichnete X-Position von der Textbreite
+    // ab (siehe placeMultiLineText.js) — wir prüfen daher indirekt: die
+    // X-Koordinate der Tm-Matrix darf nie am linken Rand der Box liegen
+    // (xMm=1.176mm ≈ 3.33pt), da der Name sonst nicht zentriert wäre.
+    const xMatch = content.match(/1 0 0 1 ([\d.]+) [\d.]+ Tm/);
+    assert.ok(xMatch, `Tm-Matrix nicht gefunden für "${name}"`);
+    assert.ok(Number(xMatch[1]) > 10, `Name "${name}" scheint nicht zentriert (x=${xMatch[1]})`);
+  }
+});
+
+test("Urkunde: langer Name mit Auto-Shrink erzeugt keine Warning (kein fehlerhafter Output)", async () => {
+  const { warnings } = await renderFlyer({
+    templateConfig: certificateRepresentativeMaleTemplate,
+    textValues: { name: "Maximilian Bartholomäus-Schweighofer" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+  assert.deepEqual(warnings, []);
+});
+
+test("Urkunde: weibliche Vorlage rendert ohne Fehler und ohne Warnings", async () => {
+  const { bytes, warnings } = await renderFlyer({
+    templateConfig: certificateRepresentativeFemaleTemplate,
+    textValues: { name: "Maximiliane Bartholomäus-Schweighofer" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+  assert.ok(bytes.length > 0);
+  assert.deepEqual(warnings, []);
 });

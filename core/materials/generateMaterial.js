@@ -1,4 +1,5 @@
 import { generateQr as defaultGenerateQr } from "../qr/generateQr.js";
+import { buildFileContent } from "./buildFileContent.js";
 
 const DATA_URL_PATTERN = /^data:([^;]*);base64,(.*)$/s;
 
@@ -9,7 +10,8 @@ const DATA_URL_PATTERN = /^data:([^;]*);base64,(.*)$/s;
  * Reine Orchestrierung um das bestehende `core/qr/generateQr.js` herum:
  * erzeugt keinen eigenen QR-Code, sondern ruft ausschließlich die
  * bestehende Funktion auf und wandelt deren PNG-DataURL-Rückgabewert in
- * `{ content, size }` um (Blob, falls verfügbar, sonst Uint8Array).
+ * `{ content, size }` um (siehe `buildFileContent.js`: `File` mit
+ * Dateinamen, falls verfügbar, sonst `Blob`, zuletzt `Uint8Array`).
  *
  * Der Dateiname wird unverändert aus `entry.filename` übernommen — hier
  * findet keine erneute Dateinamensbildung statt (siehe
@@ -37,7 +39,7 @@ export async function generateMaterial({ entry, content, moduleColor, logoImage,
 
   const canvas = createCanvas();
   const dataUrl = await generateQrFn(canvas, content, logoImage, moduleColor);
-  const { content: fileContent, size } = dataUrlToFileContent(dataUrl, entry.key);
+  const { content: fileContent, size } = dataUrlToFileContent(dataUrl, entry.key, entry.filename);
 
   return {
     key: entry.key,
@@ -56,7 +58,7 @@ function defaultCreateCanvas() {
   return document.createElement("canvas");
 }
 
-function dataUrlToFileContent(dataUrl, key) {
+function dataUrlToFileContent(dataUrl, key, filename) {
   const match = typeof dataUrl === "string" ? dataUrl.match(DATA_URL_PATTERN) : null;
   if (!match) {
     throw new Error(`generateMaterial: unerwartetes Datenformat der erzeugten Grafik für "${key}".`);
@@ -67,9 +69,7 @@ function dataUrlToFileContent(dataUrl, key) {
     throw new Error(`generateMaterial: erzeugte Datei für "${key}" ist leer.`);
   }
 
-  const content = typeof Blob !== "undefined" ? new Blob([bytes], { type: "image/png" }) : bytes;
-  const size = typeof Blob !== "undefined" ? content.size : bytes.length;
-  return { content, size };
+  return buildFileContent(bytes, filename, "image/png");
 }
 
 function base64ToUint8Array(base64) {

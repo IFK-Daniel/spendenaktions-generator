@@ -1,5 +1,6 @@
 import { renderFlyer } from "../pdf/renderFlyer.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+import { buildFileContent } from "./buildFileContent.js";
 
 /**
  * Bildet `manifest.person`-Felder auf die generischen `textValues`-
@@ -91,8 +92,7 @@ export async function generateFlyerMaterial({
     deps: renderDeps,
   });
 
-  const content = typeof Blob !== "undefined" ? new Blob([bytes], { type: "application/pdf" }) : bytes;
-  const size = typeof Blob !== "undefined" ? content.size : bytes.length;
+  const { content, size } = buildFileContent(bytes, entry.filename, "application/pdf");
 
   return {
     key: entry.key,

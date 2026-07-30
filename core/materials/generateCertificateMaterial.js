@@ -1,5 +1,6 @@
 import { renderFlyer } from "../pdf/renderFlyer.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+import { buildFileContent } from "./buildFileContent.js";
 
 /**
  * Erzeugt aus einem bereits aufgelösten Urkunde-Materialtyp-Eintrag,
@@ -46,8 +47,7 @@ export async function generateCertificateMaterial({ entry, templateConfig, perso
     deps: renderDeps,
   });
 
-  const content = typeof Blob !== "undefined" ? new Blob([bytes], { type: "application/pdf" }) : bytes;
-  const size = typeof Blob !== "undefined" ? content.size : bytes.length;
+  const { content, size } = buildFileContent(bytes, entry.filename, "application/pdf");
 
   return {
     key: entry.key,

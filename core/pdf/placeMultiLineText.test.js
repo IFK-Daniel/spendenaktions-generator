@@ -124,6 +124,46 @@ test("verticalAlign 'middle' zentriert den Textblock vertikal in maxHeightPt", (
   assert.ok(Math.abs(drawCalls[0].y - 72.2) < 1e-9);
 });
 
+test("verticalOffsetPt verschiebt die Baseline zusätzlich additiv (positiv = nach oben)", () => {
+  const font = fakeFontWithAscent(10);
+  const drawCalls = [];
+  const page = fakePage(drawCalls);
+  placeMultiLineText({
+    page,
+    font,
+    text: "Kurz",
+    xPt: 0,
+    yPt: 100,
+    maxWidthPt: 200,
+    maxHeightPt: 50,
+    startSizePt: 12,
+    minSizePt: 12,
+    color: { r: 0, g: 0, b: 0 },
+    verticalAlign: "middle",
+    verticalOffsetPt: 5,
+  });
+  // Wie im 'middle'-Test oben (baselineYPt ohne Offset = 72.2), plus verticalOffsetPt = 5.
+  assert.ok(Math.abs(drawCalls[0].y - 77.2) < 1e-9);
+});
+
+test("verticalOffsetPt ist standardmäßig 0 (kein Verhaltensunterschied ohne explizite Angabe)", () => {
+  const font = fakeFontWithAscent(10);
+  const drawCalls = [];
+  const page = fakePage(drawCalls);
+  placeMultiLineText({
+    page,
+    font,
+    text: "Kurz",
+    xPt: 0,
+    yPt: 100,
+    maxWidthPt: 200,
+    startSizePt: 12,
+    minSizePt: 12,
+    color: { r: 0, g: 0, b: 0 },
+  });
+  assert.equal(drawCalls[0].y, 90);
+});
+
 test("verticalAlign 'middle' ohne endliche maxHeightPt verhält sich wie 'top'", () => {
   const font = fakeFontWithAscent(10);
   const drawCalls = [];

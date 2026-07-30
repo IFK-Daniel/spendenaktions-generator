@@ -19,7 +19,7 @@ test("liefert die korrekten Dateinamen für alle sieben Materialtypen", () => {
   assert.equal(filenames.QR_PAYPAL_BLACK, "IFK_Max_Mustermann_PayPal_QR_schwarz.png");
   assert.equal(filenames.QR_GIRO_GREEN, "IFK_Max_Mustermann_GiroCode_gruen.png");
   assert.equal(filenames.QR_GIRO_BLACK, "IFK_Max_Mustermann_GiroCode_schwarz.png");
-  assert.equal(filenames.CERTIFICATE_REPRESENTATIVE, "IFK_Max_Mustermann_Urkunde.pdf");
+  assert.equal(filenames.CERTIFICATE_REPRESENTATIVE, "Urkunde_Max_Mustermann.pdf");
 
   for (const entry of result) {
     assert.equal(entry.ifkId, "IFK7QX");
@@ -120,6 +120,47 @@ test("ohne 'materials' werden alle sieben Dateinamen erzeugt", () => {
     ifkId: VALID_IFK_ID,
   });
   assert.equal(result.length, 7);
+});
+
+test("Urkunde: 'Daniel Feigenbutz' erzeugt 'Urkunde_Daniel_Feigenbutz.pdf'", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Daniel",
+    lastName: "Feigenbutz",
+    ifkId: VALID_IFK_ID,
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Daniel_Feigenbutz.pdf");
+});
+
+test("Urkunde: Umlaute/ß werden transliteriert (ä→ae, ö→oe, ü→ue, ß→ss)", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Jürgen",
+    lastName: "Weiß",
+    ifkId: VALID_IFK_ID,
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Juergen_Weiss.pdf");
+});
+
+test("Urkunde: Bindestrich-Nachname bleibt erhalten, Umlaute darin werden transliteriert", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Maximilian",
+    lastName: "Bartholomäus-Schweighofer",
+    ifkId: VALID_IFK_ID,
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Maximilian_Bartholomaeus-Schweighofer.pdf");
+});
+
+test("Urkunde: problematische Dateisystemzeichen erzeugen keinen ungültigen Dateinamen (nie 'Unknown.pdf')", () => {
+  const result = buildMaterialFilenames({
+    firstName: 'Max/Mo:ritz*Te?st"<>|',
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_MaxMoritzTest_Mustermann.pdf");
+  assert.notEqual(result[0].filename, "Unknown.pdf");
 });
 
 test("'materials' akzeptiert auch das Ergebnis von buildMaterialList", async () => {

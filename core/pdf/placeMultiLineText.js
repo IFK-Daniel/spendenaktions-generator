@@ -29,6 +29,16 @@ import { wrapText } from "./wrapText.js";
  *   der gesamte Textblock (alle Zeilen zusammen) vertikal in `maxHeightPt`
  *   zentriert, statt (wie bisher) an der Oberkante der Fläche zu beginnen.
  *   Ohne Wirkung, wenn `maxHeightPt` nicht angegeben ist (`Infinity`).
+ * @param {number} [params.verticalOffsetPt=0] Generischer, rein additiver
+ *   Y-Korrekturwert (in PDF-Punkten, positiv = nach oben auf der Seite),
+ *   der nach der eigentlichen Positionierung (`verticalAlign`) auf jede
+ *   Baseline angewendet wird. Dient dazu, den systematischen Versatz
+ *   zwischen rechnerischer Mitte (Font-Ascent ohne Descender) und
+ *   optischer Mitte auszugleichen, den bestimmte Schriften/Schriftgrade
+ *   erzeugen können — der Wert selbst gehört in die jeweilige
+ *   Template-Config des Aufrufers (siehe z. B. `templates/certificate-
+ *   representative-{male,female}/template.config.js`), nicht hierher
+ *   fest codiert.
  * @returns {{sizePt: number, lines: string[]}}
  */
 export function placeMultiLineText({
@@ -45,6 +55,7 @@ export function placeMultiLineText({
   color,
   align = "left",
   verticalAlign = "top",
+  verticalOffsetPt = 0,
   stepPt = 0.5,
 }) {
   const exceedsMaxWidth = (candidateLines, candidateSize) =>
@@ -76,7 +87,7 @@ export function placeMultiLineText({
     } else if (align === "right") {
       drawXPt = xPt + (maxWidthPt - lineWidthPt);
     }
-    const baselineYPt = blockTopYPt - ascentPt - index * lineHeightPt;
+    const baselineYPt = blockTopYPt - ascentPt - index * lineHeightPt + verticalOffsetPt;
     page.drawText(line, { x: drawXPt, y: baselineYPt, size, font, color });
   });
 

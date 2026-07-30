@@ -8,6 +8,12 @@ import { certificateRepresentativeMaleTemplate } from "../certificate-representa
  * Kommentare zur Herleitung der Namensbalken-Koordinaten) — nur
  * `background` (eigene Master-Vorlage "Urkunde Repräsentantin.pdf")
  * sowie `key`/`label` unterscheiden sich.
+ *
+ * Enthält damit auch dieselbe optische Y-Korrektur `fields.name.
+ * verticalOffsetMm = 2.2` (siehe ausführliche Herleitung dort) — der
+ * grüne Namensbalken sitzt in `background.pdf` (weiblich) an exakt
+ * derselben Position wie in der männlichen Vorlage (geprüft), daher
+ * gilt derselbe empirisch ermittelte Korrekturwert unverändert.
  */
 
 const BACKGROUND_URL = new URL("./background.pdf", import.meta.url);

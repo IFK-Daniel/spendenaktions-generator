@@ -127,15 +127,21 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     // Hintergrund-Artwork — sichtbar als Zeilenversatz. Grafiker-Vorgabe
     // (Y=49.55mm) und tatsächliches Artwork weichen hier voneinander ab;
     // der Korrekturwert wurde direkt am Artwork gemessen, nicht geschätzt.
-    // xMm zusätzlich um 1,8mm auf 66.2mm erhöht: bei X=64.4mm (Listenwert)
+    // xMm zusätzlich um 1,5mm auf 65.9mm erhöht: bei X=64.4mm (Listenwert)
     // stößt der Regionsname direkt ohne Leerzeichen an "…Region" an (siehe
     // Testrender "…RegionWien"), da das statische Label selbst offenbar
-    // kein Leerzeichen am Ende mitbringt — 1,8mm Abstand ergänzt.
+    // kein Leerzeichen am Ende mitbringt — Abstand ergänzt.
+    // Feinschliff (visueller Vergleich mehrerer ±0,2mm-Varianten anhand
+    // eines echten Testrenders, siehe Konversation): xMm von 66.2 auf
+    // 65.9mm (-0,3mm) und yMm von 46.13 auf 45.93mm (-0,2mm) verfeinert,
+    // damit der Wortabstand vor "Düsseldorf"/"Hameln" optisch demselben
+    // Abstand wie zwischen "für"/"die"/"Region" entspricht und die
+    // Grundlinie exakt mit "für die Region" fluchtet.
     region: Object.freeze({
       type: "text",
-      xMm: 66.2,
-      yMm: 46.13,
-      maxWidthMm: 73.8,
+      xMm: 65.9,
+      yMm: 45.93,
+      maxWidthMm: 74.1,
       font: "regular",
       startSizePt: 9,
       minSizePt: 6,
@@ -180,6 +186,11 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     // korrigiert (entspricht nahezu exakt den früheren männlichen
     // Koordinaten 12.7/98.4 — die "korrigierten" Listenwerte scheinen
     // für dieses gelieferte Hintergrund-PDF noch nicht umgesetzt).
+    // Feinschliff geprüft: mehrere ±0,15mm-Varianten anhand eines echten
+    // Testrenders verglichen (sichtbarer schwarzer Rahmen oben/unten/
+    // links/rechts um die QR-Fläche gemessen) — bei 12.7/98.4 ist der
+    // Rahmen bereits auf allen vier Seiten gleich breit sichtbar, keine
+    // Korrektur nötig.
     qrPaypal: Object.freeze({
       type: "image",
       shape: "rect",
@@ -190,10 +201,14 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     }),
     // Koordinatenliste sagt X 81.221mm Y 99.4mm — Artwork-Eckmarken
     // gemessen bei x=79.2mm, y=98.4mm (siehe Hinweis bei qrPaypal).
+    // Feinschliff: bei x=79.2mm blieb der Rahmen rechts unsichtbar (vom
+    // GiroCode selbst knapp verdeckt) — per Variantenvergleich (±0,15mm)
+    // auf x=79.05mm (-0,15mm) korrigiert, danach Rahmen auf allen vier
+    // Seiten gleich breit sichtbar.
     qrGiro: Object.freeze({
       type: "image",
       shape: "rect",
-      xMm: 79.2,
+      xMm: 79.05,
       yMm: 98.4,
       widthMm: 20,
       heightMm: 20,

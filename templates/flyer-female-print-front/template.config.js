@@ -137,11 +137,16 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     // damit der Wortabstand vor "Düsseldorf"/"Hameln" optisch demselben
     // Abstand wie zwischen "für"/"die"/"Region" entspricht und die
     // Grundlinie exakt mit "für die Region" fluchtet.
+    // Zweiter Feinschliff-Durchgang anhand eines Production-Screenshots:
+    // xMm weiter auf 65.75mm (-0,15mm) verringert (Abstand vor dem
+    // Regionsnamen war noch minimal größer als zwischen "für"/"die"),
+    // yMm auf 46.03mm (+0,10mm) leicht zurückgenommen (vorige Korrektur
+    // hat die Grundlinie minimal zu weit nach oben verschoben).
     region: Object.freeze({
       type: "text",
-      xMm: 65.9,
-      yMm: 45.93,
-      maxWidthMm: 74.1,
+      xMm: 65.75,
+      yMm: 46.03,
+      maxWidthMm: 74.25,
       font: "regular",
       startSizePt: 9,
       minSizePt: 6,
@@ -203,12 +208,16 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     // gemessen bei x=79.2mm, y=98.4mm (siehe Hinweis bei qrPaypal).
     // Feinschliff: bei x=79.2mm blieb der Rahmen rechts unsichtbar (vom
     // GiroCode selbst knapp verdeckt) — per Variantenvergleich (±0,15mm)
-    // auf x=79.05mm (-0,15mm) korrigiert, danach Rahmen auf allen vier
-    // Seiten gleich breit sichtbar.
+    // auf x=79.05mm (-0,15mm) korrigiert.
+    // Zweiter Feinschliff-Durchgang anhand eines Production-Screenshots:
+    // bei x=79.05mm wirkte der sichtbare Rahmen rechts deutlich breiter
+    // als links (leichte Überkorrektur) — auf x=79.15mm (+0,10mm
+    // gegenüber 79.05mm) angepasst, damit der Rahmen optisch auf allen
+    // vier Seiten gleich breit erscheint.
     qrGiro: Object.freeze({
       type: "image",
       shape: "rect",
-      xMm: 79.05,
+      xMm: 79.15,
       yMm: 98.4,
       widthMm: 20,
       heightMm: 20,

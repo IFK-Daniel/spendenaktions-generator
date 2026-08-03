@@ -120,11 +120,22 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
       align: "left",
     }),
     // Koordinatenliste: Region X 64.4mm Y 49.55mm ("Koord. für den ganzen Satz: 'für die Region XXXX'").
+    // yMm hier auf 46.13mm korrigiert (-3,42mm): Bei Y=49.55mm (Listenwert)
+    // sitzt die Grundlinie nachweislich (per Content-Stream- und
+    // Pixelmessung an einem echten Testrender verifiziert) 3,42mm/9,7pt
+    // UNTER der Grundlinie der statischen Zeile "für die Region" im
+    // Hintergrund-Artwork — sichtbar als Zeilenversatz. Grafiker-Vorgabe
+    // (Y=49.55mm) und tatsächliches Artwork weichen hier voneinander ab;
+    // der Korrekturwert wurde direkt am Artwork gemessen, nicht geschätzt.
+    // xMm zusätzlich um 1,8mm auf 66.2mm erhöht: bei X=64.4mm (Listenwert)
+    // stößt der Regionsname direkt ohne Leerzeichen an "…Region" an (siehe
+    // Testrender "…RegionWien"), da das statische Label selbst offenbar
+    // kein Leerzeichen am Ende mitbringt — 1,8mm Abstand ergänzt.
     region: Object.freeze({
       type: "text",
-      xMm: 64.4,
-      yMm: 49.55,
-      maxWidthMm: 75.6,
+      xMm: 66.2,
+      yMm: 46.13,
+      maxWidthMm: 73.8,
       font: "regular",
       startSizePt: 9,
       minSizePt: 6,
@@ -145,9 +156,14 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
       align: "left",
     }),
     // Koordinatenliste: Email X 85.42mm Y 71.45mm.
+    // xMm hier auf 84.1mm korrigiert (-1,32mm): per Content-Stream-Messung
+    // sitzt das statische Label "Email" im Artwork tatsächlich bei x=84.1mm
+    // (nicht 85.42mm) — Wert misst die tatsächliche Label-Position, nicht
+    // die Listenangabe, damit die E-Mail-Adresse linksbündig mit "Email"
+    // beginnt (siehe Vorgabe).
     email: Object.freeze({
       type: "text",
-      xMm: 85.42,
+      xMm: 84.1,
       yMm: 71.45,
       maxWidthMm: 55.0,
       font: "regular",
@@ -156,21 +172,29 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
       color: TEXT_DARK_GREY,
       align: "left",
     }),
-    // Koordinatenliste: QR-Code Paypal X 14.6mm Y 99.4mm B/H 20mm.
+    // Koordinatenliste sagt X 14.6mm Y 99.4mm B/H 20mm — die tatsächliche
+    // Eckmarken-Box im Artwork (per Pixelmessung an einem echten
+    // Testrender ermittelt: schwarze Eckmarken bei x=12.7mm, y=98.4mm,
+    // Größe 20x20mm) liegt davon abweichend ~1,9mm weiter links und
+    // ~1mm weiter oben. Werte hier auf die gemessene Artwork-Position
+    // korrigiert (entspricht nahezu exakt den früheren männlichen
+    // Koordinaten 12.7/98.4 — die "korrigierten" Listenwerte scheinen
+    // für dieses gelieferte Hintergrund-PDF noch nicht umgesetzt).
     qrPaypal: Object.freeze({
       type: "image",
       shape: "rect",
-      xMm: 14.6,
-      yMm: 99.4,
+      xMm: 12.7,
+      yMm: 98.4,
       widthMm: 20,
       heightMm: 20,
     }),
-    // Koordinatenliste: GiroCode X 81.221mm Y 99.4mm B/H 20mm.
+    // Koordinatenliste sagt X 81.221mm Y 99.4mm — Artwork-Eckmarken
+    // gemessen bei x=79.2mm, y=98.4mm (siehe Hinweis bei qrPaypal).
     qrGiro: Object.freeze({
       type: "image",
       shape: "rect",
-      xMm: 81.221,
-      yMm: 99.4,
+      xMm: 79.2,
+      yMm: 98.4,
       widthMm: 20,
       heightMm: 20,
     }),

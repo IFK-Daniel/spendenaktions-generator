@@ -22,6 +22,8 @@ import { initPhotoCropEditor } from "./photoCropEditor.js";
 import { loadTemplateAssetsBrowser } from "../../core/pdf/loadTemplateAssetsBrowser.js";
 import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
+import { flyerFemalePrintFrontTemplate } from "../../templates/flyer-female-print-front/template.config.js";
+import { flyerFemaleHomeFrontTemplate } from "../../templates/flyer-female-home-front/template.config.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import {
@@ -41,10 +43,28 @@ const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
 const CERTIFICATE_KEYS = new Set([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]);
 
-const FLYER_TEMPLATES_BY_KEY = Object.freeze({
-  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: flyerPrintFrontTemplate,
-  [MATERIAL_TYPE_KEYS.FLYER_HOME]: flyerHomeFrontTemplate,
+// Flyer-Vorlage wird ausschließlich anhand des Geschlechts gewählt
+// (siehe Vorgabe, analog zu CERTIFICATE_TEMPLATE_BY_GENDER unten) — der
+// Renderer (`renderFlyer.js`) selbst kennt kein Geschlecht, die Auswahl
+// passiert vollständig hier, vor dem Rendern. Ohne Geschlechtsangabe
+// (für den Flyer optional, siehe `needsCertificate`-Prüfung weiter
+// unten) wird die männliche Vorlage verwendet — unverändertes
+// Bestandsverhalten vor Einführung der weiblichen Vorlagen.
+const FLYER_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
+  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze({
+    male: flyerPrintFrontTemplate,
+    female: flyerFemalePrintFrontTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.FLYER_HOME]: Object.freeze({
+    male: flyerHomeFrontTemplate,
+    female: flyerFemaleHomeFrontTemplate,
+  }),
 });
+
+function resolveFlyerTemplate(materialKey, gender) {
+  const byGender = FLYER_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
+  return byGender[gender === "female" ? "female" : "male"];
+}
 
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: "Druck-PDF herunterladen",
@@ -1439,7 +1459,7 @@ export function initGenerator() {
         for (const entry of flyerEntries) {
           const flyerFile = await generateFlyerMaterial({
             entry,
-            templateConfig: FLYER_TEMPLATES_BY_KEY[entry.key],
+            templateConfig: resolveFlyerTemplate(entry.key, genderInput ? genderInput.value : undefined),
             person: manifest.person,
             photoAsset,
             qrPaypalAsset,

@@ -4,6 +4,8 @@ import { renderFlyer } from "../core/pdf/renderFlyer.js";
 import { loadTemplateAssets } from "../core/pdf/loadTemplateAssets.js";
 import { flyerPrintFrontTemplate } from "../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../templates/flyer-home-front/template.config.js";
+import { flyerFemalePrintFrontTemplate } from "../templates/flyer-female-print-front/template.config.js";
+import { flyerFemaleHomeFrontTemplate } from "../templates/flyer-female-home-front/template.config.js";
 import { buildGirocodePayload } from "../core/girocode/buildGirocodePayload.js";
 import { QR_COLOR_GRUEN } from "../core/config/colors.js";
 import { GIROCODE_DEFAULTS } from "../core/config/girocodeDefaults.js";
@@ -71,6 +73,8 @@ const CASES = [
 const TEMPLATES = [
   { id: "druckerei", config: flyerPrintFrontTemplate },
   { id: "home", config: flyerHomeFrontTemplate },
+  { id: "druckerei-weiblich", config: flyerFemalePrintFrontTemplate },
+  { id: "home-weiblich", config: flyerFemaleHomeFrontTemplate },
 ];
 
 for (const testCase of CASES) {

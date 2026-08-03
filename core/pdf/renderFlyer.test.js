@@ -6,6 +6,8 @@ import { loadTemplateAssets } from "./loadTemplateAssets.js";
 import { mmToPt } from "./units.js";
 import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
+import { flyerFemalePrintFrontTemplate } from "../../templates/flyer-female-print-front/template.config.js";
+import { flyerFemaleHomeFrontTemplate } from "../../templates/flyer-female-home-front/template.config.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 
@@ -270,4 +272,69 @@ test("Urkunde: weibliche Vorlage rendert ohne Fehler und ohne Warnings", async (
   });
   assert.ok(bytes.length > 0);
   assert.deepEqual(warnings, []);
+});
+
+test("Flyer weiblich (Druckerei): korrekte Seitengröße (inkl. 3mm Beschnitt), keine Warnungen", async () => {
+  const { bytes, warnings } = await renderFlyer({
+    templateConfig: flyerFemalePrintFrontTemplate,
+    textValues: sampleTextValues(),
+    imageAssets: tinyImageAssets(),
+    deps: nodeDeps,
+  });
+
+  const result = await PDFDocument.load(bytes);
+  assert.equal(result.getPageCount(), 1);
+  assert.deepEqual(warnings, []);
+
+  const page = result.getPage(0);
+  const { width, height } = page.getSize();
+  assert.ok(Math.abs(width - (154 / 25.4) * 72) < 0.5);
+  assert.ok(Math.abs(height - (216 / 25.4) * 72) < 0.5);
+});
+
+test("Flyer weiblich (Home): Seite ohne Beschnitt (148x210mm)", async () => {
+  const { bytes } = await renderFlyer({
+    templateConfig: flyerFemaleHomeFrontTemplate,
+    textValues: sampleTextValues(),
+    imageAssets: tinyImageAssets(),
+    deps: nodeDeps,
+  });
+
+  const result = await PDFDocument.load(bytes);
+  const page = result.getPage(0);
+  const { width, height } = page.getSize();
+  assert.ok(Math.abs(width - (148 / 25.4) * 72) < 0.5);
+  assert.ok(Math.abs(height - (210 / 25.4) * 72) < 0.5);
+});
+
+test("Flyer weiblich: kein 'regionInParagraph'-Feld mehr (Übergangslösung entfällt laut Vorgabe vollständig)", () => {
+  assert.equal(flyerFemalePrintFrontTemplate.fields.regionInParagraph, undefined);
+  assert.equal(flyerFemaleHomeFrontTemplate.fields.regionInParagraph, undefined);
+});
+
+test("Flyer weiblich: sehr langer Name/Region/E-Mail erzeugen keine Warnung (kein zweites, kollisionsanfälliges Regionsfeld mehr)", async () => {
+  const { warnings } = await renderFlyer({
+    templateConfig: flyerFemalePrintFrontTemplate,
+    textValues: sampleTextValues({
+      name: "Maximilian Bartholomäus-Schweighofer",
+      region: "Landkreis Mecklenburgische Seenplatte",
+      email: "maximilian.bartholomaeus-schweighofer@stiftung-example.de",
+    }),
+    imageAssets: tinyImageAssets(),
+    deps: nodeDeps,
+  });
+  assert.deepEqual(warnings, []);
+});
+
+test("Flyer weiblich: Druckerei- und Home-Vorlage verwenden dieselben Feld-Koordinaten (nur page.outputBleedMm unterscheidet sich)", () => {
+  assert.deepEqual(flyerFemalePrintFrontTemplate.fields, flyerFemaleHomeFrontTemplate.fields);
+  assert.equal(flyerFemalePrintFrontTemplate.page.outputBleedMm, 3);
+  assert.equal(flyerFemaleHomeFrontTemplate.page.outputBleedMm, 0);
+});
+
+test("Flyer weiblich und männlich: identische Trim-Seitengröße (148x210mm) und identischer QR-Größe (20x20mm)", () => {
+  assert.equal(flyerFemalePrintFrontTemplate.page.trimWidthMm, flyerPrintFrontTemplate.page.trimWidthMm);
+  assert.equal(flyerFemalePrintFrontTemplate.page.trimHeightMm, flyerPrintFrontTemplate.page.trimHeightMm);
+  assert.equal(flyerFemalePrintFrontTemplate.fields.qrPaypal.widthMm, flyerPrintFrontTemplate.fields.qrPaypal.widthMm);
+  assert.equal(flyerFemalePrintFrontTemplate.fields.qrGiro.widthMm, flyerPrintFrontTemplate.fields.qrGiro.widthMm);
 });

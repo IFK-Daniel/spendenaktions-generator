@@ -57,15 +57,15 @@ export async function sendRepresentativeMaterials(request) {
 // Vercel begrenzt den Request-Body von Serverless Functions (Node-
 // Runtime) auf ~4,5 MB — unabhängig vom Plan, nicht per Konfiguration
 // erhöhbar. Die reale Schwelle wurde per Live-Test gegen Production
-// eingegrenzt: 4.400.155 Byte kamen noch durch (200), 4.506.823 Byte
-// wurden bereits abgelehnt (413) — die Grenze liegt also zwischen
-// diesen beiden Werten. 4.300.000 Byte lassen ausreichend
-// Sicherheitsabstand nach oben (der JSON-Rahmen um den base64-Anhang
-// kommt zur reinen Anhangsgröße noch hinzu), ohne realistische
-// Materialsätze unnötig zu blockieren — ein früherer, konservativerer
-// Wert (4.000.000 Byte) hatte einen tatsächlich noch zustellbaren
-// ~4,2-MB-Request bereits vorab abgewiesen.
-const MAX_REQUEST_BYTES = 4_300_000;
+// eingegrenzt: 4.400.155 Byte kamen noch durch (200 OK), 4.506.823 Byte
+// wurden bereits abgelehnt (413) — die tatsächliche Grenze liegt also
+// irgendwo dazwischen. 4.450.000 Byte liegen mittig in diesem Fenster:
+// ausreichend Sicherheitsabstand nach oben, ohne realistische
+// Materialsätze unnötig zu blockieren (zwei vorherige, konservativere
+// Werte — 4.000.000 und 4.300.000 Byte — hatten einen tatsächlich noch
+// zustellbaren ~4,2-MB-Request bereits vorab abgewiesen, siehe
+// Konversation/Live-Verifikation).
+const MAX_REQUEST_BYTES = 4_450_000;
 
 function estimateJsonBytes(value) {
   // base64-Inhalte und JSON-Strukturzeichen sind reines ASCII — die
@@ -156,9 +156,10 @@ async function sendPart({ payload, resultKey, label }) {
   const estimatedBytes = estimateJsonBytes(payload);
   if (estimatedBytes > MAX_REQUEST_BYTES) {
     const mb = (estimatedBytes / 1024 / 1024).toFixed(1);
+    const limitMb = (MAX_REQUEST_BYTES / 1024 / 1024).toFixed(1);
     return {
       success: false,
-      error: `${label}: Anhänge zu groß für den Mailversand (${mb} MB, Limit ca. 4 MB). Bitte weniger Materialien gleichzeitig versenden.`,
+      error: `${label}: Anhänge zu groß für den Mailversand (${mb} MB, Limit ca. ${limitMb} MB). Bitte weniger Materialien gleichzeitig versenden.`,
     };
   }
 

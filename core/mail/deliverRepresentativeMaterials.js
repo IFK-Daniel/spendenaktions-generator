@@ -70,9 +70,19 @@ async function sendOne({ label, startMessage, acceptedMessage, failedMessage, fa
  * Ergebnis des jeweils anderen — ein Fehlschlag der Repräsentanten-
  * Mail überspringt den humbee-Versand nicht (und umgekehrt).
  *
+ * `recipient` und `humbee` sind beide EINZELN optional (siehe
+ * `api/send-representative-mail.js`): der Client ruft den Endpunkt in
+ * zwei getrennten Requests auf (einmal nur `recipient`, einmal nur
+ * `humbee`), damit ein einzelner Request nicht das kombinierte
+ * Datenvolumen beider Mails tragen muss (siehe Hinweis in
+ * `api/send-representative-mail.js` zum Vercel-Payload-Limit). Fehlt
+ * ein Parameter, wird der zugehörige Versand übersprungen und der
+ * entsprechende Schlüssel im Ergebnis weggelassen — `ok` berücksichtigt
+ * dann nur die tatsächlich versuchten Versände.
+ *
  * @param {object} params
- * @param {{ to: string, subject: string, text: string, html: string, zipFilename: string, zipContent: Buffer }} params.recipient
- * @param {{ to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Buffer }> }} params.humbee
+ * @param {{ to: string, subject: string, text: string, html: string, zipFilename: string, zipContent: Buffer }} [params.recipient]
+ * @param {{ to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Buffer }> }} [params.humbee]
  * @param {(mailOptions: object) => Promise<{ messageId?: string, response?: string, rejected?: string[] }>} params.sendMail
  *   Versendet eine einzelne Mail (z. B. `transporter.sendMail`,
  *   ohne `from` — wird vom Aufrufer ergänzt). Muss bei einer vom
@@ -84,57 +94,61 @@ async function sendOne({ label, startMessage, acceptedMessage, failedMessage, fa
  *   `x-vercel-id`).
  * @returns {Promise<{
  *   ok: boolean,
- *   representative: { success: boolean, messageId?: string, error?: string },
- *   humbee: { success: boolean, messageId?: string, error?: string }
+ *   representative?: { success: boolean, messageId?: string, error?: string },
+ *   humbee?: { success: boolean, messageId?: string, error?: string }
  * }>}
  */
 export async function deliverRepresentativeMaterials({ recipient, humbee, sendMail, logger = console, runId } = {}) {
-  const representative = await sendOne({
-    label: "representative",
-    startMessage: "representative mail delivery started",
-    acceptedMessage: "representative mail delivery accepted",
-    failedMessage: "representative mail delivery failed",
-    failureError: "Versand an Empfänger fehlgeschlagen. Bitte versuche es später erneut.",
-    mail: {
-      to: recipient.to,
-      subject: recipient.subject,
-      text: recipient.text,
-      html: recipient.html,
-      attachments: [{ filename: recipient.zipFilename, content: recipient.zipContent, contentType: "application/zip" }],
-    },
-    attachmentTypes: ["application/zip"],
-    sendMail,
-    logger,
-    runId,
-  });
+  const result = {};
 
-  const humbeeAttachmentTypes = humbee.attachments.map((att) => guessAttachmentMimeType(att.filename));
+  if (recipient) {
+    result.representative = await sendOne({
+      label: "representative",
+      startMessage: "representative mail delivery started",
+      acceptedMessage: "representative mail delivery accepted",
+      failedMessage: "representative mail delivery failed",
+      failureError: "Versand an Empfänger fehlgeschlagen. Bitte versuche es später erneut.",
+      mail: {
+        to: recipient.to,
+        subject: recipient.subject,
+        text: recipient.text,
+        html: recipient.html,
+        attachments: [{ filename: recipient.zipFilename, content: recipient.zipContent, contentType: "application/zip" }],
+      },
+      attachmentTypes: ["application/zip"],
+      sendMail,
+      logger,
+      runId,
+    });
+  }
 
-  const humbeeResult = await sendOne({
-    label: "humbee",
-    startMessage: "humbee mail delivery started",
-    acceptedMessage: "humbee mail delivery accepted",
-    failedMessage: "humbee mail delivery failed",
-    failureError: "Dokumentation an humbee fehlgeschlagen.",
-    mail: {
-      to: humbee.to,
-      subject: humbee.subject,
-      text: humbee.text,
-      attachments: humbee.attachments.map((att) => ({
-        filename: att.filename,
-        content: att.content,
-        contentType: guessAttachmentMimeType(att.filename),
-      })),
-    },
-    attachmentTypes: humbeeAttachmentTypes,
-    sendMail,
-    logger,
-    runId,
-  });
+  if (humbee) {
+    const humbeeAttachmentTypes = humbee.attachments.map((att) => guessAttachmentMimeType(att.filename));
 
-  return {
-    ok: representative.success && humbeeResult.success,
-    representative,
-    humbee: humbeeResult,
-  };
+    result.humbee = await sendOne({
+      label: "humbee",
+      startMessage: "humbee mail delivery started",
+      acceptedMessage: "humbee mail delivery accepted",
+      failedMessage: "humbee mail delivery failed",
+      failureError: "Dokumentation an humbee fehlgeschlagen.",
+      mail: {
+        to: humbee.to,
+        subject: humbee.subject,
+        text: humbee.text,
+        attachments: humbee.attachments.map((att) => ({
+          filename: att.filename,
+          content: att.content,
+          contentType: guessAttachmentMimeType(att.filename),
+        })),
+      },
+      attachmentTypes: humbeeAttachmentTypes,
+      sendMail,
+      logger,
+      runId,
+    });
+  }
+
+  result.ok = (!recipient || result.representative.success) && (!humbee || result.humbee.success);
+
+  return result;
 }

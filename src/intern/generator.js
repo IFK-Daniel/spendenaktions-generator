@@ -589,8 +589,13 @@ export function initGenerator() {
       if (result.ok) {
         showDeliveryStatus("Versand erfolgreich.", "success");
       } else if (!result.representative.success && !result.humbee.success) {
+        // Beide Teilversände sind unabhängige Requests (siehe
+        // sendRepresentativeMaterials.js) — bei einem Fehlschlag beider
+        // die jeweils konkrete Fehlermeldung zeigen statt einer
+        // generischen, damit z. B. "Anhänge zu groß" von echten
+        // Maildienst-Fehlern unterscheidbar bleibt.
         showDeliveryStatus(
-          `Versand an Empfänger fehlgeschlagen. Dokumentation an humbee fehlgeschlagen.`,
+          `${result.representative.error || "Versand an Empfänger fehlgeschlagen."} ${result.humbee.error || "Dokumentation an humbee fehlgeschlagen."}`,
           "error"
         );
       } else if (!result.representative.success) {

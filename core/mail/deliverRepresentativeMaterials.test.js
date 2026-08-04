@@ -205,3 +205,38 @@ test("optionale runId wird in jede Log-Zeile aufgenommen", async () => {
 
   assert.ok(logger.lines.every((line) => line.includes("runId=run-123")));
 });
+
+test("nur recipient übergeben: nur representative wird versendet, humbee fehlt im Ergebnis", async () => {
+  const { sendMail, calls } = alwaysSucceeds();
+  const { recipient } = fakeRequest();
+  const result = await deliverRepresentativeMaterials({ recipient, sendMail, logger: fakeLogger() });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].to, PII.recipientTo);
+  assert.equal(result.ok, true);
+  assert.equal(result.representative.success, true);
+  assert.equal("humbee" in result, false);
+});
+
+test("nur humbee übergeben: nur humbee wird versendet, representative fehlt im Ergebnis", async () => {
+  const { sendMail, calls } = alwaysSucceeds();
+  const { humbee } = fakeRequest();
+  const result = await deliverRepresentativeMaterials({ humbee, sendMail, logger: fakeLogger() });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].to, PII.humbeeTo);
+  assert.equal(result.ok, true);
+  assert.equal(result.humbee.success, true);
+  assert.equal("representative" in result, false);
+});
+
+test("nur recipient übergeben, Versand schlägt fehl: ok=false", async () => {
+  const sendMail = async () => {
+    throw new Error("SMTP down");
+  };
+  const { recipient } = fakeRequest();
+  const result = await deliverRepresentativeMaterials({ recipient, sendMail, logger: fakeLogger() });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.representative.success, false);
+});

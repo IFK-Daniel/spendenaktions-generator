@@ -169,3 +169,71 @@ test("Netzwerkfehler beim Fetch führt zu einer eigenen Fehlermeldung statt eine
       assert.match(result.representative.error, /nicht erreichbar/);
     }
   ));
+
+test("humbee-Anhänge, die zusammen zu groß für einen Request sind, werden auf mehrere Mails aufgeteilt", () =>
+  withFetch(
+    async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      if (body.recipient) {
+        return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
+      }
+      // Jeder humbee-Teil-Request muss für sich unter dem Limit bleiben.
+      assert.ok(opts.body.length < 4_000_000, "jeder Teil-Request muss unter dem Byte-Limit bleiben");
+      return jsonResponse(200, {
+        ok: true,
+        humbee: { success: true, messageId: `<humbee-${body.humbee.attachments.length}@x>` },
+      });
+    },
+    async () => {
+      const request = fakeRequest();
+      // Drei ~1.6 MB base64-Anhänge (~4.8 MB zusammen) sprengen einen
+      // einzelnen Request, passen aber jeweils einzeln locker darunter.
+      const bigAttachment = (name) => ({ filename: name, content: "A".repeat(1_600_000) });
+      request.humbee.attachments = [bigAttachment("flyer-druckerei.pdf"), bigAttachment("flyer-home.pdf"), bigAttachment("urkunde.pdf")];
+
+      const result = await sendRepresentativeMaterials(request);
+      assert.equal(result.ok, true);
+      assert.equal(result.humbee.success, true);
+    }
+  ));
+
+test("Teilaufteilung der humbee-Mail: schlägt ein Teil fehl, gilt humbee insgesamt als fehlgeschlagen mit konkreter Fehlermeldung", () =>
+  withFetch(
+    async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      if (body.recipient) {
+        return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
+      }
+      if (body.humbee.subject.includes("Teil 1")) {
+        return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee-1@x>" } });
+      }
+      return jsonResponse(200, { ok: false, humbee: { success: false, error: "SMTP abgelehnt (Teil 2)." } });
+    },
+    async () => {
+      const request = fakeRequest();
+      const bigAttachment = (name) => ({ filename: name, content: "A".repeat(1_600_000) });
+      request.humbee.attachments = [bigAttachment("flyer-druckerei.pdf"), bigAttachment("flyer-home.pdf"), bigAttachment("urkunde.pdf")];
+
+      const result = await sendRepresentativeMaterials(request);
+      assert.equal(result.ok, false);
+      assert.equal(result.humbee.success, false);
+      assert.match(result.humbee.error, /SMTP abgelehnt \(Teil 2\)/);
+    }
+  ));
+
+test("humbee-Anhänge, die zusammen unter dem Limit bleiben, werden weiterhin als eine einzige Mail gesendet", () =>
+  withFetch(
+    async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      if (body.recipient) {
+        return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
+      }
+      assert.ok(!body.humbee.subject.includes("Teil"), "bei kleinem Materialsatz darf keine Teil-Kennzeichnung im Betreff stehen");
+      assert.equal(body.humbee.attachments.length, 1);
+      return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee@x>" } });
+    },
+    async () => {
+      const result = await sendRepresentativeMaterials(fakeRequest());
+      assert.equal(result.ok, true);
+    }
+  ));

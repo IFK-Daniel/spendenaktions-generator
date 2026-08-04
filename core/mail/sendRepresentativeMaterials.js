@@ -5,21 +5,31 @@
  * enthält keine Zugangsdaten — reiner Transport, analog zu
  * `core/mail/sendGeneratedMaterials.js`.
  *
- * WICHTIG — sendet `recipient` und `humbee` bewusst als ZWEI getrennte
- * Requests (statt wie zuvor kombiniert in einem): Vercel Serverless
- * Functions begrenzen den Request-Body auf ~4,5 MB. Bei einem
- * vollständigen Materialsatz (2 Flyer + Urkunde + QR-Codes) überschritt
- * ein kombinierter Request dieses Limit zuverlässig (siehe
- * `api/send-representative-mail.js`), wodurch Vercel den Request mit
- * einer nicht-JSON-Antwort ablehnte, BEVOR überhaupt eine Mail versendet
- * wurde — sichtbar als scheinbar gleichzeitiger Fehlschlag beider
- * Versände, unabhängig vom tatsächlichen Empfänger. Die Aufteilung in
- * zwei unabhängige Requests senkt das Datenvolumen pro Request und legt
- * offen, wenn eine einzelne Mail (typischerweise humbee mit mehreren
- * großen Einzelanhängen) für sich genommen bereits zu groß ist (siehe
- * `estimateBase64Bytes`/`MAX_REQUEST_BYTES` unten) — dafür gibt es dann
- * eine eigene, verständliche Fehlermeldung statt eines kryptischen
- * Plattform-Fehlers.
+ * WICHTIG — zwei Maßnahmen gegen das Vercel-Payload-Limit (Serverless
+ * Functions begrenzen den Request-Body auf ~4,5 MB, plattformseitig,
+ * nicht per Konfiguration erhöhbar):
+ *
+ * 1) `recipient` und `humbee` werden als ZWEI unabhängige Requests
+ *    gesendet statt wie zuvor kombiniert in einem. Ein kombinierter
+ *    Request überschritt bei einem vollständigen Materialsatz (2 Flyer
+ *    + Urkunde + QR-Codes, jeweils base64-kodiert sowohl im ZIP für den
+ *    Repräsentanten als auch einzeln für humbee) das Limit zuverlässig
+ *    — Vercel lehnte ihn mit einer nicht-JSON-Antwort ab, BEVOR
+ *    überhaupt eine Mail versendet wurde, sichtbar als scheinbar
+ *    gleichzeitiger Fehlschlag beider Versände unabhängig vom
+ *    tatsächlichen Empfänger.
+ * 2) Die humbee-Anhänge werden zusätzlich in mehrere Mails aufgeteilt
+ *    (`chunkAttachments`), falls schon die humbee-Mail ALLEIN das
+ *    Limit überschreiten würde (z. B. beide Flyer + Urkunde
+ *    gleichzeitig, ~4,5–4,7 MB base64-kodiert — bereits ohne den
+ *    ZIP-Anhang des Repräsentanten zu groß für einen einzelnen
+ *    Request). humbee erhält in diesem Fall mehrere Mails mit
+ *    fortlaufender "(Teil n/m)"-Kennzeichnung im Betreff, statt dass
+ *    die Dokumentation komplett fehlschlägt.
+ *
+ * Bleibt eine einzelne Datei (z. B. ein sehr großes Foto) für sich
+ * genommen zu groß, meldet `sendPart` das mit einer konkreten,
+ * verständlichen Fehlermeldung statt eines kryptischen Plattform-413.
  *
  * @param {{
  *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipContent: string },
@@ -34,7 +44,7 @@
 export async function sendRepresentativeMaterials(request) {
   const [representative, humbee] = await Promise.all([
     sendPart({ payload: { recipient: request.recipient }, resultKey: "representative", label: "Versand an Empfänger" }),
-    sendPart({ payload: { humbee: request.humbee }, resultKey: "humbee", label: "Dokumentation an humbee" }),
+    sendHumbee(request.humbee),
   ]);
 
   return {
@@ -60,10 +70,82 @@ function estimateJsonBytes(value) {
 }
 
 /**
+ * Teilt `attachments` in möglichst wenige Gruppen auf, sodass eine
+ * humbee-Mail mit `restOfHumbee` (alle humbee-Felder außer
+ * `attachments`) plus jeweils einer Gruppe das Byte-Limit einhält.
+ * Greedy: sammelt Anhänge, bis der nächste das Limit sprengen würde,
+ * beginnt dann eine neue Gruppe. Eine einzelne, für sich genommen zu
+ * große Datei bildet ihre eigene (dann zu große) Gruppe — das wird
+ * beim Versand dieser Gruppe als eigener, konkreter Fehler sichtbar,
+ * statt den gesamten Versand zu blockieren oder still zu verschlucken.
+ *
+ * @param {Array<{filename: string, content: string}>} attachments
+ * @param {object} restOfHumbee
+ * @returns {Array<Array<{filename: string, content: string}>>} Mindestens eine Gruppe (auch bei leeren `attachments`).
+ */
+function chunkAttachments(attachments, restOfHumbee) {
+  const baseBytes = estimateJsonBytes({ humbee: { ...restOfHumbee, attachments: [] } });
+  const groups = [];
+  let current = [];
+  let currentBytes = baseBytes;
+
+  for (const attachment of attachments) {
+    const attachmentBytes = estimateJsonBytes(attachment) + 1; // +1 für das Komma-Trennzeichen im Array
+    if (current.length > 0 && currentBytes + attachmentBytes > MAX_REQUEST_BYTES) {
+      groups.push(current);
+      current = [];
+      currentBytes = baseBytes;
+    }
+    current.push(attachment);
+    currentBytes += attachmentBytes;
+  }
+
+  groups.push(current);
+  return groups;
+}
+
+/**
+ * Sendet die humbee-Dokumentation, bei Bedarf aufgeteilt auf mehrere
+ * Mails (siehe `chunkAttachments`). Gilt nur dann als erfolgreich, wenn
+ * ALLE Teile erfolgreich versendet wurden.
+ */
+async function sendHumbee(humbee) {
+  const { attachments, ...restOfHumbee } = humbee;
+  const groups = chunkAttachments(attachments, restOfHumbee);
+
+  if (groups.length === 1) {
+    return sendPart({ payload: { humbee }, resultKey: "humbee", label: "Dokumentation an humbee" });
+  }
+
+  const partResults = await Promise.all(
+    groups.map((group, index) =>
+      sendPart({
+        payload: {
+          humbee: {
+            ...restOfHumbee,
+            subject: `${humbee.subject} (Teil ${index + 1}/${groups.length})`,
+            attachments: group,
+          },
+        },
+        resultKey: "humbee",
+        label: `Dokumentation an humbee (Teil ${index + 1}/${groups.length})`,
+      })
+    )
+  );
+
+  const allSucceeded = partResults.every((part) => part.success);
+  return {
+    success: allSucceeded,
+    messageId: allSucceeded ? partResults.map((part) => part.messageId).filter(Boolean).join(", ") : undefined,
+    error: allSucceeded ? undefined : partResults.filter((part) => !part.success).map((part) => part.error).join(" "),
+  };
+}
+
+/**
  * Sendet einen einzelnen Versandteil (nur `recipient` ODER nur
- * `humbee`) an `/api/send-representative-mail` und liefert dessen
- * Teilergebnis unter dem jeweiligen `resultKey` zurück — unabhängig
- * vom Ergebnis des jeweils anderen Teils (siehe `sendRepresentativeMaterials`).
+ * `humbee`, ggf. mit einer Teilmenge der humbee-Anhänge) an
+ * `/api/send-representative-mail` und liefert dessen Teilergebnis
+ * unter dem jeweiligen `resultKey` zurück.
  */
 async function sendPart({ payload, resultKey, label }) {
   const estimatedBytes = estimateJsonBytes(payload);

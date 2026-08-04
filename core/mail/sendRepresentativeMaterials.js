@@ -56,11 +56,16 @@ export async function sendRepresentativeMaterials(request) {
 
 // Vercel begrenzt den Request-Body von Serverless Functions (Node-
 // Runtime) auf ~4,5 MB — unabhängig vom Plan, nicht per Konfiguration
-// erhöhbar. Bewusst mit Sicherheitsabstand (statt exakt 4,5 MB): der
-// JSON-Rahmen um den base64-Anhang (Feldnamen, Anführungszeichen,
-// weitere Felder wie Betreff/Text) kommt zur reinen Anhangsgröße noch
-// hinzu.
-const MAX_REQUEST_BYTES = 4_000_000;
+// erhöhbar. Die reale Schwelle wurde per Live-Test gegen Production
+// eingegrenzt: 4.400.155 Byte kamen noch durch (200), 4.506.823 Byte
+// wurden bereits abgelehnt (413) — die Grenze liegt also zwischen
+// diesen beiden Werten. 4.300.000 Byte lassen ausreichend
+// Sicherheitsabstand nach oben (der JSON-Rahmen um den base64-Anhang
+// kommt zur reinen Anhangsgröße noch hinzu), ohne realistische
+// Materialsätze unnötig zu blockieren — ein früherer, konservativerer
+// Wert (4.000.000 Byte) hatte einen tatsächlich noch zustellbaren
+// ~4,2-MB-Request bereits vorab abgewiesen.
+const MAX_REQUEST_BYTES = 4_300_000;
 
 function estimateJsonBytes(value) {
   // base64-Inhalte und JSON-Strukturzeichen sind reines ASCII — die

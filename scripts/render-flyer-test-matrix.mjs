@@ -124,9 +124,18 @@ for (const testCase of CASES) {
   };
 
   for (const variant of VARIANTS) {
+    // Manche Vorlagen (siehe `flyer-female-print-front/template.config.js`)
+    // erwarten im `region`-Feld den ganzen Satz "für die Region XXXX"
+    // statt nur des Regionsnamens (`fields.region.regionPrefix`) — siehe
+    // `buildFlyerTextValues` in `core/materials/generateFlyerMaterial.js`,
+    // hier dieselbe Logik dupliziert, da dieses Skript unabhängig von
+    // `generateFlyerMaterial` direkt mit den Template-Configs arbeitet.
+    const regionPrefix = variant.front.fields.region?.regionPrefix ?? "";
+    const textValues = { ...testCase.textValues, region: `${regionPrefix}${testCase.textValues.region}` };
+
     const { bytes, warnings } = await renderMultiPageDocument({
       pages: [
-        { templateConfig: variant.front, textValues: testCase.textValues, imageAssets: frontImageAssets },
+        { templateConfig: variant.front, textValues, imageAssets: frontImageAssets },
         { templateConfig: variant.back, imageAssets: backImageAssets },
       ],
       deps: { loadTemplateAssets },

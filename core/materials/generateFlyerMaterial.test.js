@@ -67,6 +67,33 @@ test("erzeugt ein zweiseitiges Flyer-PDF-Material mit korrektem Dateinamen/Mimet
   assert.equal(backPage.imageAssets.qrMehrErfahren.bytes, FAKE_PNG_BYTES);
 });
 
+test("region-Feld mit 'regionPrefix' in der Template-Config (z. B. weibliche Vorlage) rendert den vollen Satz, 'regionInParagraph' bleibt der bloße Regionsname", async () => {
+  const manifest = manifestWithFlyer();
+  const entry = manifest.materials[0];
+
+  let capturedArgs = null;
+  const fakeRenderMultiPageDocument = async (args) => {
+    capturedArgs = args;
+    return { bytes: new Uint8Array([9, 9, 9]), warnings: [] };
+  };
+
+  await generateFlyerMaterial({
+    entry,
+    templateConfig: { key: "FLYER_DRUCKEREI_FEMALE", fields: { region: { regionPrefix: "für die Region " } } },
+    backTemplateConfig: { key: "FLYER_DRUCKEREI_BACK" },
+    person: manifest.person,
+    photoAsset: fakePhotoAsset(),
+    qrPaypalAsset: fakePhotoAsset(),
+    qrGiroAsset: fakePhotoAsset(),
+    ...backAssets(),
+    deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
+  });
+
+  const [frontPage] = capturedArgs.pages;
+  assert.equal(frontPage.textValues.region, "für die Region Wien");
+  assert.equal(frontPage.textValues.regionInParagraph, "Wien");
+});
+
 test("gibt warnings von renderMultiPageDocument unverändert durch", async () => {
   const manifest = manifestWithFlyer();
   const fakeWarnings = [{ pageIndex: 0, fieldKey: "region", sizePt: 4.25, minSizePt: 4, reason: "..." }];

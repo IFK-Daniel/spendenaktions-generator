@@ -117,6 +117,11 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
     }),
     // Koordinatenliste: Region X 44.5mm Y 46.975mm ("Koord. für den
     // ganzen Satz: 'für die Region XXXX'", Droid Sans Regular 9pt).
+    // Anders als bei der männlichen Vorlage ist "für die Region" im
+    // neuen Master KEIN statischer Text (per Textextraktion geprüft —
+    // die Zeile fehlt komplett im Master-PDF) — `regionPrefix` markiert
+    // das für `buildFlyerTextValues` (`core/materials/generateFlyerMaterial.js`),
+    // damit der volle Satz gerendert wird statt nur des Regionsnamens.
     region: Object.freeze({
       type: "text",
       xMm: 44.5,
@@ -127,6 +132,7 @@ export const flyerFemalePrintFrontTemplate = Object.freeze({
       minSizePt: 6,
       color: TEXT_DARK_GREY,
       align: "left",
+      regionPrefix: "für die Region ",
       flagShrinkAsProvisional: true,
     }),
     // Koordinatenliste: Telefon X 19.7mm Y 71.45mm (Droid Sans Regular

@@ -274,7 +274,7 @@ test("Urkunde: weibliche Vorlage rendert ohne Fehler und ohne Warnings", async (
   assert.deepEqual(warnings, []);
 });
 
-test("Flyer weiblich (Druckerei): korrekte Seitengröße (inkl. 3mm Beschnitt), keine Warnungen", async () => {
+test("Flyer weiblich (Druckerei): korrekte Seitengröße (kein Beschnitt im Master, siehe Template-Kommentar), keine Warnungen", async () => {
   const { bytes, warnings } = await renderFlyer({
     templateConfig: flyerFemalePrintFrontTemplate,
     textValues: sampleTextValues(),
@@ -288,8 +288,11 @@ test("Flyer weiblich (Druckerei): korrekte Seitengröße (inkl. 3mm Beschnitt), 
 
   const page = result.getPage(0);
   const { width, height } = page.getSize();
-  assert.ok(Math.abs(width - (154 / 25.4) * 72) < 0.5);
-  assert.ok(Math.abs(height - (216 / 25.4) * 72) < 0.5);
+  // Neuer Master hat gar keinen Anschnitt (siehe Template-Kommentar) —
+  // anders als beim männlichen Pendant ist die Druckerei-Fassung hier
+  // (noch) 148x210mm statt 154x216mm.
+  assert.ok(Math.abs(width - (148 / 25.4) * 72) < 0.5);
+  assert.ok(Math.abs(height - (210 / 25.4) * 72) < 0.5);
 });
 
 test("Flyer weiblich (Home): Seite ohne Beschnitt (148x210mm)", async () => {
@@ -326,15 +329,19 @@ test("Flyer weiblich: sehr langer Name/Region/E-Mail erzeugen keine Warnung (kei
   assert.deepEqual(warnings, []);
 });
 
-test("Flyer weiblich: Druckerei- und Home-Vorlage verwenden dieselben Feld-Koordinaten (nur page.outputBleedMm unterscheidet sich)", () => {
+test("Flyer weiblich: Druckerei- und Home-Vorlage verwenden dieselben Feld-Koordinaten UND denselben Beschnitt (Master ohne jeden Anschnitt, siehe Template-Kommentar)", () => {
   assert.deepEqual(flyerFemalePrintFrontTemplate.fields, flyerFemaleHomeFrontTemplate.fields);
-  assert.equal(flyerFemalePrintFrontTemplate.page.outputBleedMm, 3);
+  assert.equal(flyerFemalePrintFrontTemplate.page.outputBleedMm, 0);
   assert.equal(flyerFemaleHomeFrontTemplate.page.outputBleedMm, 0);
 });
 
-test("Flyer weiblich und männlich: identische Trim-Seitengröße (148x210mm) und identischer QR-Größe (20x20mm)", () => {
+test("Flyer weiblich und männlich: identische Trim-Seitengröße (148x210mm)", () => {
   assert.equal(flyerFemalePrintFrontTemplate.page.trimWidthMm, flyerPrintFrontTemplate.page.trimWidthMm);
   assert.equal(flyerFemalePrintFrontTemplate.page.trimHeightMm, flyerPrintFrontTemplate.page.trimHeightMm);
-  assert.equal(flyerFemalePrintFrontTemplate.fields.qrPaypal.widthMm, flyerPrintFrontTemplate.fields.qrPaypal.widthMm);
-  assert.equal(flyerFemalePrintFrontTemplate.fields.qrGiro.widthMm, flyerPrintFrontTemplate.fields.qrGiro.widthMm);
+  // QR-Größe unterscheidet sich bewusst (weiblicher Master: 21x21mm laut
+  // aktueller Koordinatenliste, männlicher Master weiterhin 20x20mm) —
+  // beide Werte stammen direkt aus der jeweiligen, unabhängig geprüften
+  // Grafiker-Vorgabe für den jeweiligen Master, siehe Template-Configs.
+  assert.equal(flyerFemalePrintFrontTemplate.fields.qrPaypal.widthMm, 21);
+  assert.equal(flyerFemalePrintFrontTemplate.fields.qrGiro.widthMm, 21);
 });

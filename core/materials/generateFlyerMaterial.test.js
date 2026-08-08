@@ -22,12 +22,16 @@ function manifestWithFlyer() {
   });
 }
 
-test("erzeugt ein Flyer-PDF-Material mit korrektem Dateinamen/Mimetype und ruft renderFlyer mit den erwarteten textValues auf", async () => {
+function backAssets() {
+  return { qrPartnerWerdenAsset: fakePhotoAsset(), qrMehrErfahrenAsset: fakePhotoAsset() };
+}
+
+test("erzeugt ein zweiseitiges Flyer-PDF-Material mit korrektem Dateinamen/Mimetype und ruft renderMultiPageDocument mit Vorder- UND Rückseite auf", async () => {
   const manifest = manifestWithFlyer();
   const entry = manifest.materials[0];
 
   let capturedArgs = null;
-  const fakeRenderFlyer = async (args) => {
+  const fakeRenderMultiPageDocument = async (args) => {
     capturedArgs = args;
     return { bytes: new Uint8Array([9, 9, 9]), warnings: [] };
   };
@@ -35,11 +39,13 @@ test("erzeugt ein Flyer-PDF-Material mit korrektem Dateinamen/Mimetype und ruft 
   const result = await generateFlyerMaterial({
     entry,
     templateConfig: { key: "FLYER_DRUCKEREI" },
+    backTemplateConfig: { key: "FLYER_DRUCKEREI_BACK" },
     person: manifest.person,
     photoAsset: fakePhotoAsset(),
     qrPaypalAsset: fakePhotoAsset(),
     qrGiroAsset: fakePhotoAsset(),
-    deps: { renderFlyer: fakeRenderFlyer },
+    ...backAssets(),
+    deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
   });
 
   assert.equal(result.key, MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI);
@@ -47,27 +53,35 @@ test("erzeugt ein Flyer-PDF-Material mit korrektem Dateinamen/Mimetype und ruft 
   assert.equal(result.mimeType, "application/pdf");
   assert.deepEqual(result.warnings, []);
 
-  assert.equal(capturedArgs.textValues.name, "Kim Yu");
-  assert.equal(capturedArgs.textValues.region, "Wien");
-  assert.equal(capturedArgs.textValues.regionInParagraph, "Wien");
-  assert.equal(capturedArgs.textValues.phone, "0170 1234567");
-  assert.equal(capturedArgs.textValues.email, "kim.yu@example.com");
-  assert.equal(capturedArgs.imageAssets.photo.bytes, FAKE_PNG_BYTES);
+  assert.equal(capturedArgs.pages.length, 2);
+  const [frontPage, backPage] = capturedArgs.pages;
+  assert.equal(frontPage.templateConfig.key, "FLYER_DRUCKEREI");
+  assert.equal(backPage.templateConfig.key, "FLYER_DRUCKEREI_BACK");
+  assert.equal(frontPage.textValues.name, "Kim Yu");
+  assert.equal(frontPage.textValues.region, "Wien");
+  assert.equal(frontPage.textValues.regionInParagraph, "Wien");
+  assert.equal(frontPage.textValues.phone, "0170 1234567");
+  assert.equal(frontPage.textValues.email, "kim.yu@example.com");
+  assert.equal(frontPage.imageAssets.photo.bytes, FAKE_PNG_BYTES);
+  assert.equal(backPage.imageAssets.qrPartnerWerden.bytes, FAKE_PNG_BYTES);
+  assert.equal(backPage.imageAssets.qrMehrErfahren.bytes, FAKE_PNG_BYTES);
 });
 
-test("gibt warnings von renderFlyer unverändert durch", async () => {
+test("gibt warnings von renderMultiPageDocument unverändert durch", async () => {
   const manifest = manifestWithFlyer();
-  const fakeWarnings = [{ fieldKey: "regionInParagraph", sizePt: 4.25, minSizePt: 4, reason: "..." }];
-  const fakeRenderFlyer = async () => ({ bytes: new Uint8Array([1]), warnings: fakeWarnings });
+  const fakeWarnings = [{ pageIndex: 0, fieldKey: "region", sizePt: 4.25, minSizePt: 4, reason: "..." }];
+  const fakeRenderMultiPageDocument = async () => ({ bytes: new Uint8Array([1]), warnings: fakeWarnings });
 
   const result = await generateFlyerMaterial({
     entry: manifest.materials[0],
     templateConfig: {},
+    backTemplateConfig: {},
     person: manifest.person,
     photoAsset: fakePhotoAsset(),
     qrPaypalAsset: fakePhotoAsset(),
     qrGiroAsset: fakePhotoAsset(),
-    deps: { renderFlyer: fakeRenderFlyer },
+    ...backAssets(),
+    deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
   });
 
   assert.deepEqual(result.warnings, fakeWarnings);
@@ -80,28 +94,51 @@ test("wirft ohne Foto-Asset", async () => {
       generateFlyerMaterial({
         entry: manifest.materials[0],
         templateConfig: {},
+        backTemplateConfig: {},
         person: manifest.person,
         photoAsset: null,
         qrPaypalAsset: fakePhotoAsset(),
         qrGiroAsset: fakePhotoAsset(),
+        ...backAssets(),
       }),
     /photoAsset/
   );
 });
 
-test("wirft ohne QR-Assets", async () => {
+test("wirft ohne QR-Assets (Vorderseite)", async () => {
   const manifest = manifestWithFlyer();
   await assert.rejects(
     () =>
       generateFlyerMaterial({
         entry: manifest.materials[0],
         templateConfig: {},
+        backTemplateConfig: {},
         person: manifest.person,
         photoAsset: fakePhotoAsset(),
         qrPaypalAsset: null,
         qrGiroAsset: null,
+        ...backAssets(),
       }),
     /qrPaypalAsset/
+  );
+});
+
+test("wirft ohne QR-Assets (Rückseite)", async () => {
+  const manifest = manifestWithFlyer();
+  await assert.rejects(
+    () =>
+      generateFlyerMaterial({
+        entry: manifest.materials[0],
+        templateConfig: {},
+        backTemplateConfig: {},
+        person: manifest.person,
+        photoAsset: fakePhotoAsset(),
+        qrPaypalAsset: fakePhotoAsset(),
+        qrGiroAsset: fakePhotoAsset(),
+        qrPartnerWerdenAsset: null,
+        qrMehrErfahrenAsset: null,
+      }),
+    /qrPartnerWerdenAsset/
   );
 });
 
@@ -117,10 +154,12 @@ test("wirft bei Nicht-Flyer-Materialtyp", async () => {
       generateFlyerMaterial({
         entry: manifest.materials[0],
         templateConfig: {},
+        backTemplateConfig: {},
         person: manifest.person,
         photoAsset: fakePhotoAsset(),
         qrPaypalAsset: fakePhotoAsset(),
         qrGiroAsset: fakePhotoAsset(),
+        ...backAssets(),
       }),
     /kein Flyer-Materialtyp/
   );

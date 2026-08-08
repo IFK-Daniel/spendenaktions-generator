@@ -3,13 +3,21 @@ import { flyerFemalePrintFrontTemplate } from "../flyer-female-print-front/templ
 /**
  * Template-Config "Flyer Home – Vorderseite (weiblich)".
  *
- * Nutzt bewusst dieselben Feld- und Cover-Koordinaten wie
- * `flyer-female-print-front` (identisches Layout, dieselbe Quelle) —
- * verwendet aber eine eigene, echte beschnittfreie Export-Datei vom
- * Grafiker ("Flyer_RepräsentantInnen_Seite01_2.Draft.pdf", ohne
- * Anschnittmarken). `background.pdf` ist Seite 0 dieser Datei
- * (unverändert übernommen — ihre eigene MediaBox ist bereits
- * bleed-only, 154×216mm = Trim + 2×3mm, siehe PDF-Metadaten).
+ * Nutzt bewusst dieselben Feld-Koordinaten wie `flyer-female-print-front`
+ * (identisches Layout) UND bewusst dieselbe `background.pdf` — der neue
+ * Grafiker-Master (`Medien/Flyer_RepräsentantInnen_Frauen_Du.pdf`) hat
+ * laut eigenen PDF-Metadaten überhaupt keinen Anschnitt (MediaBox =
+ * CropBox = TrimBox, siehe Kommentar in `flyer-female-print-front`).
+ * Es gibt also (noch) keine eigene Druckerei-Fassung mit 3mm Beschnitt
+ * rundum, die sich von der Home-Fassung unterscheiden würde — beide
+ * Varianten sind aktuell technisch identisch (`outputBleedMm: 0`).
+ * Getrennte Ordner/Configs trotzdem beibehalten (Konsistenz mit dem
+ * männlichen Pärchen `flyer-print-front`/`flyer-home-front` und der
+ * Materialtyp-Architektur, die pro Schlüssel eine eigene Config
+ * erwartet) — sobald der Grafiker eine echte Druckerei-Fassung mit
+ * Anschnittmarken liefert, muss nur `flyer-female-print-front` (bzw.
+ * dessen `background.pdf`/`sourceBleedMm`/`outputBleedMm`) angepasst
+ * werden, diese Home-Variante bleibt unverändert.
  */
 
 const BACKGROUND_URL = new URL("./background.pdf", import.meta.url);

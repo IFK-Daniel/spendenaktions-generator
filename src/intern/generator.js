@@ -24,6 +24,13 @@ import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/templ
 import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
 import { flyerFemalePrintFrontTemplate } from "../../templates/flyer-female-print-front/template.config.js";
 import { flyerFemaleHomeFrontTemplate } from "../../templates/flyer-female-home-front/template.config.js";
+import { flyerPrintBackTemplate } from "../../templates/flyer-print-back/template.config.js";
+import { flyerHomeBackTemplate } from "../../templates/flyer-home-back/template.config.js";
+import { flyerFemalePrintBackTemplate } from "../../templates/flyer-female-print-back/template.config.js";
+import { flyerFemaleHomeBackTemplate } from "../../templates/flyer-female-home-back/template.config.js";
+import { generateQr as generateStaticQr } from "../../core/qr/generateQr.js";
+import { loadImage as loadLogoImage } from "../../core/branding/loadImage.js";
+import { QR_COLOR_GRUEN } from "../../core/config/colors.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import {
@@ -64,6 +71,71 @@ const FLYER_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
 function resolveFlyerTemplate(materialKey, gender) {
   const byGender = FLYER_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
   return byGender[gender === "female" ? "female" : "male"];
+}
+
+// Rückseiten-Vorlagen: inhaltlich für alle vier Kombinationen identisch
+// (siehe `templates/flyer-print-back/template.config.js`) — trotzdem
+// pro Materialschlüssel/Geschlecht eine eigene Config-Referenz, analog
+// zu `FLYER_TEMPLATES_BY_KEY_AND_GENDER` oben, damit die Auswahl
+// weiterhin vollständig hier (statt im Renderer) passiert.
+const FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
+  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze({
+    male: flyerPrintBackTemplate,
+    female: flyerFemalePrintBackTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.FLYER_HOME]: Object.freeze({
+    male: flyerHomeBackTemplate,
+    female: flyerFemaleHomeBackTemplate,
+  }),
+});
+
+function resolveFlyerBackTemplate(materialKey, gender) {
+  const byGender = FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
+  return byGender[gender === "female" ? "female" : "male"];
+}
+
+// Ziel-URLs der beiden statischen QR-Codes auf der Flyer-Rückseite
+// (siehe `templates/flyer-print-back/template.config.js`) — bewusst
+// hier zentralisiert (nicht in der Template-Config, die kennt nur
+// Koordinaten/Größen, keine Inhalte). User-bestätigt (siehe
+// Konversation): verlinkt auf die echte Partnerschaftsantrag-Seite
+// bzw. die Startseite der Stiftung. Bei Bedarf hier anpassen.
+const FLYER_BACK_QR_PARTNER_WERDEN_URL = "https://www.its-for-kids.de/spenden/partnerschaftsantrag-auswahl";
+const FLYER_BACK_QR_MEHR_ERFAHREN_URL = "https://www.its-for-kids.de";
+
+/**
+ * Erzeugt die beiden statischen (nicht personalisierten) QR-Codes für
+ * die Flyer-Rückseite. Nutzt bewusst denselben Basis-Generator wie die
+ * personalisierten Flyer-QR-Codes (`core/qr/generateQr.js`) statt einen
+ * zweiten QR-Mechanismus einzuführen — Ausgabeformat identisch zu
+ * `qrPaypalAsset`/`qrGiroAsset` (`{bytes, mimeType: "image/png"}`).
+ * Wird pro Generierungsvorgang einmal aufgerufen (nicht pro
+ * Repräsentant:in nötig, da inhaltlich immer gleich) — siehe Aufrufer
+ * weiter unten.
+ */
+async function generateFlyerBackQrAssets(logo) {
+  const logoImage = await loadLogoImage(logo);
+  const [partnerWerdenDataUrl, mehrErfahrenDataUrl] = await Promise.all([
+    generateStaticQr(document.createElement("canvas"), FLYER_BACK_QR_PARTNER_WERDEN_URL, logoImage, QR_COLOR_GRUEN),
+    generateStaticQr(document.createElement("canvas"), FLYER_BACK_QR_MEHR_ERFAHREN_URL, logoImage, QR_COLOR_GRUEN),
+  ]);
+  return {
+    qrPartnerWerdenAsset: dataUrlToImageAsset(partnerWerdenDataUrl),
+    qrMehrErfahrenAsset: dataUrlToImageAsset(mehrErfahrenDataUrl),
+  };
+}
+
+function dataUrlToImageAsset(dataUrl) {
+  const match = /^data:image\/png;base64,(.*)$/s.exec(dataUrl);
+  if (!match) {
+    throw new Error("generateFlyerBackQrAssets: unerwartetes Datenformat des erzeugten QR-Codes.");
+  }
+  const binaryString = atob(match[1]);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i += 1) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return { bytes, mimeType: "image/png" };
 }
 
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
@@ -1460,15 +1532,25 @@ export function initGenerator() {
           mimeType: "image/png",
         };
 
+        // Rückseiten-QR-Codes sind statisch (nicht personalisiert, siehe
+        // `generateFlyerBackQrAssets`) — bewusst einmal für den gesamten
+        // Generierungsvorgang erzeugt, nicht pro Flyer-Materialtyp
+        // (Druckerei/Home) erneut, da beide dieselbe Rückseite verwenden.
+        const { qrPartnerWerdenAsset, qrMehrErfahrenAsset } = await generateFlyerBackQrAssets(logoUrl);
+
         const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
         for (const entry of flyerEntries) {
+          const gender = genderInput ? genderInput.value : undefined;
           const flyerFile = await generateFlyerMaterial({
             entry,
-            templateConfig: resolveFlyerTemplate(entry.key, genderInput ? genderInput.value : undefined),
+            templateConfig: resolveFlyerTemplate(entry.key, gender),
+            backTemplateConfig: resolveFlyerBackTemplate(entry.key, gender),
             person: manifest.person,
             photoAsset,
             qrPaypalAsset,
             qrGiroAsset,
+            qrPartnerWerdenAsset,
+            qrMehrErfahrenAsset,
             deps: { loadTemplateAssets: loadTemplateAssetsBrowser },
           });
           files.push(flyerFile);

@@ -1,4 +1,4 @@
-import { renderFlyer } from "../pdf/renderFlyer.js";
+import { renderMultiPageDocument } from "../pdf/renderMultiPageDocument.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { buildFileContent } from "./buildFileContent.js";
 
@@ -25,22 +25,37 @@ function buildFlyerTextValues(person) {
 }
 
 /**
- * Erzeugt aus einem bereits aufgelösten Flyer-Materialtyp-Eintrag, der
- * zugehörigen Template-Config sowie Foto-/QR-Bildbytes ein einzelnes
- * Flyer-PDF.
+ * Erzeugt aus einem bereits aufgelösten Flyer-Materialtyp-Eintrag, den
+ * Template-Configs für Vorder- UND Rückseite sowie Foto-/QR-Bildbytes
+ * ein einzelnes, zweiseitiges Flyer-PDF.
  *
- * Reine Orchestrierung um `core/pdf/renderFlyer.js` herum — erzeugt
- * selbst keine Bild- oder Textinhalte, sondern übergibt nur bereits
+ * Reine Orchestrierung um `core/pdf/renderMultiPageDocument.js` herum
+ * (das seinerseits `renderFlyer.js` je Seite aufruft) — erzeugt selbst
+ * keine Bild- oder Textinhalte, sondern übergibt nur bereits
  * vorliegende Daten (analog zu `generateMaterial.js` für QR-Codes,
  * das den bestehenden QR-Generator wiederverwendet statt einen
  * zweiten zu bauen).
+ *
+ * Seit Einführung der Rückseite (siehe Konversation) liefert diese
+ * Funktion IMMER ein 2-seitiges PDF (Seite 1 = Vorderseite mit den
+ * personalisierten Feldern, Seite 2 = die für alle Repräsentant:innen
+ * gleiche Rückseite mit den beiden statischen QR-Codes
+ * "Partner werden"/"Mehr erfahren") — es gibt keinen separaten,
+ * einseitigen Flyer-Download mehr.
  *
  * @param {object} params
  * @param {{key: string, label: string, category: string, format: string, extension: string, filename: string}} params.entry
  *   Ein einzelner Flyer-Eintrag aus `manifest.materials`
  *   (`FLYER_DRUCKEREI` oder `FLYER_HOME`).
- * @param {object} params.templateConfig Die zum `entry.key` passende
- *   Template-Config (`flyerPrintFrontTemplate`/`flyerHomeFrontTemplate`).
+ * @param {object} params.templateConfig Die zum `entry.key`/Geschlecht
+ *   passende Vorderseiten-Template-Config
+ *   (`flyerPrintFrontTemplate`/`flyerHomeFrontTemplate`/…).
+ * @param {object} params.backTemplateConfig Die zugehörige Rückseiten-
+ *   Template-Config (`flyerPrintBackTemplate`/`flyerHomeBackTemplate`/…) —
+ *   inhaltlich für alle Geschlechter/Druckvarianten identisch (siehe
+ *   dortige Doku), aber je Materialschlüssel/Geschlecht als eigene
+ *   Config-Referenz übergeben (Auswahl passiert vollständig beim
+ *   Aufrufer, siehe `resolveFlyerTemplate` in `src/intern/generator.js`).
  * @param {{firstName: string, lastName: string, region?: string, phone?: string, email?: string}} params.person
  *   `manifest.person` — die für den Flyer benötigten Felder müssen
  *   bereits vorab geprüft sein (siehe `assertFlyerPersonFieldsPresent`).
@@ -51,19 +66,28 @@ function buildFlyerTextValues(person) {
  *   Bereits erzeugter PayPal-QR (aus `generateMaterial.js`/`generateQrMaterials.js`).
  * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrGiroAsset
  *   Bereits erzeugter GiroCode (aus `generateMaterial.js`/`generateQrMaterials.js`).
+ * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrPartnerWerdenAsset
+ *   Statischer QR für die Rückseiten-Box "Partner werden" (nicht
+ *   personalisiert — siehe `templates/flyer-print-back/template.config.js`).
+ * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrMehrErfahrenAsset
+ *   Statischer QR für die Rückseiten-Box "Mehr erfahren" (nicht
+ *   personalisiert — siehe `templates/flyer-print-back/template.config.js`).
  * @param {object} [params.deps] Injizierbare Abhängigkeiten für Tests.
- * @param {typeof renderFlyer} [params.deps.renderFlyer]
+ * @param {typeof renderMultiPageDocument} [params.deps.renderMultiPageDocument]
  * @returns {Promise<{key: string, label: string, category: string, format: string, extension: string, filename: string, mimeType: "application/pdf", content: Blob | Uint8Array, size: number, warnings: Array<object>}>}
  * @throws {Error} Bei fehlendem Dateinamen im Eintrag, fehlendem
- *   Foto-Asset oder fehlenden QR-Assets.
+ *   Foto-Asset oder fehlenden QR-Assets (vordere UND hintere).
  */
 export async function generateFlyerMaterial({
   entry,
   templateConfig,
+  backTemplateConfig,
   person,
   photoAsset,
   qrPaypalAsset,
   qrGiroAsset,
+  qrPartnerWerdenAsset,
+  qrMehrErfahrenAsset,
   deps = {},
 } = {}) {
   if (!entry || typeof entry.filename !== "string" || entry.filename.trim() === "") {
@@ -78,17 +102,33 @@ export async function generateFlyerMaterial({
   if (!qrPaypalAsset || !qrGiroAsset) {
     throw new Error("generateFlyerMaterial: 'qrPaypalAsset' und 'qrGiroAsset' sind für Flyer-Materialien erforderlich.");
   }
+  if (!qrPartnerWerdenAsset || !qrMehrErfahrenAsset) {
+    throw new Error(
+      "generateFlyerMaterial: 'qrPartnerWerdenAsset' und 'qrMehrErfahrenAsset' sind für die Flyer-Rückseite erforderlich."
+    );
+  }
 
-  const { renderFlyer: renderFlyerFn = renderFlyer, ...renderDeps } = deps;
+  const { renderMultiPageDocument: renderMultiPageDocumentFn = renderMultiPageDocument, ...renderDeps } = deps;
 
-  const { bytes, warnings } = await renderFlyerFn({
-    templateConfig,
-    textValues: buildFlyerTextValues(person),
-    imageAssets: {
-      photo: photoAsset,
-      qrPaypal: qrPaypalAsset,
-      qrGiro: qrGiroAsset,
-    },
+  const { bytes, warnings } = await renderMultiPageDocumentFn({
+    pages: [
+      {
+        templateConfig,
+        textValues: buildFlyerTextValues(person),
+        imageAssets: {
+          photo: photoAsset,
+          qrPaypal: qrPaypalAsset,
+          qrGiro: qrGiroAsset,
+        },
+      },
+      {
+        templateConfig: backTemplateConfig,
+        imageAssets: {
+          qrPartnerWerden: qrPartnerWerdenAsset,
+          qrMehrErfahren: qrMehrErfahrenAsset,
+        },
+      },
+    ],
     deps: renderDeps,
   });
 

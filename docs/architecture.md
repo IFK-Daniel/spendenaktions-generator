@@ -410,15 +410,15 @@ für eine Person (Vorname, Nachname, IFK-ID) erzeugt werden sollen, mit
 welchen Dateinamen, und in welcher Reihenfolge — als reine, DOM-freie
 Datenstruktur (`materialTypes.js`, `buildMaterialList.js`,
 `buildMaterialFilenames.js`, `buildMaterialManifest.js`) — sowie,
-darauf aufbauend, die tatsächliche Erzeugung der vier individuellen
-QR-Materialien als PNG-Dateien (`generateMaterial.js`,
+darauf aufbauend, die tatsächliche Erzeugung der zwei produktiven
+individuellen QR-Materialien als PNG-Dateien (`generateMaterial.js`,
 `generateQrMaterials.js`). Die beiden Flyer-Typen (`FLYER_DRUCKEREI`,
 `FLYER_HOME`) werden weiterhin **nicht** erzeugt — dafür ist eine
 künftige PDF-/Grafikintegration vorgesehen (siehe
 [roadmap.md](roadmap.md), Phase 4). Alle sechs Module sind
 **vollständig implementiert**.
 
-**Klare Abgrenzung**: `core/materials` kennt ausschließlich die sechs
+**Klare Abgrenzung**: `core/materials` kennt ausschließlich die fünf
 unten aufgeführten individuellen Materialtypen. Logos, das Corporate
 Manual, Spendennachweise oder sonstige allgemeine Downloads sind
 bewusst **nicht** Teil dieser Definition — sie sind keine individuellen,
@@ -426,16 +426,24 @@ personalisierten Materialien und werden von diesem Modul weder erzeugt
 noch in Dateinamen, Manifest oder eine spätere Paketierung
 (`core/zip`) aufgenommen.
 
-#### Die sechs Materialtypen (`materialTypes.js`)
+#### Die fünf Materialtypen (`materialTypes.js`)
 
 | Schlüssel | Bezeichnung | Kategorie | Format |
 |---|---|---|---|
 | `FLYER_DRUCKEREI` | Flyer Druckerei | `flyer` | `pdf` |
 | `FLYER_HOME` | Flyer Home | `flyer` | `pdf` |
-| `QR_PAYPAL_GREEN` | PayPal QR grün | `qr` | `png` |
 | `QR_PAYPAL_BLACK` | PayPal QR schwarz | `qr` | `png` |
-| `QR_GIRO_GREEN` | GiroCode grün | `qr` | `png` |
 | `QR_GIRO_BLACK` | GiroCode schwarz | `qr` | `png` |
+| `CERTIFICATE_REPRESENTATIVE` | Repräsentantenurkunde | `certificate` | `pdf` |
+
+Die vormals zusätzlich vorhandenen grünen QR-Varianten
+(`QR_PAYPAL_GREEN`, `QR_GIRO_GREEN`) wurden aus dem produktiven
+Materialworkflow vollständig entfernt (Materialauswahl, Erzeugung,
+Ergebnisanzeige, Downloads, ZIP, Mailversand, Manifest, Flyer, Tests) —
+siehe Abschnitt 12. `core/qr/generateQr.js` und `core/config/colors.js`
+(inkl. `QR_COLOR_GRUEN`) bleiben als wiederverwendbare Core-Bausteine
+bestehen, erzeugen im produktiven Wegbegleiter-Workflow aber kein
+grünes QR-Material mehr.
 
 Die Reihenfolge in dieser Tabelle ist die feste, reproduzierbare
 Reihenfolge, die `buildMaterialList()` und `buildMaterialManifest()`
@@ -446,15 +454,15 @@ nicht versehentlich verändert werden kann.
 
 #### `buildMaterialList(options)`
 
-Legt fest, welche der sechs Materialtypen ausgewählt werden. Ohne
-Optionen werden alle sechs in fester Reihenfolge zurückgegeben.
+Legt fest, welche der fünf Materialtypen ausgewählt werden. Ohne
+Optionen werden alle fünf in fester Reihenfolge zurückgegeben.
 Optional: `{ include }` (nur diese Typen) und/oder `{ exclude }` (diese
 Typen entfernen). Unbekannte Schlüssel in `include`/`exclude` führen zu
 einem Fehler. Reine Funktion ohne Seiteneffekte.
 
 #### `buildMaterialFilenames({ firstName, lastName, ifkId, materials })`
 
-Erzeugt für die ausgewählten Materialien (Standard: alle sechs, wie von
+Erzeugt für die ausgewählten Materialien (Standard: alle fünf, wie von
 `buildMaterialList()` geliefert) die Dateinamen nach dem Schema
 `IFK_<Vorname>_<Nachname>_<Materialsuffix>.<extension>` — z. B.
 `IFK_Max_Mustermann_Flyer_Druckerei.pdf`. Vor- und Nachname sind
@@ -519,10 +527,10 @@ fehlendem Dateinamen oder leerem/unerwartetem Grafikinhalt.
 
 #### `generateQrMaterials({ manifest, paypalUrl, girocode, logo, deps })`
 
-Erzeugt aus einem Manifest die vier individuellen QR-Materialien
-(`QR_PAYPAL_GREEN`, `QR_PAYPAL_BLACK`, `QR_GIRO_GREEN`,
-`QR_GIRO_BLACK`) als PNG-Dateien und gibt sie als Array zurück, in der
-Reihenfolge des Manifests: `{ key, label, category, format, extension,
+Erzeugt aus einem Manifest die zwei produktiven, individuellen
+QR-Materialien (`QR_PAYPAL_BLACK`, `QR_GIRO_BLACK` — jeweils schwarz
+mit grünem It's-for-Kids-Logo in der Mitte) als PNG-Dateien und gibt
+sie als Array zurück, in der Reihenfolge des Manifests: `{ key, label, category, format, extension,
 filename, mimeType: "image/png", content, size }`. Flyer-Einträge im
 Manifest werden ignoriert (kein Fehler); enthält das Manifest
 ausschließlich Flyer, ist das Ergebnis ein leeres Array.
@@ -542,9 +550,10 @@ Wiederverwendung bestehender Module, keine Duplikate:
 - **PayPal-Link-Prüfung**: `core/text/extractPaypalLink.js` — keine
   zweite, parallele Validierung.
 - **IFK-ID-Prüfung**: `core/id/validateIfkId.js`.
-- **Farben**: `core/config/colors.js` (`QR_COLOR_GRUEN` für
-  `QR_PAYPAL_GREEN`/`QR_GIRO_GREEN`, `QR_COLOR_SCHWARZ` für
-  `QR_PAYPAL_BLACK`/`QR_GIRO_BLACK`).
+- **Farben**: `core/config/colors.js` (`QR_COLOR_SCHWARZ` für
+  `QR_PAYPAL_BLACK`/`QR_GIRO_BLACK`; `QR_COLOR_GRUEN` bleibt als
+  Konstante bestehen, wird im produktiven Workflow aber nicht mehr
+  verwendet, siehe Abschnitt 12).
 - **Logo laden**: `core/branding/loadImage.js`, `logo` entspricht
   dessen `src`-Parameter — kein zweites Logo-System.
 
@@ -646,11 +655,12 @@ getrennte Build-Einstiegspunkte (`build.rollupOptions.input`), sodass
   mitgeführt (siehe `buildMaterialManifest` in Abschnitt 6).
 - PayPal-Link/Share-Text-Eingabe, ausgewertet über die bestehende
   `core/text/extractPaypalLink.js` — keine zweite Parsing-Logik.
-- Materialauswahl als Checkboxen für alle sechs Materialtypen aus
-  `core/materials/materialTypes.js`. Die beiden Flyer-Typen sind
-  bewusst deaktiviert (`disabled`) und mit dem Hinweis "wartet auf
-  Grafikentwurf" versehen, da ihre Erzeugung noch nicht implementiert
-  ist (siehe Abschnitt 6, Phase 4 in [roadmap.md](roadmap.md)).
+- Materialauswahl als Checkboxen für die fünf Materialtypen aus
+  `core/materials/materialTypes.js` (grüne QR-Varianten wurden entfernt,
+  siehe Abschnitt 12). Flyer- und Urkunden-Checkboxen werden zusätzlich
+  abhängig vom gewählten Wegbegleiter-Typ deaktiviert, wenn für diesen
+  noch keine Vorlage hinterlegt ist (siehe Abschnitt 12) — nicht mehr
+  statisch anhand des Materialtyps allein.
 - Erzeugung: `src/intern/generator.js` baut aus den Eingaben ein
   Manifest über `buildMaterialManifest()` und ruft anschließend
   `generateQrMaterials()` auf; GiroCode-Empfänger/IBAN/BIC nutzen dabei
@@ -1684,3 +1694,220 @@ JS-DOM-Testbibliothek, Bearbeitung mehrerer Felder gleichzeitig
 (bewusst auf ein Feld begrenzt, um "zentrale Übernahme sperren"
 einfach und eindeutig zu halten), Änderungen an der fachlichen
 OCR-/Validierungslogik.
+
+## 12. Mehrere Wegbegleiter-Typen (`core/materials/roleConfig.js`) und Entfernung der grünen QR-Codes
+
+**Zweck**: Der interne Materialgenerator war bis hierhin implizit auf
+"Repräsentant" zugeschnitten (Bundesland/Region als feste
+Pflichtfelder, ausschließlich Repräsentanten-Flyer/-Urkunde). Dieser
+Schritt führt einen expliziten **Wegbegleiter-Typ** ein, den die
+Nutzerin/der Nutzer ganz am Anfang der Datenerfassung auswählt, und
+entfernt parallel die grünen QR-Code-Varianten vollständig aus dem
+produktiven Workflow.
+
+### 12.1 Entfernung der grünen QR-Codes
+
+Entscheidung: Es werden künftig ausschließlich zwei QR-Codes erzeugt —
+**PayPal-QR** und **GiroCode**, jeweils **schwarz mit grünem
+It's-for-Kids-Logo** in der Mitte. Die vormals zusätzlich erzeugten
+grünen Varianten (`QR_PAYPAL_GREEN`, `QR_GIRO_GREEN`) wurden aus dem
+produktiven Repräsentanten-/Wegbegleiter-Workflow entfernt:
+
+- **`core/materials/materialTypes.js`** — `QR_PAYPAL_GREEN`/
+  `QR_GIRO_GREEN` sind keine bekannten Materialtypen mehr
+  (`MATERIAL_TYPES`/`MATERIAL_TYPE_KEYS` enthalten nur noch fünf
+  Einträge statt sieben).
+- **`core/materials/buildMaterialFilenames.js`** — die
+  Dateinamenssuffixe `PayPal_QR_gruen`/`GiroCode_gruen` entfallen.
+- **`core/materials/generateQrMaterials.js`** — `PAYPAL_KEYS`/
+  `GIRO_KEYS`/`COLOR_BY_KEY` kennen nur noch die schwarzen Varianten;
+  die Funktion erzeugt dadurch nur noch die zwei produktiven
+  QR-Materialien statt vier.
+- **`intern/index.html`** — die beiden grünen Checkboxen
+  (`QR_PAYPAL_GREEN`/`QR_GIRO_GREEN`) wurden entfernt.
+- **`src/intern/generator.js`** — `PAYPAL_KEYS`/`GIRO_KEYS` sowie die
+  interne, für den Flyer immer mitgenerierte QR-Zusatzauswahl
+  (`extraFlyerQrKeys`) verwenden jetzt die schwarzen statt der grünen
+  Schlüssel.
+- **Manifest, ZIP, Mailversand (Repräsentant + humbee)**: `buildMaterialManifest.js`,
+  `buildMaterialZip.js`, `buildRepresentativeDeliveryRequest.js` und
+  die humbee-/Repräsentanten-Mailtexte arbeiten generisch über die im
+  Manifest enthaltenen Materialien — da grüne Varianten dort nicht mehr
+  auftauchen, landen sie automatisch nicht mehr im ZIP oder in
+  Mailanhängen. Keine dieser Dateien musste inhaltlich geändert werden.
+- **Tests**: alle Tests, die zuvor grüne QR-Materialien referenzierten
+  (`materialTypes.test.js`, `buildMaterialList.test.js`,
+  `buildMaterialFilenames.test.js`, `generateQrMaterials.test.js`,
+  `generateMaterial.test.js`, `generateFlyerMaterial.test.js`,
+  `generateCertificateMaterial.test.js`, `buildMaterialManifest.test.js`)
+  wurden auf die schwarzen Varianten umgestellt; `buildMaterialList.test.js`
+  und `generateQrMaterials.test.js` prüfen zusätzlich explizit, dass die
+  grünen Schlüssel jetzt einen Fehler ("unbekannter Materialtyp"/
+  "unbekannter QR-Materialtyp") auslösen.
+
+**Nicht gelöscht** (bewusst weiter wiederverwendbar, aber ohne
+produktive Wirkung): `core/qr/generateQr.js` (generische
+QR-Rendering-Funktion) und `core/config/colors.js` (`QR_COLOR_GRUEN`
+bleibt als Konstante bestehen). Der öffentliche, nicht-interne
+QR-Code-Generator (`src/main.js`) ist von dieser Änderung unberührt.
+
+**Flyer**: Auf der Flyer-Vorderseite bleiben die bisherigen
+QR-Koordinaten (`fields.qrPaypal`/`fields.qrGiro` in
+`templates/flyer-*-front/template.config.js`, für Druckerei/Home und
+männlich/weiblich) unverändert — es wurde lediglich in
+`src/intern/generator.js` die Quelle der dort eingebetteten QR-Grafiken
+von `QR_PAYPAL_GREEN`/`QR_GIRO_GREEN` auf `QR_PAYPAL_BLACK`/
+`QR_GIRO_BLACK` umgestellt. Keine Koordinaten-, Größen- oder
+Template-Änderung.
+
+Die beiden statischen, nicht-personalisierten QR-Codes unten auf Seite 2
+des Flyers ("Partner werden"/"Mehr erfahren") wurden vollständig
+entfernt: `templates/flyer-print-back/template.config.js` hat jetzt ein
+leeres `fields`-Objekt (die drei weiteren Rückseiten-Configs erben das
+über ein Spread), `core/materials/generateFlyerMaterial.js` erwartet
+keine `qrPartnerWerdenAsset`/`qrMehrErfahrenAsset`-Parameter mehr, und
+`src/intern/generator.js` erzeugt diese beiden Grafiken nicht mehr
+(`generateFlyerBackQrAssets` wurde entfernt). Diese beiden QR-Codes
+werden künftig vom Grafiker fest in eine neue Master-Vorlage eingebaut,
+da sie nicht individualisiert sind.
+
+**Ergebnisraster**: `#result-grid` in `src/intern/style.css` ist von
+vier auf zwei Basis-Spalten umgestellt (`grid-template-columns:
+repeat(2, 1fr)`), sodass die beiden verbleibenden QR-Ergebniskarten je
+die halbe verfügbare Breite einnehmen statt zwei von vier Spalten leer
+zu lassen. Flyer-/Urkunden-Ergebnisse (`.result-block--flyer`) spannen
+weiterhin über beide Spalten (volle Breite, unverändertes Verhalten).
+Responsive: ≤700px weiterhin einspaltig.
+
+### 12.2 Wegbegleiter-Typ-Auswahl und Rollen-Konfiguration
+
+**UI**: `intern/index.html` zeigt ganz am Anfang der Datenerfassung
+(vor den Personendaten-Feldern) ein Auswahlfeld `#role-select`:
+"Für welchen Wegbegleiter möchtest du Materialien erstellen?" mit den
+Optionen Repräsentant, Botschafter, Wirtschaftsrat, Fachrat, Kurator,
+Beirat.
+
+**Technische Schlüssel** (`core/materials/roleConfig.js`,
+`ROLE_KEYS`): `representative`, `ambassador`, `economic_council`,
+`expert_council`, `curator`, `advisory_board` — stabil und unabhängig
+von den sichtbaren deutschen Bezeichnungen (`ROLE_CONFIG[key].label`).
+
+**Zentrale Rollen-Konfiguration** (`core/materials/roleConfig.js`,
+`ROLE_CONFIG`): statt rollenspezifischer `if`/`else`-Blöcke in
+`generator.js` fragt die UI ausschließlich diese eine, testbare
+Konfiguration ab. Jeder Rollen-Eintrag enthält:
+
+- `label` — deutsche Kurzbezeichnung für die Dropdown-Anzeige.
+- `requiresRegion` — ob Bundesland/Region Teil der Datenerfassung sind.
+- `roleLabels` — Rollenbezeichnung für Anrede-/Mailtexte, getrennt nach
+  `male`/`female`/`neutral` (`getRoleLabel(roleKey, gender)`). Rollen
+  mit natürlicher Form (Repräsentant/-in, Botschafter/-in, Kurator/-in)
+  nutzen unterschiedliche männliche/weibliche Formen; Gremien
+  (Wirtschaftsrat, Fachrat, Beirat) liefern bewusst für **jedes**
+  Geschlecht dieselbe neutrale Form ("Mitglied des Wirtschaftsrats" /
+  "Mitglied des Fachrats" / "Mitglied des Beirats") statt einer
+  erfundenen geschlechtsspezifischen Form. Diese Bezeichnungen sind
+  bewusst noch **nicht** in vorhandene Flyer eingebaut — dafür fehlt
+  noch die finale Master-Vorlage mit variablem Rollen-Textfeld (siehe
+  unten); die Architektur ist aber bereits darauf vorbereitet.
+- `flyerMaterialKeys`/`certificateMaterialKeys` — welche
+  Materialschlüssel aus `materialTypes.js` für diese Rolle bereits eine
+  Vorlage haben (aktuell ausschließlich bei `representative` befüllt).
+- `additionalMaterialKeys` — Platzhalter für künftige, rollenspezifische
+  Zusatzmaterialien (aktuell für alle Rollen leer, um keine noch nicht
+  existierenden Materialien vorzutäuschen).
+
+**Gemeinsame Felder für ALLE Wegbegleiter** (unverändert eine einzige
+Datenstruktur/ein einziges Formular, keine Duplikation): Geschlecht,
+Vorname, Nachname, E-Mail-Adresse, Telefonnummer, IFK-ID, Foto-Link,
+PayPal-Link.
+
+**Sonderfelder ausschließlich für `representative`**: Bundesland und
+Region. `src/intern/generator.js` (`applyRoleToForm`) blendet die
+beiden Formularfelder (`#federal-state-field`/`#region-field`)
+vollständig aus dem DOM aus (`hidden`, nicht nur `required=false`),
+sobald eine andere Rolle gewählt ist, und `handleGenerate` validiert
+und übernimmt Bundesland/Region ins Manifest nur, wenn
+`roleRequiresRegion(role)` `true` liefert — für alle anderen Rollen
+bleiben beide Werte `undefined` und tauchen weder als Pflichtfeld noch
+als fehlende Angabe noch im erzeugten Material auf. Bereits
+eingetragene Werte werden beim Rollenwechsel nicht gelöscht (nur
+ausgeblendet), damit ein Zurückwechseln zu `representative` keine
+Daten verliert.
+
+`core/materials/buildMaterialManifest.js` kennt zusätzlich ein
+optionales `role`-Feld (`person.role`), validiert gegen
+`isValidRoleKey()` aus `roleConfig.js` — ohne Angabe (bestehende
+Aufrufe) bleibt das Verhalten unverändert.
+
+**IFK-ID**: unverändert eine einzige, rollenunabhängige Logik
+(`core/id/generateIfkId.js`/`validateIfkId.js`) — es gibt keine
+getrennten ID-Systeme je Rolle.
+
+**Foto**: bleibt für alle Rollen grundsätzlich verfügbar und
+unverändert (Link eintragen, prüfen, grün bei Erfolg, optionaler
+Ausschnitt); ob es für ein konkretes Material Pflicht ist, entscheidet
+weiterhin das jeweilige Material (aktuell: die beiden Flyer-Typen).
+
+**Screenshot-Import**: bleibt fachlich unverändert auf die bekannte
+humbee-Struktur ausgelegt. Wichtig: die OCR-Erkennung kennt Bundesland/
+Region unabhängig von der gewählten Rolle — ob diese Felder Pflicht
+sind, entscheidet ausschließlich `roleConfig.js`
+(`roleRequiresRegion`), nie die OCR bzw. das Vorhandensein erkannter
+Werte.
+
+### 12.3 Materialverfügbarkeit ohne stillen Fallback
+
+Für Rollen außer `representative` existieren aktuell keine Flyer- oder
+Urkunden-Vorlagen. Damit nie versehentlich eine
+Repräsentanten-Vorlage für eine andere Rolle verwendet wird:
+
+1. **UI-Ebene**: `updateMaterialAvailabilityForRole()` in
+   `src/intern/generator.js` deaktiviert (`disabled`, unchecked) die
+   Flyer-/Urkunden-Checkboxen, sobald `isFlyerTemplateAvailableForRole()`/
+   `isCertificateTemplateAvailableForRole()` (aus `roleConfig.js`)
+   `false` liefert, und blendet statt des normalen Hinweistexts den
+   Hinweis "Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt."
+   ein (`[data-role-unavailable-hint]` in `intern/index.html`). Die
+   beiden schwarzen QR-Checkboxen sind von dieser Sperre bewusst
+   ausgenommen — QR-Codes können für jede Rolle erzeugt werden.
+2. **Verteidigungslinie in `handleGenerate`**: selbst falls ein Flyer-
+   oder Urkunden-Material trotzdem im Manifest landet (z. B. Altzustand
+   vor einem Rollenwechsel), prüft `generator.js` vor der eigentlichen
+   Erzeugung erneut `isFlyerTemplateAvailableForRole`/
+   `isCertificateTemplateAvailableForRole` und wirft andernfalls einen
+   sprechenden Fehler — es gibt **keinen** Codepfad, der in diesem Fall
+   still auf `resolveFlyerTemplate`/`CERTIFICATE_TEMPLATE_BY_GENDER`
+   (die Repräsentanten-Vorlagen) zurückfällt.
+3. Wird künftig eine Vorlage für eine weitere Rolle ergänzt, genügt es,
+   das neue Template unter `templates/` anzulegen und den
+   entsprechenden Materialschlüssel in `ROLE_CONFIG[roleKey]
+   .flyerMaterialKeys`/`.certificateMaterialKeys` in `roleConfig.js`
+   einzutragen — keine Änderung an `generator.js` nötig.
+
+**Aktueller Stand je Rolle**: `representative` kann bereits Flyer
+(Druckerei + Home), Urkunde und beide QR-Codes erzeugen. Alle anderen
+Rollen (`ambassador`, `economic_council`, `expert_council`, `curator`,
+`advisory_board`) können bereits die gemeinsamen Stammdaten erfassen,
+eine IFK-ID verwenden/generieren und beide QR-Codes erzeugen — Flyer
+und Urkunde sind für sie aktuell gesperrt, bis entsprechende Vorlagen
+hinterlegt werden.
+
+**Tests**: `core/materials/roleConfig.test.js` deckt alle sechs Rollen,
+die Region-Anforderung ausschließlich bei `representative`, die
+Rollenbezeichnungen (inkl. neutraler Gremien-Form) sowie — als
+expliziten Regressionsschutz gegen einen stillen Fallback — ab, dass
+ausschließlich `representative` eine Flyer-/Urkunden-Vorlage hat.
+`core/materials/buildMaterialManifest.test.js` deckt das optionale
+`role`-Feld (gültig/ungültig/fehlend) ab.
+
+**Bewusst nicht Teil dieses Schritts**: tatsächliche Flyer-/
+Urkunden-Vorlagen für andere Rollen als `representative`; Einbau der
+rollenabhängigen Anrede in eine Master-Flyer-Vorlage (wartet auf eine
+finale Grafikvorlage mit variablem Rollen-Textfeld); Änderungen am
+Mailversand-Textbausteine für andere Rollen als `representative`
+(`core/templates/representativeMailContent.js`/`humbeeMailContent.js`
+bleiben inhaltlich auf den Repräsentanten-Wortlaut ausgelegt, delegieren
+die Rollenbezeichnung aber bereits generisch an
+`getRoleLabel(ROLE_KEYS.REPRESENTATIVE, gender)` statt eine eigene
+Zuordnung zu duplizieren).

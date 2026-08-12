@@ -4,7 +4,7 @@ import { generateQrMaterials } from "./generateQrMaterials.js";
 import { buildMaterialManifest } from "./buildMaterialManifest.js";
 import { buildGirocodePayload } from "../girocode/buildGirocodePayload.js";
 import { GIROCODE_DEFAULTS } from "../config/girocodeDefaults.js";
-import { QR_COLOR_GRUEN, QR_COLOR_SCHWARZ } from "../config/colors.js";
+import { QR_COLOR_SCHWARZ } from "../config/colors.js";
 
 const VALID_IFK_ID = "IFK7QX";
 const VALID_PAYPAL_URL = "https://www.paypal.com/donate/?hosted_button_id=ABC123";
@@ -39,7 +39,7 @@ function fakeDeps({ calls } = {}) {
   };
 }
 
-test("alle vier QR-Materialien werden in korrekter Reihenfolge erzeugt", async () => {
+test("beide produktiven QR-Materialien werden in korrekter Reihenfolge erzeugt", async () => {
   const manifest = baseManifest();
   const result = await generateQrMaterials({
     manifest,
@@ -51,12 +51,36 @@ test("alle vier QR-Materialien werden in korrekter Reihenfolge erzeugt", async (
 
   assert.deepEqual(
     result.map((entry) => entry.key),
-    ["QR_PAYPAL_GREEN", "QR_PAYPAL_BLACK", "QR_GIRO_GREEN", "QR_GIRO_BLACK"]
+    ["QR_PAYPAL_BLACK", "QR_GIRO_BLACK"]
+  );
+});
+
+test("grüne QR-Varianten werden nicht mehr erzeugt (kein bekannter Materialtyp)", async () => {
+  const manifest = baseManifest();
+  manifest.materials.push({
+    key: "QR_PAYPAL_GREEN",
+    label: "PayPal QR grün",
+    category: "qr",
+    format: "png",
+    extension: "png",
+    filename: "IFK_Max_Mustermann_PayPal_QR_gruen.png",
+  });
+
+  await assert.rejects(
+    () =>
+      generateQrMaterials({
+        manifest,
+        paypalUrl: VALID_PAYPAL_URL,
+        girocode: {},
+        logo: "logo.png",
+        deps: fakeDeps(),
+      }),
+    /unbekannter QR-Materialtyp/
   );
 });
 
 test("nur ausgewählte QR-Materialien werden erzeugt", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   const result = await generateQrMaterials({
     manifest,
     paypalUrl: VALID_PAYPAL_URL,
@@ -65,7 +89,7 @@ test("nur ausgewählte QR-Materialien werden erzeugt", async () => {
   });
 
   assert.equal(result.length, 1);
-  assert.equal(result[0].key, "QR_PAYPAL_GREEN");
+  assert.equal(result[0].key, "QR_PAYPAL_BLACK");
 });
 
 test("Manifest mit nur Flyern liefert ein leeres Array, ohne Fehler", async () => {
@@ -87,7 +111,7 @@ test("Flyer werden ignoriert und nicht als Datei erzeugt", async () => {
   const keys = result.map((entry) => entry.key);
   assert.equal(keys.includes("FLYER_DRUCKEREI"), false);
   assert.equal(keys.includes("FLYER_HOME"), false);
-  assert.equal(result.length, 4);
+  assert.equal(result.length, 2);
 });
 
 test("Dateinamen werden unverändert aus dem Manifest übernommen", async () => {
@@ -106,7 +130,7 @@ test("Dateinamen werden unverändert aus dem Manifest übernommen", async () => 
   }
 });
 
-test("PayPal grün verwendet IFK-Grün und PayPal schwarz verwendet Schwarz", async () => {
+test("PayPal schwarz und GiroCode schwarz verwenden beide QR_COLOR_SCHWARZ", async () => {
   const manifest = baseManifest();
   const calls = [];
   await generateQrMaterials({
@@ -117,38 +141,14 @@ test("PayPal grün verwendet IFK-Grün und PayPal schwarz verwendet Schwarz", as
     deps: fakeDeps({ calls }),
   });
 
-  const order = manifest.materials
-    .filter((m) => m.category === "qr")
-    .map((m) => m.key);
-
-  const greenIndex = order.indexOf("QR_PAYPAL_GREEN");
-  const blackIndex = order.indexOf("QR_PAYPAL_BLACK");
-
-  assert.equal(calls[greenIndex].moduleColor, QR_COLOR_GRUEN);
-  assert.equal(calls[blackIndex].moduleColor, QR_COLOR_SCHWARZ);
-});
-
-test("GiroCode grün verwendet IFK-Grün und GiroCode schwarz verwendet Schwarz", async () => {
-  const manifest = baseManifest();
-  const calls = [];
-  await generateQrMaterials({
-    manifest,
-    paypalUrl: VALID_PAYPAL_URL,
-    girocode: {},
-    logo: "logo.png",
-    deps: fakeDeps({ calls }),
-  });
-
-  const order = manifest.materials.filter((m) => m.category === "qr").map((m) => m.key);
-  const greenIndex = order.indexOf("QR_GIRO_GREEN");
-  const blackIndex = order.indexOf("QR_GIRO_BLACK");
-
-  assert.equal(calls[greenIndex].moduleColor, QR_COLOR_GRUEN);
-  assert.equal(calls[blackIndex].moduleColor, QR_COLOR_SCHWARZ);
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.equal(call.moduleColor, QR_COLOR_SCHWARZ);
+  }
 });
 
 test("PayPal-Link wird unverändert als QR-Inhalt für PayPal-Materialien verwendet", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN", "QR_PAYPAL_BLACK"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   const calls = [];
   await generateQrMaterials({
     manifest,
@@ -158,11 +158,10 @@ test("PayPal-Link wird unverändert als QR-Inhalt für PayPal-Materialien verwen
   });
 
   assert.equal(calls[0].text, VALID_PAYPAL_URL);
-  assert.equal(calls[1].text, VALID_PAYPAL_URL);
 });
 
 test("GiroCode-Payload wird über buildGirocodePayload() erzeugt (inkl. Defaults)", async () => {
-  const manifest = baseManifest(["QR_GIRO_GREEN"]);
+  const manifest = baseManifest(["QR_GIRO_BLACK"]);
   const calls = [];
   await generateQrMaterials({
     manifest,
@@ -181,7 +180,7 @@ test("GiroCode-Payload wird über buildGirocodePayload() erzeugt (inkl. Defaults
 });
 
 test("GiroCode-Verwendungszweck enthält exakt '<IFK-ID> Spende'", async () => {
-  const manifest = baseManifest(["QR_GIRO_GREEN"]);
+  const manifest = baseManifest(["QR_GIRO_BLACK"]);
   const calls = [];
   await generateQrMaterials({
     manifest,
@@ -195,7 +194,7 @@ test("GiroCode-Verwendungszweck enthält exakt '<IFK-ID> Spende'", async () => {
 });
 
 test("GiroCode-Betrag bleibt leer, auch wenn im girocode-Parameter ein Betrag übergeben wird", async () => {
-  const manifest = baseManifest(["QR_GIRO_GREEN"]);
+  const manifest = baseManifest(["QR_GIRO_BLACK"]);
   const calls = [];
   await generateQrMaterials({
     manifest,
@@ -219,7 +218,7 @@ test("Logo-Overlay (logoImage) wird für jede erzeugte Datei an generateQr über
     deps: fakeDeps({ calls }),
   });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 2);
   for (const call of calls) {
     assert.equal(call.logoImage, FAKE_LOGO_IMAGE);
   }
@@ -257,7 +256,7 @@ test("jede Datei hat Inhalt und eine Größe größer null", async () => {
 });
 
 test("fehlender PayPal-Link erzeugt nur dann einen Fehler, wenn PayPal-Material ausgewählt ist", async () => {
-  const manifestOhnePaypal = baseManifest(["QR_GIRO_GREEN"]);
+  const manifestOhnePaypal = baseManifest(["QR_GIRO_BLACK"]);
   await assert.doesNotReject(() =>
     generateQrMaterials({
       manifest: manifestOhnePaypal,
@@ -267,7 +266,7 @@ test("fehlender PayPal-Link erzeugt nur dann einen Fehler, wenn PayPal-Material 
     })
   );
 
-  const manifestMitPaypal = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifestMitPaypal = baseManifest(["QR_PAYPAL_BLACK"]);
   await assert.rejects(
     () =>
       generateQrMaterials({
@@ -280,7 +279,7 @@ test("fehlender PayPal-Link erzeugt nur dann einen Fehler, wenn PayPal-Material 
 });
 
 test("fehlende GiroCode-Daten erzeugen nur dann einen Fehler, wenn GiroCode-Material ausgewählt ist", async () => {
-  const manifestOhneGiro = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifestOhneGiro = baseManifest(["QR_PAYPAL_BLACK"]);
   await assert.doesNotReject(() =>
     generateQrMaterials({
       manifest: manifestOhneGiro,
@@ -290,7 +289,7 @@ test("fehlende GiroCode-Daten erzeugen nur dann einen Fehler, wenn GiroCode-Mate
     })
   );
 
-  const manifestMitGiro = baseManifest(["QR_GIRO_GREEN"]);
+  const manifestMitGiro = baseManifest(["QR_GIRO_BLACK"]);
   await assert.rejects(
     () =>
       generateQrMaterials({
@@ -303,7 +302,7 @@ test("fehlende GiroCode-Daten erzeugen nur dann einen Fehler, wenn GiroCode-Mate
 });
 
 test("ungültiger PayPal-Link erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   await assert.rejects(
     () =>
       generateQrMaterials({
@@ -317,7 +316,7 @@ test("ungültiger PayPal-Link erzeugt einen Fehler", async () => {
 });
 
 test("fehlendes oder nicht ladbares Logo erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
 
   await assert.rejects(
     () =>
@@ -347,7 +346,7 @@ test("fehlendes oder ungültiges Manifest erzeugt einen Fehler", async () => {
 });
 
 test("ungültige IFK-ID im Manifest erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   manifest.person.ifkId = "INVALID";
 
   await assert.rejects(
@@ -363,7 +362,7 @@ test("ungültige IFK-ID im Manifest erzeugt einen Fehler", async () => {
 });
 
 test("unbekannter QR-Materialtyp erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   manifest.materials.push({
     key: "QR_UNKNOWN_TYPE",
     label: "Unbekannt",
@@ -386,7 +385,7 @@ test("unbekannter QR-Materialtyp erzeugt einen Fehler", async () => {
 });
 
 test("fehlender Dateiname im Manifest erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_GREEN"]);
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
   delete manifest.materials[0].filename;
 
   await assert.rejects(

@@ -12,9 +12,7 @@ import { buildMaterialList } from "./buildMaterialList.js";
 const FILENAME_SUFFIX_BY_KEY = Object.freeze({
   FLYER_DRUCKEREI: "Flyer_Druckerei",
   FLYER_HOME: "Flyer_Home",
-  QR_PAYPAL_GREEN: "PayPal_QR_gruen",
   QR_PAYPAL_BLACK: "PayPal_QR_schwarz",
-  QR_GIRO_GREEN: "GiroCode_gruen",
   QR_GIRO_BLACK: "GiroCode_schwarz",
 });
 

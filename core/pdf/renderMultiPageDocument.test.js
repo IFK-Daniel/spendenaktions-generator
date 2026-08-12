@@ -113,7 +113,6 @@ test("renderMultiPageDocument sammelt warnings pro Seite mit korrektem pageIndex
       },
       {
         templateConfig: flyerPrintBackTemplate,
-        imageAssets: { qrPartnerWerden: tinyImage(), qrMehrErfahren: tinyImage() },
       },
     ],
     deps: nodeDeps,
@@ -123,20 +122,18 @@ test("renderMultiPageDocument sammelt warnings pro Seite mit korrektem pageIndex
   assert.ok(warnings.every((w) => w.pageIndex === 0));
 });
 
-test("renderMultiPageDocument wirft bei fehlendem Bild-Asset auf der Rückseite (wie renderFlyer selbst)", async () => {
-  await assert.rejects(
-    () =>
-      renderMultiPageDocument({
-        pages: [
-          {
-            templateConfig: flyerPrintFrontTemplate,
-            textValues: frontTextValues(),
-            imageAssets: { photo: tinyImage(), qrPaypal: tinyImage(), qrGiro: tinyImage() },
-          },
-          { templateConfig: flyerPrintBackTemplate, imageAssets: {} },
-        ],
-        deps: nodeDeps,
-      }),
-    /fehlendes Bild-Asset/
-  );
+test("renderMultiPageDocument rendert die Rückseite ohne Bild-Assets (statische QR-Codes entfernt, keine Bildfelder mehr)", async () => {
+  const { bytes } = await renderMultiPageDocument({
+    pages: [
+      {
+        templateConfig: flyerPrintFrontTemplate,
+        textValues: frontTextValues(),
+        imageAssets: { photo: tinyImage(), qrPaypal: tinyImage(), qrGiro: tinyImage() },
+      },
+      { templateConfig: flyerPrintBackTemplate, imageAssets: {} },
+    ],
+    deps: nodeDeps,
+  });
+
+  assert.ok(bytes.length > 0);
 });

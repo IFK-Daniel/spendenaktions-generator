@@ -3,6 +3,7 @@ import { isValidEmail } from "../mail/validateEmail.js";
 import { isHttpUrl } from "../text/isHttpUrl.js";
 import { MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
 import { buildMaterialFilenames } from "./buildMaterialFilenames.js";
+import { isValidRoleKey } from "./roleConfig.js";
 
 /**
  * Zulässige Werte für `gender`. Bewusst auf genau zwei Werte begrenzt,
@@ -32,6 +33,12 @@ const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
  * @param {string} params.firstName
  * @param {string} params.lastName
  * @param {string} params.ifkId
+ * @param {string} [params.role] Optional. Technischer Wegbegleiter-Typ-
+ *   Schlüssel (siehe `core/materials/roleConfig.js`, `ROLE_KEYS`). Wird,
+ *   sofern angegeben, gegen die zentrale Rollen-Konfiguration geprüft
+ *   und unverändert im Manifest mitgeführt. Ohne Angabe enthält
+ *   `person` kein `role`-Feld (kein Default) — bestehende Aufrufe ohne
+ *   Rollenangabe funktionieren unverändert.
  * @param {"male" | "female"} [params.gender] Optional. Wird, sofern
  *   angegeben, gegen `GENDER_VALUES` geprüft und unverändert im
  *   Manifest mitgeführt. Ohne Angabe enthält `person` kein
@@ -71,6 +78,7 @@ export function buildMaterialManifest({
   firstName,
   lastName,
   ifkId,
+  role,
   gender,
   email,
   phone,
@@ -87,6 +95,13 @@ export function buildMaterialManifest({
     lastName: lastName.trim(),
     ifkId: normalizedIfkId,
   };
+
+  if (role !== undefined) {
+    if (!isValidRoleKey(role)) {
+      throw new Error(`buildMaterialManifest: ungültiger Wert für 'role' ("${role}").`);
+    }
+    person.role = role;
+  }
 
   if (gender !== undefined) {
     if (!VALID_GENDER_VALUES.has(gender)) {

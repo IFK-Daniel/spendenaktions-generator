@@ -7,24 +7,30 @@
  * Materialgenerator erzeugt ausschließlich individuelle, personalisierte
  * Materialien für eine Person/IFK-ID.
  *
+ * Die grünen QR-Varianten (vormals `QR_PAYPAL_GREEN`/`QR_GIRO_GREEN`)
+ * wurden aus dem produktiven Materialworkflow entfernt (Entscheidung:
+ * künftig ausschließlich die schwarzen QR-Codes mit grünem
+ * It's-for-Kids-Logo). `core/qr/generateQr.js` und `core/config/colors.js`
+ * (inkl. `QR_COLOR_GRUEN`) bleiben als wiederverwendbare Core-Bausteine
+ * bestehen, erzeugen aber im produktiven Wegbegleiter-Workflow kein
+ * grünes QR-Material mehr.
+ *
  * Reihenfolge ist bewusst fest und reproduzierbar (siehe
- * `buildMaterialList.js`): Flyer Druckerei, Flyer Home, PayPal QR grün,
- * PayPal QR schwarz, GiroCode grün, GiroCode schwarz, Repräsentantenurkunde.
+ * `buildMaterialList.js`): Flyer Druckerei, Flyer Home, PayPal QR
+ * schwarz, GiroCode schwarz, Repräsentantenurkunde.
  */
 
-/** Eindeutige technische Schlüssel der sechs Materialtypen. */
+/** Eindeutige technische Schlüssel der fünf Materialtypen. */
 export const MATERIAL_TYPE_KEYS = Object.freeze({
   FLYER_DRUCKEREI: "FLYER_DRUCKEREI",
   FLYER_HOME: "FLYER_HOME",
-  QR_PAYPAL_GREEN: "QR_PAYPAL_GREEN",
   QR_PAYPAL_BLACK: "QR_PAYPAL_BLACK",
-  QR_GIRO_GREEN: "QR_GIRO_GREEN",
   QR_GIRO_BLACK: "QR_GIRO_BLACK",
   CERTIFICATE_REPRESENTATIVE: "CERTIFICATE_REPRESENTATIVE",
 });
 
 /**
- * Die sieben Materialtypen in fester Reihenfolge, jeweils mit
+ * Die fünf Materialtypen in fester Reihenfolge, jeweils mit
  * `{ key, label, category, format, extension }`. Jedes Objekt sowie das
  * äußere Array sind mit `Object.freeze` eingefroren, damit die
  * Definition von außen nicht versehentlich verändert werden kann.
@@ -45,22 +51,8 @@ export const MATERIAL_TYPES = Object.freeze([
     extension: "pdf",
   }),
   Object.freeze({
-    key: MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN,
-    label: "PayPal QR grün",
-    category: "qr",
-    format: "png",
-    extension: "png",
-  }),
-  Object.freeze({
     key: MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK,
     label: "PayPal QR schwarz",
-    category: "qr",
-    format: "png",
-    extension: "png",
-  }),
-  Object.freeze({
-    key: MATERIAL_TYPE_KEYS.QR_GIRO_GREEN,
-    label: "GiroCode grün",
     category: "qr",
     format: "png",
     extension: "png",

@@ -16,9 +16,11 @@ import { flyerFemaleHomeBackTemplate } from "../../templates/flyer-female-home-b
 /**
  * Deckt alle vier Flyer-Varianten (männlich/weiblich × Druckerei/Home)
  * end-to-end ab: jede Kombination aus Vorder- + Rückseiten-Template muss
- * über `renderMultiPageDocument` ein gültiges 2-seitiges PDF ergeben,
- * und jede Rückseiten-Config muss die beiden statischen QR-Bildfelder
- * (`qrPartnerWerden`, `qrMehrErfahren`) deklarieren.
+ * über `renderMultiPageDocument` ein gültiges 2-seitiges PDF ergeben.
+ * Die früher auf der Rückseite personalisiert erzeugten statischen
+ * QR-Bildfelder (`qrPartnerWerden`, `qrMehrErfahren`) wurden entfernt
+ * (siehe `templates/flyer-print-back/template.config.js`) — die
+ * Rückseiten-Config hat daher aktuell keine Bildfelder mehr.
  */
 
 const nodeDeps = { loadTemplateAssets };
@@ -48,9 +50,8 @@ const VARIANTS = [
 ];
 
 for (const variant of VARIANTS) {
-  test(`Flyer ${variant.id}: Rückseiten-Config deklariert qrPartnerWerden und qrMehrErfahren als Bildfelder`, () => {
-    assert.equal(variant.back.fields.qrPartnerWerden.type, "image");
-    assert.equal(variant.back.fields.qrMehrErfahren.type, "image");
+  test(`Flyer ${variant.id}: Rückseiten-Config deklariert keine Bildfelder mehr (statische QR-Codes entfernt)`, () => {
+    assert.deepEqual(variant.back.fields, {});
   });
 
   test(`Flyer ${variant.id}: Front+Back ergeben zusammen ein gültiges 2-seitiges PDF ohne Warnungen`, async () => {
@@ -63,7 +64,6 @@ for (const variant of VARIANTS) {
         },
         {
           templateConfig: variant.back,
-          imageAssets: { qrPartnerWerden: tinyImage(), qrMehrErfahren: tinyImage() },
         },
       ],
       deps: nodeDeps,

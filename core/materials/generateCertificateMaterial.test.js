@@ -74,7 +74,7 @@ test("wirft bei Nicht-Urkunde-Materialtyp", async () => {
     firstName: "Kim",
     lastName: "Yu",
     ifkId: "IFK7QX",
-    materials: [MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN],
+    materials: [MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK],
   });
   await assert.rejects(
     () =>

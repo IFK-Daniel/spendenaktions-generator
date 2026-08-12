@@ -19,12 +19,12 @@ function fakeDeps({ pngBase64 = FAKE_PNG_BASE64, calls } = {}) {
 }
 
 const BASE_ENTRY = {
-  key: "QR_PAYPAL_GREEN",
-  label: "PayPal QR grün",
+  key: "QR_PAYPAL_BLACK",
+  label: "PayPal QR schwarz",
   category: "qr",
   format: "png",
   extension: "png",
-  filename: "IFK_Max_Mustermann_PayPal_QR_gruen.png",
+  filename: "IFK_Max_Mustermann_PayPal_QR_schwarz.png",
 };
 
 test("erzeugt eine Datei mit MIME image/png, Inhalt und Größe > 0", async () => {

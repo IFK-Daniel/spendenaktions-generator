@@ -23,28 +23,17 @@
  *   zum neuen weiblichen Vorderseiten-Master, siehe dortiger
  *   Kommentar) — auch hier deshalb `sourceBleedMm = 0` und
  *   `outputBleedMm = 0`.
- * - Enthält zwei vom Grafiker absichtlich leer gelassene weiße Boxen
- *   ("Partner werden" / "Mehr erfahren"), vorgesehen für QR-Codes.
- *   Koordinaten per Pixelmessung ermittelt: Box "Partner werden"
- *   x 95.75-111.20mm, Box "Mehr erfahren" x 119.80-135.26mm, beide
- *   y 169.98-184.51mm (15.45mm breit × 14.53mm hoch). Der QR-Code
- *   selbst wird quadratisch auf die kleinere Dimension (Höhe,
- *   14.53mm) skaliert und horizontal in der Box zentriert, oben
- *   bündig zur Box (da die Höhe bereits exakt der Boxhöhe entspricht).
+ * - Enthielt ursprünglich zwei vom Grafiker leer gelassene weiße Boxen
+ *   ("Partner werden" / "Mehr erfahren") für statische QR-Codes. Diese
+ *   beiden QR-Codes wurden bewusst entfernt (Entscheidung: werden in
+ *   einer künftigen Grafikversion vom Grafiker fest eingebaut, da nicht
+ *   individualisiert) — `fields` enthält daher aktuell keine Einträge.
+ *   Die Boxen selbst bleiben auf der Hintergrundgrafik sichtbar, werden
+ *   aber vom Renderer nicht mehr befüllt.
  *
- * WICHTIG:
- *
- * 1) Diese beiden QR-Codes sind STATISCH (nicht personalisiert) — sie
- *    zeigen für jede Repräsentantin/jeden Repräsentanten auf dieselbe
- *    Ziel-URL. Erzeugung erfolgt über den bestehenden
- *    `core/qr/generateQr.js`, siehe
- *    `core/materials/generateFlyerMaterial.js`. Ziel-URLs (User-
- *    bestätigt, siehe Konversation — bei Bedarf hier anpassen):
- *      - "Partner werden" → https://www.its-for-kids.de/spenden/partnerschaftsantrag-auswahl
- *      - "Mehr erfahren"  → https://www.its-for-kids.de
- * 2) `legacyContentCovers: []` — der Rückseiten-Master enthält keine
- *    personalisierten Felder (keine Name/Telefon/E-Mail-Platzhalter),
- *    daher entfällt der gesamte Cover-Mechanismus hier von vornherein.
+ * `legacyContentCovers: []` — der Rückseiten-Master enthält keine
+ * personalisierten Felder (keine Name/Telefon/E-Mail-Platzhalter),
+ * daher entfällt der gesamte Cover-Mechanismus hier von vornherein.
  */
 
 const BACKGROUND_URL = new URL("./background.pdf", import.meta.url);
@@ -66,27 +55,7 @@ export const flyerPrintBackTemplate = Object.freeze({
   }),
   fonts: Object.freeze({}),
   legacyContentCovers: Object.freeze([]),
-  fields: Object.freeze({
-    // Box "Partner werden": x 95.75-111.20mm, y 169.98-184.51mm,
-    // 15.45×14.53mm — QR quadratisch auf 14.53mm (Boxhöhe), horizontal
-    // zentriert: 95.75 + (15.45 - 14.53) / 2 = 96.21mm.
-    qrPartnerWerden: Object.freeze({
-      type: "image",
-      shape: "rect",
-      xMm: 96.21,
-      yMm: 169.98,
-      widthMm: 14.53,
-      heightMm: 14.53,
-    }),
-    // Box "Mehr erfahren": x 119.80-135.26mm, y 169.98-184.51mm,
-    // gleiche Logik: 119.80 + (15.46 - 14.53) / 2 = 120.27mm.
-    qrMehrErfahren: Object.freeze({
-      type: "image",
-      shape: "rect",
-      xMm: 120.27,
-      yMm: 169.98,
-      widthMm: 14.53,
-      heightMm: 14.53,
-    }),
-  }),
+  // Bewusst leer: die beiden statischen QR-Codes ("Partner werden" /
+  // "Mehr erfahren") wurden entfernt, siehe Kommentar oben.
+  fields: Object.freeze({}),
 });

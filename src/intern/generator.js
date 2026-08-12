@@ -28,9 +28,6 @@ import { flyerPrintBackTemplate } from "../../templates/flyer-print-back/templat
 import { flyerHomeBackTemplate } from "../../templates/flyer-home-back/template.config.js";
 import { flyerFemalePrintBackTemplate } from "../../templates/flyer-female-print-back/template.config.js";
 import { flyerFemaleHomeBackTemplate } from "../../templates/flyer-female-home-back/template.config.js";
-import { generateQr as generateStaticQr } from "../../core/qr/generateQr.js";
-import { loadImage as loadLogoImage } from "../../core/branding/loadImage.js";
-import { QR_COLOR_GRUEN } from "../../core/config/colors.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import {
@@ -44,9 +41,16 @@ import { shouldShowFieldCrop } from "../../core/screenshot/shouldShowFieldCrop.j
 import { buildUncertainCharacterHint } from "../../core/screenshot/buildUncertainCharacterHint.js";
 import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncertainCharacterIndex.js";
 import { isFieldAutoRecognized } from "../../core/screenshot/isFieldAutoRecognized.js";
+import {
+  ROLE_KEY_LIST,
+  getRoleConfig,
+  roleRequiresRegion,
+  isFlyerTemplateAvailableForRole,
+  isCertificateTemplateAvailableForRole,
+} from "../../core/materials/roleConfig.js";
 
-const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
-const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
+const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
+const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
 const CERTIFICATE_KEYS = new Set([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]);
 
@@ -92,50 +96,6 @@ const FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
 function resolveFlyerBackTemplate(materialKey, gender) {
   const byGender = FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
   return byGender[gender === "female" ? "female" : "male"];
-}
-
-// Ziel-URLs der beiden statischen QR-Codes auf der Flyer-Rückseite
-// (siehe `templates/flyer-print-back/template.config.js`) — bewusst
-// hier zentralisiert (nicht in der Template-Config, die kennt nur
-// Koordinaten/Größen, keine Inhalte). User-bestätigt (siehe
-// Konversation): verlinkt auf die echte Partnerschaftsantrag-Seite
-// bzw. die Startseite der Stiftung. Bei Bedarf hier anpassen.
-const FLYER_BACK_QR_PARTNER_WERDEN_URL = "https://www.its-for-kids.de/spenden/partnerschaftsantrag-auswahl";
-const FLYER_BACK_QR_MEHR_ERFAHREN_URL = "https://www.its-for-kids.de";
-
-/**
- * Erzeugt die beiden statischen (nicht personalisierten) QR-Codes für
- * die Flyer-Rückseite. Nutzt bewusst denselben Basis-Generator wie die
- * personalisierten Flyer-QR-Codes (`core/qr/generateQr.js`) statt einen
- * zweiten QR-Mechanismus einzuführen — Ausgabeformat identisch zu
- * `qrPaypalAsset`/`qrGiroAsset` (`{bytes, mimeType: "image/png"}`).
- * Wird pro Generierungsvorgang einmal aufgerufen (nicht pro
- * Repräsentant:in nötig, da inhaltlich immer gleich) — siehe Aufrufer
- * weiter unten.
- */
-async function generateFlyerBackQrAssets(logo) {
-  const logoImage = await loadLogoImage(logo);
-  const [partnerWerdenDataUrl, mehrErfahrenDataUrl] = await Promise.all([
-    generateStaticQr(document.createElement("canvas"), FLYER_BACK_QR_PARTNER_WERDEN_URL, logoImage, QR_COLOR_GRUEN),
-    generateStaticQr(document.createElement("canvas"), FLYER_BACK_QR_MEHR_ERFAHREN_URL, logoImage, QR_COLOR_GRUEN),
-  ]);
-  return {
-    qrPartnerWerdenAsset: dataUrlToImageAsset(partnerWerdenDataUrl),
-    qrMehrErfahrenAsset: dataUrlToImageAsset(mehrErfahrenDataUrl),
-  };
-}
-
-function dataUrlToImageAsset(dataUrl) {
-  const match = /^data:image\/png;base64,(.*)$/s.exec(dataUrl);
-  if (!match) {
-    throw new Error("generateFlyerBackQrAssets: unerwartetes Datenformat des erzeugten QR-Codes.");
-  }
-  const binaryString = atob(match[1]);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i += 1) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return { bytes, mimeType: "image/png" };
 }
 
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
@@ -192,6 +152,7 @@ function getScreenshotExtractionErrorMessage(reason) {
  * Login-/Logout-Logik — siehe `src/intern/auth.js`.
  */
 export function initGenerator() {
+  const roleSelect = document.getElementById("role-select");
   const firstNameInput = document.getElementById("first-name-input");
   const lastNameInput = document.getElementById("last-name-input");
   const ifkIdInput = document.getElementById("ifk-id-input");
@@ -204,7 +165,9 @@ export function initGenerator() {
   const photoUrlInput = document.getElementById("photo-url-input");
   const photoUrlField = document.getElementById("photo-url-field");
   const photoUrlErrorHint = document.getElementById("photo-url-error-hint");
+  const federalStateField = document.getElementById("federal-state-field");
   const federalStateInput = document.getElementById("federal-state-input");
+  const regionField = document.getElementById("region-field");
   const regionInput = document.getElementById("region-input");
   const paypalInput = document.getElementById("paypal-input");
   const generateBtn = document.getElementById("generate-btn");
@@ -219,6 +182,55 @@ export function initGenerator() {
   const photoCropStatusEl = document.getElementById("photo-crop-status");
   const photoCropResetBtn = document.getElementById("photo-crop-reset-btn");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
+  // Checkboxen mit rollenabhängiger Vorlagenverfügbarkeit (Flyer +
+  // Urkunde) — die beiden schwarzen QR-Checkboxen sind bewusst NICHT
+  // enthalten, da QR-Codes für jeden Wegbegleiter-Typ erzeugt werden
+  // können (siehe Vorgabe, Abschnitt 9).
+  const roleGatedMaterialCheckboxes = materialCheckboxes.filter(
+    (checkbox) => checkbox.hasAttribute("data-material-flyer") || checkbox.dataset.materialKey === MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE
+  );
+
+  // Aktuell ausgewählter Wegbegleiter-Typ — Default `representative`
+  // entspricht dem bisherigen alleinigen Verhalten der Seite (Dropdown
+  // steht trotzdem sichtbar ganz am Anfang, siehe intern/index.html).
+  function selectedRoleKey() {
+    return roleSelect.value;
+  }
+
+  // Blendet Bundesland/Region vollständig aus dem Formular aus (nicht
+  // nur `required=false`) und deaktiviert die zugehörige Vorlagen-
+  // Verfügbarkeit für Flyer/Urkunde, sobald eine andere Rolle als
+  // `representative` gewählt ist — siehe `core/materials/roleConfig.js`.
+  // Bereits eingetragene Werte bleiben beim Rollenwechsel erhalten
+  // (nicht gelöscht), damit ein Zurückwechseln zu `representative`
+  // keine Daten verliert.
+  function applyRoleToForm() {
+    const roleKey = selectedRoleKey();
+    const requiresRegion = roleRequiresRegion(roleKey);
+    federalStateField.hidden = !requiresRegion;
+    regionField.hidden = !requiresRegion;
+    updateMaterialAvailabilityForRole(roleKey);
+  }
+
+  function updateMaterialAvailabilityForRole(roleKey) {
+    for (const checkbox of roleGatedMaterialCheckboxes) {
+      const materialKey = checkbox.dataset.materialKey;
+      const isFlyerMaterial = checkbox.hasAttribute("data-material-flyer");
+      const available = isFlyerMaterial
+        ? isFlyerTemplateAvailableForRole(roleKey, materialKey)
+        : isCertificateTemplateAvailableForRole(roleKey, materialKey);
+
+      const item = checkbox.closest(".material-item");
+      const defaultHint = item?.querySelector("[data-default-hint]");
+      const unavailableHint = item?.querySelector("[data-role-unavailable-hint]");
+
+      checkbox.disabled = !available;
+      if (!available) checkbox.checked = false;
+      item?.classList.toggle("material-item-disabled", !available);
+      if (defaultHint) defaultHint.hidden = !available;
+      if (unavailableHint) unavailableHint.hidden = available;
+    }
+  }
 
   const screenshotDropzone = document.getElementById("screenshot-dropzone");
   const screenshotSelectBtn = document.getElementById("screenshot-select-btn");
@@ -1349,6 +1361,12 @@ export function initGenerator() {
     lastPhotoUrl = null;
     updatePhotoLinkCompletionState();
 
+    const role = selectedRoleKey();
+    if (!role) {
+      showError("Bitte zuerst einen Wegbegleiter-Typ auswählen.");
+      return;
+    }
+
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
     if (!firstName || !lastName) {
@@ -1375,16 +1393,26 @@ export function initGenerator() {
       return;
     }
 
-    const federalState = federalStateInput.value.trim();
-    if (!federalState) {
-      showError("Bitte ein Bundesland eintragen.");
-      return;
-    }
+    // Bundesland/Region sind ausschließlich Bestandteil der
+    // Datenerfassung, wenn die aktuell gewählte Rolle sie benötigt
+    // (aktuell nur `representative`, siehe `core/materials/roleConfig.js`)
+    // — für alle anderen Rollen bleiben beide Felder `undefined` und
+    // werden weder validiert noch ins Manifest übernommen.
+    const requiresRegion = roleRequiresRegion(role);
+    let federalState;
+    let region;
+    if (requiresRegion) {
+      federalState = federalStateInput.value.trim();
+      if (!federalState) {
+        showError("Bitte ein Bundesland eintragen.");
+        return;
+      }
 
-    const region = regionInput.value.trim();
-    if (!region) {
-      showError("Bitte eine Region eintragen.");
-      return;
+      region = regionInput.value.trim();
+      if (!region) {
+        showError("Bitte eine Region eintragen.");
+        return;
+      }
     }
 
     const materialKeys = selectedMaterialKeys();
@@ -1475,6 +1503,7 @@ export function initGenerator() {
       firstName,
       lastName,
       ifkId: ifkIdCheck.normalized,
+      role,
       gender: genderInput ? genderInput.value : undefined,
       email,
       phone,
@@ -1489,14 +1518,17 @@ export function initGenerator() {
 
     try {
       // QR-Materialien: alles vom Nutzer ausgewählte, plus (nur intern,
-      // nicht Teil der Ergebnisliste/des Zips) die grünen PayPal-/
+      // nicht Teil der Ergebnisliste/des Zips) die schwarzen PayPal-/
       // GiroCode-Varianten, falls ein Flyer ausgewählt ist und der Nutzer
       // diese nicht ohnehin schon separat ausgewählt hat — der Flyer
       // benötigt exakt diese beiden Grafiken zum Einbetten (siehe
       // `templates/*/template.config.js`, Felder `qrPaypal`/`qrGiro`).
+      // Es werden ausschließlich die schwarzen Varianten (mit grünem
+      // Logo) verwendet — die grünen QR-Varianten wurden aus dem
+      // produktiven Workflow entfernt (siehe `materialTypes.js`).
       const selectedQrKeys = materialKeys.filter((key) => PAYPAL_KEYS.has(key) || GIRO_KEYS.has(key));
       const extraFlyerQrKeys = needsFlyer
-        ? [MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_GREEN].filter(
+        ? [MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK].filter(
             (key) => !selectedQrKeys.includes(key)
           )
         : [];
@@ -1521,8 +1553,23 @@ export function initGenerator() {
       const files = qrResults.filter((result) => selectedQrKeys.includes(result.key));
 
       if (needsFlyer) {
-        const qrPaypalResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN);
-        const qrGiroResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_GIRO_GREEN);
+        const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
+        // Verteidigungslinie gegen einen stillen Repräsentanten-Fallback:
+        // die Materialauswahl in der Oberfläche deaktiviert bereits
+        // Flyer-Checkboxen ohne Vorlage für die gewählte Rolle (siehe
+        // `updateMaterialAvailabilityForRole`) — dieser Check greift nur,
+        // falls ein Flyer trotzdem ausgewählt wurde (z. B. Altzustand des
+        // Formulars vor einem Rollenwechsel).
+        for (const entry of flyerEntries) {
+          if (!isFlyerTemplateAvailableForRole(role, entry.key)) {
+            throw new Error(
+              `Für den gewählten Wegbegleiter-Typ ist noch keine Flyer-Vorlage hinterlegt (${getRoleConfig(role).label}).`
+            );
+          }
+        }
+
+        const qrPaypalResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK);
+        const qrGiroResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_GIRO_BLACK);
         const qrPaypalAsset = {
           bytes: new Uint8Array(await qrPaypalResult.content.arrayBuffer()),
           mimeType: "image/png",
@@ -1532,13 +1579,6 @@ export function initGenerator() {
           mimeType: "image/png",
         };
 
-        // Rückseiten-QR-Codes sind statisch (nicht personalisiert, siehe
-        // `generateFlyerBackQrAssets`) — bewusst einmal für den gesamten
-        // Generierungsvorgang erzeugt, nicht pro Flyer-Materialtyp
-        // (Druckerei/Home) erneut, da beide dieselbe Rückseite verwenden.
-        const { qrPartnerWerdenAsset, qrMehrErfahrenAsset } = await generateFlyerBackQrAssets(logoUrl);
-
-        const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
         for (const entry of flyerEntries) {
           const gender = genderInput ? genderInput.value : undefined;
           const flyerFile = await generateFlyerMaterial({
@@ -1549,8 +1589,6 @@ export function initGenerator() {
             photoAsset,
             qrPaypalAsset,
             qrGiroAsset,
-            qrPartnerWerdenAsset,
-            qrMehrErfahrenAsset,
             deps: { loadTemplateAssets: loadTemplateAssetsBrowser },
           });
           files.push(flyerFile);
@@ -1561,6 +1599,13 @@ export function initGenerator() {
       // Prüfung weiter oben) — beeinflusst keine anderen Materialien.
       if (needsCertificate && genderInput) {
         const certificateEntry = manifest.materials.find((entry) => CERTIFICATE_KEYS.has(entry.key));
+        // Siehe Kommentar zum Flyer-Fallback-Schutz oben — dieselbe
+        // Absicherung für die Urkunde.
+        if (!isCertificateTemplateAvailableForRole(role, certificateEntry.key)) {
+          throw new Error(
+            `Für den gewählten Wegbegleiter-Typ ist noch keine Urkunden-Vorlage hinterlegt (${getRoleConfig(role).label}).`
+          );
+        }
         const certificateFile = await generateCertificateMaterial({
           entry: certificateEntry,
           templateConfig: CERTIFICATE_TEMPLATE_BY_GENDER[genderInput.value],
@@ -1721,6 +1766,9 @@ export function initGenerator() {
   photoCropOpenBtn.addEventListener("click", handleOpenPhotoCropEditor);
   photoCropResetBtn.addEventListener("click", resetPhotoCrop);
   updatePhotoCropStatusUI();
+
+  roleSelect.addEventListener("change", applyRoleToForm);
+  applyRoleToForm();
 
   generateBtn.addEventListener("click", handleGenerate);
   deliverySendBtn.addEventListener("click", handleSendDelivery);

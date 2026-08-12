@@ -110,6 +110,18 @@
           <img class="screenshot-lightbox-img" id="screenshot-lightbox-img" alt="Screenshot, vergrößert" />
         </div>
 
+        <div class="person-field role-field">
+          <label class="field-label" for="role-select">Für welchen Wegbegleiter möchtest du Materialien erstellen?</label>
+          <select id="role-select">
+            <option value="representative">Repräsentant</option>
+            <option value="ambassador">Botschafter</option>
+            <option value="economic_council">Wirtschaftsrat</option>
+            <option value="expert_council">Fachrat</option>
+            <option value="curator">Kurator</option>
+            <option value="advisory_board">Beirat</option>
+          </select>
+        </div>
+
         <div class="person-fields">
           <div class="person-field">
             <label class="field-label" for="first-name-input">Vorname</label>
@@ -155,11 +167,11 @@
             <label class="field-label" for="phone-input">Telefonnummer</label>
             <input type="tel" id="phone-input" placeholder="z. B. 0170 1234567" />
           </div>
-          <div class="person-field">
+          <div class="person-field" id="federal-state-field">
             <label class="field-label" for="federal-state-input">Bundesland</label>
             <input type="text" id="federal-state-input" placeholder="z. B. Bayern" />
           </div>
-          <div class="person-field">
+          <div class="person-field" id="region-field">
             <label class="field-label" for="region-input">Region</label>
             <input type="text" id="region-input" placeholder="z. B. München" />
           </div>
@@ -264,24 +276,22 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
               Flyer – Druckerei
-              <span class="material-item-hint">Prototyp, Foto nötig</span>
+              <span class="material-item-hint" data-default-hint>Prototyp, Foto nötig</span>
+              <span class="material-item-hint" data-role-unavailable-hint hidden
+                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+              >
             </label>
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
               Flyer – Home
-              <span class="material-item-hint">Prototyp, Foto nötig</span>
-            </label>
-            <label class="material-item">
-              <input type="checkbox" data-material-key="QR_PAYPAL_GREEN" checked />
-              PayPal QR grün
+              <span class="material-item-hint" data-default-hint>Prototyp, Foto nötig</span>
+              <span class="material-item-hint" data-role-unavailable-hint hidden
+                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+              >
             </label>
             <label class="material-item">
               <input type="checkbox" data-material-key="QR_PAYPAL_BLACK" checked />
               PayPal QR schwarz
-            </label>
-            <label class="material-item">
-              <input type="checkbox" data-material-key="QR_GIRO_GREEN" checked />
-              GiroCode grün
             </label>
             <label class="material-item">
               <input type="checkbox" data-material-key="QR_GIRO_BLACK" checked />
@@ -290,7 +300,10 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="CERTIFICATE_REPRESENTATIVE" />
               Repräsentantenurkunde
-              <span class="material-item-hint">Geschlecht nötig</span>
+              <span class="material-item-hint" data-default-hint>Geschlecht nötig</span>
+              <span class="material-item-hint" data-role-unavailable-hint hidden
+                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+              >
             </label>
           </div>
         </fieldset>

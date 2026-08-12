@@ -1,9 +1,11 @@
-import { GENDER_VALUES } from "./buildMaterialManifest.js";
+import { ROLE_KEYS, getRoleLabel } from "./roleConfig.js";
 
 /**
  * Liefert die deutsche Rollenbezeichnung für die Repräsentanten-Mail
  * anhand von `person.gender`. Reine Textzuordnung, keine
- * Seiteneffekte.
+ * Seiteneffekte. Delegiert an die zentrale, für alle Wegbegleiter-Typen
+ * gültige Rollen-Konfiguration (`core/materials/roleConfig.js`), damit
+ * die Bezeichnung nur an einer Stelle gepflegt wird.
  *
  * @param {"male" | "female" | undefined} gender
  * @returns {"Repräsentant" | "Repräsentantin"}
@@ -11,5 +13,5 @@ import { GENDER_VALUES } from "./buildMaterialManifest.js";
  *   `"male"` und fehlender Angabe) ergibt "Repräsentant".
  */
 export function getRepresentativeRoleLabel(gender) {
-  return gender === GENDER_VALUES.FEMALE ? "Repräsentantin" : "Repräsentant";
+  return getRoleLabel(ROLE_KEYS.REPRESENTATIVE, gender);
 }

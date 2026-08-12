@@ -52,10 +52,13 @@ function buildFlyerTextValues(person, templateConfig) {
  *
  * Seit Einführung der Rückseite (siehe Konversation) liefert diese
  * Funktion IMMER ein 2-seitiges PDF (Seite 1 = Vorderseite mit den
- * personalisierten Feldern, Seite 2 = die für alle Repräsentant:innen
- * gleiche Rückseite mit den beiden statischen QR-Codes
- * "Partner werden"/"Mehr erfahren") — es gibt keinen separaten,
- * einseitigen Flyer-Download mehr.
+ * personalisierten Feldern, Seite 2 = die für alle Wegbegleiter:innen
+ * gleiche, statische Rückseite) — es gibt keinen separaten, einseitigen
+ * Flyer-Download mehr. Die früher auf Seite 2 personalisiert erzeugten
+ * statischen QR-Codes ("Partner werden"/"Mehr erfahren") wurden
+ * entfernt (siehe `templates/flyer-print-back/template.config.js`) —
+ * sie werden künftig vom Grafiker fest in die Vorlage eingebaut, da sie
+ * ohnehin nicht individualisiert sind.
  *
  * @param {object} params
  * @param {{key: string, label: string, category: string, format: string, extension: string, filename: string}} params.entry
@@ -77,20 +80,17 @@ function buildFlyerTextValues(person, templateConfig) {
  *   Bereits geladenes, normalisiertes Foto (siehe
  *   `core/photo/normalizePhotoToPng.js`) — Pflicht für Flyer-Materialien.
  * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrPaypalAsset
- *   Bereits erzeugter PayPal-QR (aus `generateMaterial.js`/`generateQrMaterials.js`).
+ *   Bereits erzeugter PayPal-QR (aus `generateMaterial.js`/`generateQrMaterials.js`,
+ *   ausschließlich die schwarze Variante mit grünem Logo — siehe
+ *   `materialTypes.js`).
  * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrGiroAsset
- *   Bereits erzeugter GiroCode (aus `generateMaterial.js`/`generateQrMaterials.js`).
- * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrPartnerWerdenAsset
- *   Statischer QR für die Rückseiten-Box "Partner werden" (nicht
- *   personalisiert — siehe `templates/flyer-print-back/template.config.js`).
- * @param {{bytes: Uint8Array, mimeType: "image/png"}} params.qrMehrErfahrenAsset
- *   Statischer QR für die Rückseiten-Box "Mehr erfahren" (nicht
- *   personalisiert — siehe `templates/flyer-print-back/template.config.js`).
+ *   Bereits erzeugter GiroCode (aus `generateMaterial.js`/`generateQrMaterials.js`,
+ *   ausschließlich die schwarze Variante mit grünem Logo).
  * @param {object} [params.deps] Injizierbare Abhängigkeiten für Tests.
  * @param {typeof renderMultiPageDocument} [params.deps.renderMultiPageDocument]
  * @returns {Promise<{key: string, label: string, category: string, format: string, extension: string, filename: string, mimeType: "application/pdf", content: Blob | Uint8Array, size: number, warnings: Array<object>}>}
  * @throws {Error} Bei fehlendem Dateinamen im Eintrag, fehlendem
- *   Foto-Asset oder fehlenden QR-Assets (vordere UND hintere).
+ *   Foto-Asset oder fehlenden QR-Assets.
  */
 export async function generateFlyerMaterial({
   entry,
@@ -100,8 +100,6 @@ export async function generateFlyerMaterial({
   photoAsset,
   qrPaypalAsset,
   qrGiroAsset,
-  qrPartnerWerdenAsset,
-  qrMehrErfahrenAsset,
   deps = {},
 } = {}) {
   if (!entry || typeof entry.filename !== "string" || entry.filename.trim() === "") {
@@ -115,11 +113,6 @@ export async function generateFlyerMaterial({
   }
   if (!qrPaypalAsset || !qrGiroAsset) {
     throw new Error("generateFlyerMaterial: 'qrPaypalAsset' und 'qrGiroAsset' sind für Flyer-Materialien erforderlich.");
-  }
-  if (!qrPartnerWerdenAsset || !qrMehrErfahrenAsset) {
-    throw new Error(
-      "generateFlyerMaterial: 'qrPartnerWerdenAsset' und 'qrMehrErfahrenAsset' sind für die Flyer-Rückseite erforderlich."
-    );
   }
 
   const { renderMultiPageDocument: renderMultiPageDocumentFn = renderMultiPageDocument, ...renderDeps } = deps;
@@ -137,10 +130,6 @@ export async function generateFlyerMaterial({
       },
       {
         templateConfig: backTemplateConfig,
-        imageAssets: {
-          qrPartnerWerden: qrPartnerWerdenAsset,
-          qrMehrErfahren: qrMehrErfahrenAsset,
-        },
       },
     ],
     deps: renderDeps,

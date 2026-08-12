@@ -4,7 +4,7 @@ import { buildMaterialFilenames } from "./buildMaterialFilenames.js";
 
 const VALID_IFK_ID = "IFK7QX";
 
-test("liefert die korrekten Dateinamen für alle sieben Materialtypen", () => {
+test("liefert die korrekten Dateinamen für alle fünf Materialtypen", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
@@ -15,9 +15,7 @@ test("liefert die korrekten Dateinamen für alle sieben Materialtypen", () => {
 
   assert.equal(filenames.FLYER_DRUCKEREI, "IFK_Max_Mustermann_Flyer_Druckerei.pdf");
   assert.equal(filenames.FLYER_HOME, "IFK_Max_Mustermann_Flyer_Home.pdf");
-  assert.equal(filenames.QR_PAYPAL_GREEN, "IFK_Max_Mustermann_PayPal_QR_gruen.png");
   assert.equal(filenames.QR_PAYPAL_BLACK, "IFK_Max_Mustermann_PayPal_QR_schwarz.png");
-  assert.equal(filenames.QR_GIRO_GREEN, "IFK_Max_Mustermann_GiroCode_gruen.png");
   assert.equal(filenames.QR_GIRO_BLACK, "IFK_Max_Mustermann_GiroCode_schwarz.png");
   assert.equal(filenames.CERTIFICATE_REPRESENTATIVE, "Urkunde_Max_Mustermann.pdf");
 
@@ -113,13 +111,13 @@ test("unbekannter Materialtyp wirft einen Fehler", () => {
   );
 });
 
-test("ohne 'materials' werden alle sieben Dateinamen erzeugt", () => {
+test("ohne 'materials' werden alle fünf Dateinamen erzeugt", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
     ifkId: VALID_IFK_ID,
   });
-  assert.equal(result.length, 7);
+  assert.equal(result.length, 5);
 });
 
 test("Urkunde: 'Daniel Feigenbutz' erzeugt 'Urkunde_Daniel_Feigenbutz.pdf'", () => {
@@ -165,7 +163,7 @@ test("Urkunde: problematische Dateisystemzeichen erzeugen keinen ungültigen Dat
 
 test("'materials' akzeptiert auch das Ergebnis von buildMaterialList", async () => {
   const { buildMaterialList } = await import("./buildMaterialList.js");
-  const materials = buildMaterialList({ include: ["QR_GIRO_GREEN"] });
+  const materials = buildMaterialList({ include: ["QR_GIRO_BLACK"] });
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
@@ -173,5 +171,5 @@ test("'materials' akzeptiert auch das Ergebnis von buildMaterialList", async () 
     materials,
   });
   assert.equal(result.length, 1);
-  assert.equal(result[0].filename, "IFK_Max_Mustermann_GiroCode_gruen.png");
+  assert.equal(result[0].filename, "IFK_Max_Mustermann_GiroCode_schwarz.png");
 });

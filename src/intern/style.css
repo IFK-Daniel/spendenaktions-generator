@@ -565,6 +565,28 @@
   margin-bottom: 0;
 }
 
+.role-field {
+  margin-bottom: 20px;
+}
+
+.role-field select {
+  width: 100%;
+  max-width: 420px;
+  padding: 14px;
+  font-size: 15px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  color: var(--text);
+}
+
+.role-field select:focus {
+  outline: none;
+  border-color: var(--ifk-green);
+  box-shadow: 0 0 0 3px rgba(140, 193, 64, 0.18);
+}
+
 .person-fields {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -931,23 +953,26 @@ textarea.field-complete {
   cursor: not-allowed;
 }
 
+/* Seit Entfernung der grünen QR-Varianten gibt es nur noch zwei
+   QR-Ergebniskarten (PayPal schwarz, GiroCode schwarz) — die Basis-Grid
+   ist deshalb bewusst zweispaltig statt vierspaltig, damit die beiden
+   QR-Karten je die halbe verfügbare Breite einnehmen, ohne leere
+   Spalten zu hinterlassen. */
 #result-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   max-width: 1100px;
   margin: 0 auto;
 }
 
-/* QR-Ergebnisse (PayPal/GiroCode): je eine der vier Spalten. */
+/* QR-Ergebnisse (PayPal/GiroCode): je eine der zwei Spalten (halbe Breite). */
 .result-block {
   grid-column: span 1;
 }
 
-/* Flyer-Ergebnisse (PDF): doppelt so breit wie eine QR-Karte — bei vier
-   Grid-Spalten stehen beide Flyer damit nebeneinander auf einer Zeile
-   (je zwei Spalten), bei weniger Spalten (siehe Media Queries unten)
-   wächst dieselbe Regel automatisch auf die volle Zeilenbreite. */
+/* Flyer-/Urkunden-Ergebnisse (PDF): volle Zeilenbreite (beide Spalten) —
+   bleiben dadurch unverändert breit wie bisher. */
 .result-block--flyer {
   grid-column: span 2;
 }
@@ -960,15 +985,6 @@ textarea.field-complete {
 @media (max-width: 900px) {
   .person-fields {
     grid-template-columns: 1fr 1fr;
-  }
-}
-
-/* Nicht überlappende Breakpoints für #result-grid (statt zweier
-   verschachtelter max-width-Regeln mit gleicher Spezifität) — macht die
-   Kaskade eindeutig, unabhängig von der Regel-Reihenfolge im Stylesheet. */
-@media (min-width: 701px) and (max-width: 900px) {
-  #result-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 

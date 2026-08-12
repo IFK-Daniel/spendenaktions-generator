@@ -22,10 +22,6 @@ function manifestWithFlyer() {
   });
 }
 
-function backAssets() {
-  return { qrPartnerWerdenAsset: fakePhotoAsset(), qrMehrErfahrenAsset: fakePhotoAsset() };
-}
-
 test("erzeugt ein zweiseitiges Flyer-PDF-Material mit korrektem Dateinamen/Mimetype und ruft renderMultiPageDocument mit Vorder- UND Rückseite auf", async () => {
   const manifest = manifestWithFlyer();
   const entry = manifest.materials[0];
@@ -44,7 +40,6 @@ test("erzeugt ein zweiseitiges Flyer-PDF-Material mit korrektem Dateinamen/Mimet
     photoAsset: fakePhotoAsset(),
     qrPaypalAsset: fakePhotoAsset(),
     qrGiroAsset: fakePhotoAsset(),
-    ...backAssets(),
     deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
   });
 
@@ -63,8 +58,10 @@ test("erzeugt ein zweiseitiges Flyer-PDF-Material mit korrektem Dateinamen/Mimet
   assert.equal(frontPage.textValues.phone, "0170 1234567");
   assert.equal(frontPage.textValues.email, "kim.yu@example.com");
   assert.equal(frontPage.imageAssets.photo.bytes, FAKE_PNG_BYTES);
-  assert.equal(backPage.imageAssets.qrPartnerWerden.bytes, FAKE_PNG_BYTES);
-  assert.equal(backPage.imageAssets.qrMehrErfahren.bytes, FAKE_PNG_BYTES);
+  // Die Rückseite hat seit Entfernung der statischen QR-Codes (siehe
+  // `templates/flyer-print-back/template.config.js`) keine Bild-Assets
+  // mehr — `imageAssets` wird für die Rückseite gar nicht mehr gesetzt.
+  assert.equal(backPage.imageAssets, undefined);
 });
 
 test("region-Feld mit 'regionPrefix' in der Template-Config (z. B. weibliche Vorlage) rendert den vollen Satz, 'regionInParagraph' bleibt der bloße Regionsname", async () => {
@@ -85,7 +82,6 @@ test("region-Feld mit 'regionPrefix' in der Template-Config (z. B. weibliche Vor
     photoAsset: fakePhotoAsset(),
     qrPaypalAsset: fakePhotoAsset(),
     qrGiroAsset: fakePhotoAsset(),
-    ...backAssets(),
     deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
   });
 
@@ -107,7 +103,6 @@ test("gibt warnings von renderMultiPageDocument unverändert durch", async () =>
     photoAsset: fakePhotoAsset(),
     qrPaypalAsset: fakePhotoAsset(),
     qrGiroAsset: fakePhotoAsset(),
-    ...backAssets(),
     deps: { renderMultiPageDocument: fakeRenderMultiPageDocument },
   });
 
@@ -126,13 +121,12 @@ test("wirft ohne Foto-Asset", async () => {
         photoAsset: null,
         qrPaypalAsset: fakePhotoAsset(),
         qrGiroAsset: fakePhotoAsset(),
-        ...backAssets(),
       }),
     /photoAsset/
   );
 });
 
-test("wirft ohne QR-Assets (Vorderseite)", async () => {
+test("wirft ohne QR-Assets", async () => {
   const manifest = manifestWithFlyer();
   await assert.rejects(
     () =>
@@ -144,28 +138,8 @@ test("wirft ohne QR-Assets (Vorderseite)", async () => {
         photoAsset: fakePhotoAsset(),
         qrPaypalAsset: null,
         qrGiroAsset: null,
-        ...backAssets(),
       }),
     /qrPaypalAsset/
-  );
-});
-
-test("wirft ohne QR-Assets (Rückseite)", async () => {
-  const manifest = manifestWithFlyer();
-  await assert.rejects(
-    () =>
-      generateFlyerMaterial({
-        entry: manifest.materials[0],
-        templateConfig: {},
-        backTemplateConfig: {},
-        person: manifest.person,
-        photoAsset: fakePhotoAsset(),
-        qrPaypalAsset: fakePhotoAsset(),
-        qrGiroAsset: fakePhotoAsset(),
-        qrPartnerWerdenAsset: null,
-        qrMehrErfahrenAsset: null,
-      }),
-    /qrPartnerWerdenAsset/
   );
 });
 
@@ -174,7 +148,7 @@ test("wirft bei Nicht-Flyer-Materialtyp", async () => {
     firstName: "Kim",
     lastName: "Yu",
     ifkId: "IFK7QX",
-    materials: [MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN],
+    materials: [MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK],
   });
   await assert.rejects(
     () =>
@@ -186,7 +160,6 @@ test("wirft bei Nicht-Flyer-Materialtyp", async () => {
         photoAsset: fakePhotoAsset(),
         qrPaypalAsset: fakePhotoAsset(),
         qrGiroAsset: fakePhotoAsset(),
-        ...backAssets(),
       }),
     /kein Flyer-Materialtyp/
   );

@@ -5,15 +5,13 @@ import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES, MATERIAL_TYPES_BY_KEY } from "./mat
 const EXPECTED_ORDER = [
   "FLYER_DRUCKEREI",
   "FLYER_HOME",
-  "QR_PAYPAL_GREEN",
   "QR_PAYPAL_BLACK",
-  "QR_GIRO_GREEN",
   "QR_GIRO_BLACK",
   "CERTIFICATE_REPRESENTATIVE",
 ];
 
-test("genau sieben Materialtypen sind vorhanden", () => {
-  assert.equal(MATERIAL_TYPES.length, 7);
+test("genau fünf Materialtypen sind vorhanden (grüne QR-Varianten entfernt)", () => {
+  assert.equal(MATERIAL_TYPES.length, 5);
 });
 
 test("alle erwarteten Schlüssel sind vorhanden", () => {
@@ -31,9 +29,7 @@ test("jeder Materialtyp enthält die erwarteten Metadaten", () => {
   const expected = {
     FLYER_DRUCKEREI: { label: "Flyer Druckerei", category: "flyer", format: "pdf", extension: "pdf" },
     FLYER_HOME: { label: "Flyer Home", category: "flyer", format: "pdf", extension: "pdf" },
-    QR_PAYPAL_GREEN: { label: "PayPal QR grün", category: "qr", format: "png", extension: "png" },
     QR_PAYPAL_BLACK: { label: "PayPal QR schwarz", category: "qr", format: "png", extension: "png" },
-    QR_GIRO_GREEN: { label: "GiroCode grün", category: "qr", format: "png", extension: "png" },
     QR_GIRO_BLACK: { label: "GiroCode schwarz", category: "qr", format: "png", extension: "png" },
     CERTIFICATE_REPRESENTATIVE: {
       label: "Repräsentantenurkunde",
@@ -76,5 +72,5 @@ test("die Definition kann von außen nicht verändert werden", () => {
   }, TypeError);
 
   assert.equal(MATERIAL_TYPES[0].label, "Flyer Druckerei");
-  assert.equal(MATERIAL_TYPES.length, 7);
+  assert.equal(MATERIAL_TYPES.length, 5);
 });

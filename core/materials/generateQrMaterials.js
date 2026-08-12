@@ -2,25 +2,26 @@ import { validateIfkId } from "../id/validateIfkId.js";
 import { extractPaypalLink } from "../text/extractPaypalLink.js";
 import { buildGirocodePayload } from "../girocode/buildGirocodePayload.js";
 import { loadImage as defaultLoadImage } from "../branding/loadImage.js";
-import { QR_COLOR_GRUEN, QR_COLOR_SCHWARZ } from "../config/colors.js";
+import { QR_COLOR_SCHWARZ } from "../config/colors.js";
 import { GIROCODE_DEFAULTS } from "../config/girocodeDefaults.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { generateMaterial } from "./generateMaterial.js";
 
-const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
-const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_GREEN, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
+const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
+const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const HANDLED_QR_KEYS = new Set([...PAYPAL_KEYS, ...GIRO_KEYS]);
 
 const COLOR_BY_KEY = Object.freeze({
-  [MATERIAL_TYPE_KEYS.QR_PAYPAL_GREEN]: QR_COLOR_GRUEN,
   [MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]: QR_COLOR_SCHWARZ,
-  [MATERIAL_TYPE_KEYS.QR_GIRO_GREEN]: QR_COLOR_GRUEN,
   [MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]: QR_COLOR_SCHWARZ,
 });
 
 /**
- * Erzeugt die vier individuellen QR-Materialien (PayPal QR grün/schwarz,
- * GiroCode grün/schwarz) aus einem Materialmanifest.
+ * Erzeugt die zwei individuellen, produktiven QR-Materialien (PayPal QR
+ * schwarz, GiroCode schwarz — jeweils mit grünem It's-for-Kids-Logo in
+ * der Mitte, siehe `logo`-Parameter) aus einem Materialmanifest. Die
+ * vormals ebenfalls erzeugten grünen Varianten wurden aus dem
+ * produktiven Workflow entfernt (siehe `materialTypes.js`).
  *
  * Reine Orchestrierung über bestehenden Core-Modulen — es wird weder
  * QR-/GiroCode-/Branding-Logik dupliziert noch neu implementiert:

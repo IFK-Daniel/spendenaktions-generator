@@ -2,7 +2,7 @@ import logoUrl from "../Medien/IFK Logo nur Zähne.png";
 import { generateQr } from "../core/qr/generateQr.js";
 import { loadImage } from "../core/branding/loadImage.js";
 import { buildGirocodePayload } from "../core/girocode/buildGirocodePayload.js";
-import { QR_COLOR_SCHWARZ, QR_COLOR_GRUEN } from "../core/config/colors.js";
+import { QR_COLOR_SCHWARZ } from "../core/config/colors.js";
 import { GIROCODE_DEFAULTS } from "../core/config/girocodeDefaults.js";
 import { extractPaypalLink } from "../core/text/extractPaypalLink.js";
 import { extractCampaignTitle } from "../core/text/extractCampaignTitle.js";
@@ -21,13 +21,9 @@ const manualTitleInput = document.getElementById("manual-title-input");
 
 const paypalCanvasSchwarz = document.getElementById("paypal-qr-schwarz");
 const paypalDownloadSchwarz = document.getElementById("paypal-download-schwarz");
-const paypalCanvasGruen = document.getElementById("paypal-qr-gruen");
-const paypalDownloadGruen = document.getElementById("paypal-download-gruen");
 
 const girocodeCanvasSchwarz = document.getElementById("girocode-qr-schwarz");
 const girocodeDownloadSchwarz = document.getElementById("girocode-download-schwarz");
-const girocodeCanvasGruen = document.getElementById("girocode-qr-gruen");
-const girocodeDownloadGruen = document.getElementById("girocode-download-gruen");
 
 const emailInput = document.getElementById("email-input");
 const infoCheckbox = document.getElementById("info-checkbox");
@@ -117,14 +113,6 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_SCHWARZ
     );
-    const paypalGruen = await renderQrToCanvas(
-      paypalCanvasGruen,
-      paypalDownloadGruen,
-      paypalLink,
-      `${slug}-paypal-gruen.png`,
-      logoImage,
-      QR_COLOR_GRUEN
-    );
     const girocodeSchwarz = await renderQrToCanvas(
       girocodeCanvasSchwarz,
       girocodeDownloadSchwarz,
@@ -133,29 +121,17 @@ async function handleGenerate() {
       logoImage,
       QR_COLOR_SCHWARZ
     );
-    const girocodeGruen = await renderQrToCanvas(
-      girocodeCanvasGruen,
-      girocodeDownloadGruen,
-      girocodePayload,
-      `${slug}-girocode-gruen.png`,
-      logoImage,
-      QR_COLOR_GRUEN
-    );
 
     generatedState = {
       campaignTitle: campaignTitle || "Kampagne",
       paypalLink,
       pngs: {
         paypalSchwarz,
-        paypalGruen,
         girocodeSchwarz,
-        girocodeGruen,
       },
       filenames: {
         paypalSchwarz: `${slug}-paypal-schwarz.png`,
-        paypalGruen: `${slug}-paypal-gruen.png`,
         girocodeSchwarz: `${slug}-girocode-schwarz.png`,
-        girocodeGruen: `${slug}-girocode-gruen.png`,
       },
     };
     clearEmailStatus();
@@ -194,9 +170,7 @@ async function handleSendEmail() {
       infoOptIn: infoCheckbox.checked,
       attachments: [
         { filename: filenames.paypalSchwarz, content: pngs.paypalSchwarz },
-        { filename: filenames.paypalGruen, content: pngs.paypalGruen },
         { filename: filenames.girocodeSchwarz, content: pngs.girocodeSchwarz },
-        { filename: filenames.girocodeGruen, content: pngs.girocodeGruen },
       ],
     });
 

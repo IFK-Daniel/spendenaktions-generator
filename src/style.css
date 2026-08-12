@@ -335,9 +335,8 @@ button#generate-btn:hover {
 }
 
 .result-group-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .result-block {
@@ -345,13 +344,6 @@ button#generate-btn:hover {
   border-radius: 8px;
   padding: 20px;
   text-align: center;
-}
-
-.result-block h4 {
-  font-weight: 400;
-  font-size: 14px;
-  margin: 0 0 16px;
-  color: var(--text-muted);
 }
 
 .result-block canvas {
@@ -516,10 +508,6 @@ button#email-send-btn:disabled {
 }
 
 @media (max-width: 600px) {
-  .result-group-grid {
-    grid-template-columns: 1fr;
-  }
-
   .page {
     padding: 32px 20px 64px;
   }

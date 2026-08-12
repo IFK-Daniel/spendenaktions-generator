@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!Array.isArray(attachments) || attachments.length !== 4) {
+  if (!Array.isArray(attachments) || attachments.length !== 2) {
     res.status(400).json({ ok: false, error: "Anhänge fehlen oder unvollständig." });
     return;
   }
@@ -62,10 +62,8 @@ export default async function handler(req, res) {
     "vielen Dank für Deinen Einsatz zugunsten benachteiligter Kinder!",
     "",
     `im Anhang findest Du Deine QR-Codes und Materialien für Deine Spendenaktion „${title}“:`,
-    "- PayPal QR-Code Schwarz",
-    "- PayPal QR-Code IFK-Grün",
-    "- GiroCode Schwarz",
-    "- GiroCode IFK-Grün",
+    "- PayPal QR-Code",
+    "- GiroCode",
     "",
     "Wir wünschen Dir viel Erfolg mit Deiner Aktion!",
     "",
@@ -80,10 +78,8 @@ export default async function handler(req, res) {
       <p>vielen Dank für Deinen Einsatz zugunsten benachteiligter Kinder!</p>
       <p>Im Anhang findest Du Deine QR-Codes und Materialien für Deine Spendenaktion „${title}“:</p>
       <ul>
-        <li>PayPal QR-Code Schwarz</li>
-        <li>PayPal QR-Code IFK-Grün</li>
-        <li>GiroCode Schwarz</li>
-        <li>GiroCode IFK-Grün</li>
+        <li>PayPal QR-Code</li>
+        <li>GiroCode</li>
       </ul>
       <p>Wir wünschen Dir viel Erfolg mit Deiner Aktion!</p>
       <p>Herzliche Grüße<br />Dein Team der Stiftung It's for Kids</p>

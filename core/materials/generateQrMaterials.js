@@ -55,14 +55,16 @@ const COLOR_BY_KEY = Object.freeze({
  * @param {Function} [params.deps.generateQr] Siehe `generateMaterial.js`.
  * @param {() => *} [params.deps.createCanvas] Siehe `generateMaterial.js`.
  * @returns {Promise<Array<{key: string, label: string, category: string, format: string, extension: string, filename: string, mimeType: string, content: Blob | Uint8Array, size: number}>>}
- * @throws {Error} Bei ungültigem/fehlendem Manifest, ungültiger IFK-ID,
- *   fehlendem/ungültigem PayPal-Link (wenn benötigt), fehlenden
- *   GiroCode-Daten (wenn benötigt), fehlendem/nicht ladbarem Logo,
- *   unbekanntem QR-Materialtyp oder fehlendem Dateinamen im Manifest.
+ * @throws {Error} Bei ungültigem/fehlendem Manifest, fehlendem/ungültigem
+ *   PayPal-Link (wenn benötigt), fehlenden GiroCode-Daten oder
+ *   ungültiger IFK-ID (wenn GiroCode benötigt — die IFK-ID ist NICHT
+ *   Bestandteil des PayPal-QR-Inhalts, siehe `content: validatedPaypalUrl`
+ *   unten, und daher für ein Manifest ohne GiroCode-Material irrelevant),
+ *   fehlendem/nicht ladbarem Logo, unbekanntem QR-Materialtyp oder
+ *   fehlendem Dateinamen im Manifest.
  */
 export async function generateQrMaterials({ manifest, paypalUrl, girocode, logo, deps = {} } = {}) {
   assertValidManifest(manifest);
-  const ifkId = assertValidIfkId(manifest.person.ifkId);
   const materialsToGenerate = resolveQrMaterials(manifest.materials);
 
   if (materialsToGenerate.length === 0) {
@@ -73,6 +75,12 @@ export async function generateQrMaterials({ manifest, paypalUrl, girocode, logo,
 
   const needsPaypal = materialsToGenerate.some((entry) => PAYPAL_KEYS.has(entry.key));
   const needsGiro = materialsToGenerate.some((entry) => GIRO_KEYS.has(entry.key));
+
+  // Die IFK-ID ist ausschließlich für den GiroCode-Inhalt
+  // (Verwendungszweck, siehe `buildGirocodeContent()`) fachlich nötig —
+  // für ein reines PayPal-QR-Manifest wird sie nicht geprüft (siehe
+  // Vorgabe: IFK-ID ist kein Bestandteil des PayPal-QR-Inhalts).
+  const ifkId = needsGiro ? assertValidIfkId(manifest.person.ifkId) : undefined;
 
   const validatedPaypalUrl = needsPaypal ? assertValidPaypalUrl(paypalUrl) : null;
   const girocodePayload = needsGiro ? buildGirocodeContent(girocode, ifkId) : null;

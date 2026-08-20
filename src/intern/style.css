@@ -4,6 +4,23 @@
   color: var(--text-muted);
 }
 
+/* Materialabhängige Pflichtfeld-Hinweise (siehe generator.js,
+   `buildMissingFieldsMessage`/`skipMessages`) sind mehrzeilig — die
+   geerbte `.error-message`-Regel aus `src/style.css` bricht Zeilen
+   sonst nicht um `\n` um. Nur hier (nicht in der öffentlichen Seite)
+   nötig, daher bewusst auf die ID beschränkt. */
+#error-message {
+  white-space: pre-line;
+}
+
+/* Dezenter Pflichtfeld-Marker (Vorgabe Abschnitt 9) — wird von
+   `updateRequiredFieldIndicators()` in generator.js je nach aktueller
+   Materialauswahl auf den betroffenen Feld-Labels umgeschaltet. */
+.field-label--required::after {
+  content: " *";
+  color: var(--error);
+}
+
 .logout-btn {
   padding: 8px 20px;
   font-size: 13px;

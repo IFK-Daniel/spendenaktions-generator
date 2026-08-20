@@ -161,6 +161,60 @@ test("Urkunde: problematische Dateisystemzeichen erzeugen keinen ungültigen Dat
   assert.notEqual(result[0].filename, "Unknown.pdf");
 });
 
+test("Urkunde allein: fehlende IFK-ID wirft KEINEN Fehler (nicht fachlich benötigt)", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Max",
+    lastName: "Mustermann",
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(result[0].ifkId, undefined);
+});
+
+test("Urkunde allein: ungültige IFK-ID wirft KEINEN Fehler (nicht fachlich benötigt)", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: "IFK-7QX",
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Max_Mustermann.pdf");
+});
+
+test("PayPal QR schwarz allein: fehlende IFK-ID wirft KEINEN Fehler (nicht Bestandteil des QR-Inhalts)", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Max",
+    lastName: "Mustermann",
+    materials: ["QR_PAYPAL_BLACK"],
+  });
+  assert.equal(result[0].filename, "IFK_Max_Mustermann_PayPal_QR_schwarz.png");
+  assert.equal(result[0].ifkId, undefined);
+});
+
+test("GiroCode schwarz allein: fehlende IFK-ID wirft weiterhin einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialFilenames({
+        firstName: "Max",
+        lastName: "Mustermann",
+        materials: ["QR_GIRO_BLACK"],
+      }),
+    /ungültige IFK-ID/
+  );
+});
+
+test("Urkunde + GiroCode: fehlende IFK-ID wirft einen Fehler (von GiroCode benötigt)", () => {
+  assert.throws(
+    () =>
+      buildMaterialFilenames({
+        firstName: "Max",
+        lastName: "Mustermann",
+        materials: ["CERTIFICATE_REPRESENTATIVE", "QR_GIRO_BLACK"],
+      }),
+    /ungültige IFK-ID/
+  );
+});
+
 test("'materials' akzeptiert auch das Ergebnis von buildMaterialList", async () => {
   const { buildMaterialList } = await import("./buildMaterialList.js");
   const materials = buildMaterialList({ include: ["QR_GIRO_BLACK"] });

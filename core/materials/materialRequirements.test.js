@@ -1,0 +1,142 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  FIELD_KEYS,
+  getRequiredFieldsForMaterial,
+  getRequiredFieldsForMaterials,
+  getMissingFields,
+} from "./materialRequirements.js";
+import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+
+test("Urkunde benötigt ausschließlich Vorname, Nachname, Geschlecht", () => {
+  assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE), [
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.GENDER,
+  ]);
+});
+
+test("Urkunde benötigt auch für 'representative' keine Region", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, "representative");
+  assert.equal(fields.includes(FIELD_KEYS.REGION), false);
+  assert.equal(fields.includes(FIELD_KEYS.FEDERAL_STATE), false);
+});
+
+test("GiroCode benötigt ausschließlich Vorname, Nachname, IFK-ID", () => {
+  assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.QR_GIRO_BLACK), [
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.IFK_ID,
+  ]);
+});
+
+test("GiroCode benötigt keinen PayPal-Link, kein Foto, keine Region, keine Telefonnummer, keine E-Mail", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.QR_GIRO_BLACK);
+  for (const forbidden of [
+    FIELD_KEYS.PAYPAL_URL,
+    FIELD_KEYS.PHOTO_URL,
+    FIELD_KEYS.REGION,
+    FIELD_KEYS.PHONE,
+    FIELD_KEYS.EMAIL,
+  ]) {
+    assert.equal(fields.includes(forbidden), false);
+  }
+});
+
+test("PayPal-QR benötigt ausschließlich Vorname, Nachname, PayPal-Link", () => {
+  assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK), [
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.PAYPAL_URL,
+  ]);
+});
+
+test("PayPal-QR benötigt keine IFK-ID, kein Foto, keine Region, keine Telefonnummer, keine E-Mail, kein Geschlecht", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK);
+  for (const forbidden of [
+    FIELD_KEYS.IFK_ID,
+    FIELD_KEYS.PHOTO_URL,
+    FIELD_KEYS.REGION,
+    FIELD_KEYS.PHONE,
+    FIELD_KEYS.EMAIL,
+    FIELD_KEYS.GENDER,
+  ]) {
+    assert.equal(fields.includes(forbidden), false);
+  }
+});
+
+test("Flyer benötigt für 'representative' auch Bundesland und Region", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, "representative");
+  assert.equal(fields.includes(FIELD_KEYS.FEDERAL_STATE), true);
+  assert.equal(fields.includes(FIELD_KEYS.REGION), true);
+});
+
+test("Flyer benötigt für 'ambassador' KEIN Bundesland und KEINE Region", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, "ambassador");
+  assert.equal(fields.includes(FIELD_KEYS.FEDERAL_STATE), false);
+  assert.equal(fields.includes(FIELD_KEYS.REGION), false);
+});
+
+test("Flyer benötigt weiterhin die gemeinsamen Grunddaten inklusive IFK-ID und PayPal-Link", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, "ambassador");
+  for (const expected of [
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.GENDER,
+    FIELD_KEYS.EMAIL,
+    FIELD_KEYS.PHONE,
+    FIELD_KEYS.IFK_ID,
+    FIELD_KEYS.PHOTO_URL,
+    FIELD_KEYS.PAYPAL_URL,
+  ]) {
+    assert.equal(fields.includes(expected), true);
+  }
+});
+
+test("unbekannter Materialtyp wirft einen Fehler", () => {
+  assert.throws(() => getRequiredFieldsForMaterial("NICHT_VORHANDEN"), /unbekannter Materialtyp/);
+});
+
+test("Vereinigungsmenge Urkunde + GiroCode enthält Vorname, Nachname, Geschlecht, IFK-ID", () => {
+  const fields = getRequiredFieldsForMaterials(
+    [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK],
+    "representative"
+  );
+  assert.deepEqual(fields, [FIELD_KEYS.FIRST_NAME, FIELD_KEYS.LAST_NAME, FIELD_KEYS.GENDER, FIELD_KEYS.IFK_ID]);
+});
+
+test("Vereinigungsmenge Urkunde + PayPal-QR enthält Vorname, Nachname, Geschlecht, PayPal-Link", () => {
+  const fields = getRequiredFieldsForMaterials(
+    [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK],
+    "representative"
+  );
+  assert.deepEqual(fields, [FIELD_KEYS.FIRST_NAME, FIELD_KEYS.LAST_NAME, FIELD_KEYS.GENDER, FIELD_KEYS.PAYPAL_URL]);
+});
+
+test("Vereinigungsmenge Flyer + Urkunde + GiroCode fügt keine unnötigen Doppelanforderungen hinzu", () => {
+  const flyerOnly = getRequiredFieldsForMaterials([MATERIAL_TYPE_KEYS.FLYER_HOME], "representative");
+  const combined = getRequiredFieldsForMaterials(
+    [MATERIAL_TYPE_KEYS.FLYER_HOME, MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK],
+    "representative"
+  );
+  assert.deepEqual(combined, flyerOnly);
+});
+
+test("getMissingFields liefert nur tatsächlich fehlende Felder, in Reihenfolge der Anforderung", () => {
+  const required = [FIELD_KEYS.FIRST_NAME, FIELD_KEYS.LAST_NAME, FIELD_KEYS.GENDER];
+  const missing = getMissingFields(required, { firstName: "Max", lastName: "", gender: "" });
+  assert.deepEqual(missing, [FIELD_KEYS.LAST_NAME, FIELD_KEYS.GENDER]);
+});
+
+test("getMissingFields: nur aus Leerzeichen bestehende Werte gelten als fehlend", () => {
+  const missing = getMissingFields([FIELD_KEYS.FIRST_NAME], { firstName: "   " });
+  assert.deepEqual(missing, [FIELD_KEYS.FIRST_NAME]);
+});
+
+test("getMissingFields: vollständig ausgefüllte Felder liefern ein leeres Ergebnis", () => {
+  const missing = getMissingFields([FIELD_KEYS.FIRST_NAME, FIELD_KEYS.LAST_NAME], {
+    firstName: "Max",
+    lastName: "Mustermann",
+  });
+  assert.deepEqual(missing, []);
+});

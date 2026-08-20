@@ -345,19 +345,44 @@ test("fehlendes oder ungültiges Manifest erzeugt einen Fehler", async () => {
   await assert.rejects(() => generateQrMaterials({ manifest: { person: {} } }), /manifest/);
 });
 
-test("ungültige IFK-ID im Manifest erzeugt einen Fehler", async () => {
-  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
+test("ungültige IFK-ID im Manifest erzeugt einen Fehler, wenn GiroCode ausgewählt ist", async () => {
+  const manifest = baseManifest(["QR_GIRO_BLACK"]);
   manifest.person.ifkId = "INVALID";
 
   await assert.rejects(
     () =>
       generateQrMaterials({
         manifest,
-        paypalUrl: VALID_PAYPAL_URL,
+        girocode: {},
         logo: "logo.png",
         deps: fakeDeps(),
       }),
     /ungültige IFK-ID/
+  );
+});
+
+test("ungültige oder fehlende IFK-ID im Manifest erzeugt KEINEN Fehler, wenn ausschließlich PayPal-QR ausgewählt ist (IFK-ID nicht Bestandteil des QR-Inhalts)", async () => {
+  const manifest = baseManifest(["QR_PAYPAL_BLACK"]);
+  manifest.person.ifkId = "INVALID";
+
+  await assert.doesNotReject(() =>
+    generateQrMaterials({
+      manifest,
+      paypalUrl: VALID_PAYPAL_URL,
+      logo: "logo.png",
+      deps: fakeDeps(),
+    })
+  );
+
+  delete manifest.person.ifkId;
+
+  await assert.doesNotReject(() =>
+    generateQrMaterials({
+      manifest,
+      paypalUrl: VALID_PAYPAL_URL,
+      logo: "logo.png",
+      deps: fakeDeps(),
+    })
   );
 });
 

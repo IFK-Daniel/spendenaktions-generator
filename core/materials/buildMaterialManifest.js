@@ -1,4 +1,3 @@
-import { validateIfkId } from "../id/validateIfkId.js";
 import { isValidEmail } from "../mail/validateEmail.js";
 import { isHttpUrl } from "../text/isHttpUrl.js";
 import { MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
@@ -32,7 +31,13 @@ const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
  * @param {object} params
  * @param {string} params.firstName
  * @param {string} params.lastName
- * @param {string} params.ifkId
+ * @param {string} [params.ifkId] Pflicht, sofern mindestens einer der
+ *   ausgewählten Materialtypen die IFK-ID fachlich benötigt (siehe
+ *   `core/materials/materialRequirements.js`, z. B. GiroCode schwarz
+ *   oder Flyer). Andernfalls (z. B. ausschließlich die Repräsentanten-
+ *   urkunde oder ausschließlich PayPal QR schwarz ausgewählt) optional —
+ *   `person` enthält dann kein `ifkId`-Feld, eine fehlende oder
+ *   ungültige IFK-ID blockiert die Erzeugung nicht.
  * @param {string} [params.role] Optional. Technischer Wegbegleiter-Typ-
  *   Schlüssel (siehe `core/materials/roleConfig.js`, `ROLE_KEYS`). Wird,
  *   sofern angegeben, gegen die zentrale Rollen-Konfiguration geprüft
@@ -88,13 +93,22 @@ export function buildMaterialManifest({
   materials,
 } = {}) {
   const filenameEntries = buildMaterialFilenames({ firstName, lastName, ifkId, materials });
-  const normalizedIfkId = validateIfkId(ifkId).normalized;
+  // `buildMaterialFilenames` prüft/normalisiert die IFK-ID bereits nur,
+  // wenn mindestens ein ausgewählter Materialtyp sie tatsächlich benötigt
+  // (siehe dort) — bei Bedarf identisch für alle Einträge, daher genügt
+  // der erste. Ohne Bedarf bleibt sie `undefined` und wird unten NICHT
+  // Teil von `person` (kein globaler IFK-ID-Zwang mehr, siehe
+  // `core/materials/materialRequirements.js`).
+  const normalizedIfkId = filenameEntries[0]?.ifkId;
 
   const person = {
     firstName: firstName.trim(),
     lastName: lastName.trim(),
-    ifkId: normalizedIfkId,
   };
+
+  if (normalizedIfkId !== undefined) {
+    person.ifkId = normalizedIfkId;
+  }
 
   if (role !== undefined) {
     if (!isValidRoleKey(role)) {

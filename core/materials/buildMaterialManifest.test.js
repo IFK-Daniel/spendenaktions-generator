@@ -266,6 +266,49 @@ test("leere region wirft einen Fehler", () => {
   );
 });
 
+test("Urkunde allein: ohne IFK-ID enthält person kein ifkId-Feld und wirft keinen Fehler", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    materials: ["CERTIFICATE_REPRESENTATIVE"],
+  });
+
+  assert.deepEqual(Object.keys(manifest.person).sort(), ["firstName", "lastName"]);
+});
+
+test("PayPal QR schwarz allein: ohne IFK-ID enthält person kein ifkId-Feld und wirft keinen Fehler", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    materials: ["QR_PAYPAL_BLACK"],
+  });
+
+  assert.deepEqual(Object.keys(manifest.person).sort(), ["firstName", "lastName"]);
+});
+
+test("GiroCode schwarz allein: ohne IFK-ID wirft weiterhin einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        materials: ["QR_GIRO_BLACK"],
+      }),
+    /ungültige IFK-ID/
+  );
+});
+
+test("GiroCode schwarz allein: mit gültiger IFK-ID enthält person das ifkId-Feld", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+    materials: ["QR_GIRO_BLACK"],
+  });
+
+  assert.equal(manifest.person.ifkId, "IFK7QX");
+});
+
 test("ohne Angabe von role enthält person kein role-Feld", () => {
   const manifest = buildMaterialManifest({
     firstName: "Max",

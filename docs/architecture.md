@@ -1911,3 +1911,81 @@ bleiben inhaltlich auf den Repräsentanten-Wortlaut ausgelegt, delegieren
 die Rollenbezeichnung aber bereits generisch an
 `getRoleLabel(ROLE_KEYS.REPRESENTATIVE, gender)` statt eine eigene
 Zuordnung zu duplizieren).
+
+## 13. Materialabhängige Datenanforderungen (`core/materials/materialRequirements.js`)
+
+Die Pflichtfeldlogik des internen Materialgenerators ist **nicht mehr
+global**, sondern materialabhängig: welche Personendaten benötigt
+werden, entscheidet ausschließlich das ausgewählte Material.
+
+- **Material definiert die benötigten Daten**: jeder Materialtyp
+  (`MATERIAL_TYPE_KEYS`) hat in `BASE_MATERIAL_REQUIREMENTS`
+  (`materialRequirements.js`) eine eigene, feste Liste benötigter
+  Feldschlüssel. Beispiel: die Repräsentantenurkunde benötigt
+  ausschließlich Vorname, Nachname und Geschlecht — weder IFK-ID noch
+  PayPal-Link, Foto, Kontaktdaten oder Region, da das Urkunden-Template
+  (`generateCertificateMaterial.js`) diese Angaben nicht verwendet.
+  GiroCode schwarz benötigt IFK-ID (Bestandteil des Verwendungszwecks
+  im QR-Inhalt, siehe `generateQrMaterials.js`), aber keinen
+  PayPal-Link. PayPal QR schwarz benötigt umgekehrt den PayPal-Link,
+  aber **keine** IFK-ID — sie ist kein Bestandteil des QR-Inhalts
+  (`content: validatedPaypalUrl`), sondern höchstens organisatorisch für
+  Dateinamen hilfreich (siehe unten). Beide Flyer-Varianten benötigen
+  die vollständigen gemeinsamen Daten (siehe Vorgabe), da sie beide
+  schwarzen QR-Codes einbetten.
+- **Rolle kann Anforderungen ergänzen**: `getRequiredFieldsForMaterial(materialKey, roleKey)`
+  fragt zusätzlich `roleConfig.js` (`roleRequiresRegion`) ab und ergänzt
+  Bundesland/Region ausschließlich für die beiden Flyer-Materialien,
+  wenn die aktuelle Rolle sie verlangt (aktuell nur `representative`).
+  Für die Urkunde bleibt Region unabhängig von der Rolle nicht
+  erforderlich — die Materialanforderung hat Vorrang vor einer
+  pauschalen Rollen-Pflicht.
+- **Mehrere Materialien bilden eine Vereinigungsmenge**:
+  `getRequiredFieldsForMaterials(materialKeys, roleKey)` vereinigt die
+  Anforderungen aller aktuell ausgewählten Materialien (keine
+  Duplikate, feste Feldreihenfolge). `getMissingFields(required, values)`
+  prüft rein oberflächlich (nicht leer), welche davon im Formular noch
+  fehlen — Formatprüfungen (gültige IFK-ID, gültige E-Mail, gültiger
+  PayPal-Link, erreichbares Foto) bleiben bei den bestehenden,
+  spezialisierten Validierungen.
+- **Kein globaler PayPal-/Foto-/Regionszwang mehr**:
+  `buildMaterialFilenames.js`/`buildMaterialManifest.js` verlangen die
+  IFK-ID nur noch, wenn mindestens eines der übergebenen Materialien sie
+  tatsächlich benötigt (`anyMaterialRequiresIfkId`) — sonst bleibt
+  `person.ifkId` schlicht `undefined`, ohne Fehler.
+  `generateQrMaterials.js` validiert die IFK-ID ebenfalls nur noch, wenn
+  GiroCode unter den zu erzeugenden Materialien ist. `src/intern/
+  generator.js` fragt für Foto- und PayPal-Pflicht ausschließlich ab, ob
+  ein tatsächlich fotobasiertes bzw. PayPal-abhängiges Material
+  ausgewählt (oder vom Flyer benötigt) ist.
+- **Organisatorisch vs. fachlich**: die IFK-ID kann in Dateinamen
+  organisatorisch hilfreich sein, obwohl ein Medium sie fachlich nicht
+  benötigt — sie erscheint aber in keinem Materialdateinamen (auch nicht
+  bei Flyer/GiroCode), sondern ausschließlich in Manifest/Zip-Dateinamen
+  intern. Fehlt sie bei einem Material ohne fachlichen Bedarf, wird ein
+  sauberer Dateiname ohne ID-Segment verwendet (Urkunde:
+  `Urkunde_<Vorname>_<Nachname>.pdf`, ZIP:
+  `IFK_Materialien_<Vorname>_<Nachname>.zip` — siehe
+  `buildMaterialFilenames.js`/`buildMaterialZipFilename.js`).
+- **Unabhängige Materialerzeugung**: `handleGenerate()` in
+  `src/intern/generator.js` prüft jedes ausgewählte Material einzeln;
+  ein Material mit fehlenden/ungültigen Daten wird übersprungen (mit
+  konkretem, nicht-blockierendem Hinweis, z. B. "PayPal QR schwarz
+  konnte nicht erzeugt werden: gültiger PayPal-Link fehlt."), während
+  die übrigen ausgewählten Materialien trotzdem erzeugt werden. Nur wenn
+  **kein** ausgewähltes Material erzeugt werden kann, blockiert ein
+  zusammengefasster, konkreter Hinweis (Auflistung der fehlenden Felder,
+  nie dasselbe Feld doppelt) die gesamte Erzeugung.
+- **UI**: `updateRequiredFieldIndicators()` markiert bei jeder Änderung
+  der Materialauswahl oder Rolle die betroffenen Formular-Labels mit
+  einem dezenten `*` (`.field-label--required`, siehe
+  `src/intern/style.css`) — rein visueller Hinweis, keine eigene
+  Validierungslogik (die bleibt vollständig in
+  `materialRequirements.js`/`handleGenerate()`).
+
+**Tests**: `core/materials/materialRequirements.test.js` deckt jede
+Materialanforderung einzeln sowie mehrere Vereinigungsmengen-Szenarien
+ab. `core/materials/buildMaterialFilenames.test.js`,
+`buildMaterialManifest.test.js`, `generateQrMaterials.test.js` und
+`buildMaterialZipFilename.test.js` decken die optionale IFK-ID (nur bei
+tatsächlichem Bedarf Pflicht) ab.

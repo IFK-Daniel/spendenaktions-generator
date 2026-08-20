@@ -10,7 +10,14 @@ import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRe
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
-import { MATERIAL_TYPE_KEYS } from "../../core/materials/materialTypes.js";
+import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES_BY_KEY } from "../../core/materials/materialTypes.js";
+import {
+  FIELD_KEYS,
+  FIELD_LABELS,
+  getRequiredFieldsForMaterial,
+  getRequiredFieldsForMaterials,
+  getMissingFields,
+} from "../../core/materials/materialRequirements.js";
 import { fetchRepresentativePhoto } from "../../core/photo/fetchRepresentativePhoto.js";
 import { getPhotoRetrievalErrorMessage } from "../../core/photo/getPhotoRetrievalErrorMessage.js";
 import { normalizePhotoToPng } from "../../core/photo/normalizePhotoToPng.js";
@@ -57,10 +64,11 @@ const CERTIFICATE_KEYS = new Set([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]
 // Flyer-Vorlage wird ausschließlich anhand des Geschlechts gewählt
 // (siehe Vorgabe, analog zu CERTIFICATE_TEMPLATE_BY_GENDER unten) — der
 // Renderer (`renderFlyer.js`) selbst kennt kein Geschlecht, die Auswahl
-// passiert vollständig hier, vor dem Rendern. Ohne Geschlechtsangabe
-// (für den Flyer optional, siehe `needsCertificate`-Prüfung weiter
-// unten) wird die männliche Vorlage verwendet — unverändertes
-// Bestandsverhalten vor Einführung der weiblichen Vorlagen.
+// passiert vollständig hier, vor dem Rendern. Geschlecht ist Teil der
+// für den Flyer benötigten Grunddaten (siehe
+// `core/materials/materialRequirements.js`) und wird daher vor der
+// Erzeugung bereits geprüft — ohne Angabe würde die männliche Vorlage
+// verwendet (Fallback in `resolveFlyerTemplate` unten).
 const FLYER_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze({
     male: flyerPrintFrontTemplate,
@@ -111,6 +119,27 @@ const CERTIFICATE_TEMPLATE_BY_GENDER = Object.freeze({
   male: certificateRepresentativeMaleTemplate,
   female: certificateRepresentativeFemaleTemplate,
 });
+
+// Baut die zusammengefasste, blockierende Fehlermeldung, wenn KEIN
+// ausgewähltes Material erzeugt werden kann (siehe `handleGenerate`
+// weiter unten sowie Vorgabe Abschnitt 10) — nennt jedes fehlende Feld
+// nur genau einmal, nie pro Material wiederholt. DOM-frei und daher
+// unabhängig testbar.
+function buildMissingFieldsMessage(materialKeys, missingFieldKeys) {
+  const bulletList = missingFieldKeys.map((key) => `- ${FIELD_LABELS[key]}`).join("\n");
+  if (materialKeys.length === 1) {
+    const label = MATERIAL_TYPES_BY_KEY[materialKeys[0]]?.label || materialKeys[0];
+    return `Für ${label} fehlen noch:\n${bulletList}`;
+  }
+  return `Für die ausgewählten Materialien fehlen noch:\n${bulletList}`;
+}
+
+// Kurze, deutsche Aufzählung von Feldbezeichnungen für die nicht-
+// blockierenden Hinweise, wenn ein einzelnes Material trotz
+// unabhängiger Erzeugung übersprungen werden musste (Vorgabe Abschnitt 11).
+function describeFieldList(fieldKeys) {
+  return fieldKeys.map((key) => FIELD_LABELS[key]).join(", ");
+}
 
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
@@ -210,6 +239,34 @@ export function initGenerator() {
     federalStateField.hidden = !requiresRegion;
     regionField.hidden = !requiresRegion;
     updateMaterialAvailabilityForRole(roleKey);
+    updateRequiredFieldIndicators();
+  }
+
+  // Ordnet jedem Personendaten-Feld sein sichtbares `<label>`/`<legend>`
+  // zu — für den dezenten `*`-Pflichtfeld-Marker (Vorgabe Abschnitt 9),
+  // NICHT für die eigentliche Validierung (die läuft ausschließlich über
+  // `core/materials/materialRequirements.js`, siehe `handleGenerate`).
+  const requiredFieldLabelElements = {
+    [FIELD_KEYS.FIRST_NAME]: document.querySelector('label[for="first-name-input"]'),
+    [FIELD_KEYS.LAST_NAME]: document.querySelector('label[for="last-name-input"]'),
+    [FIELD_KEYS.GENDER]: document.querySelector(".gender-fieldset legend"),
+    [FIELD_KEYS.IFK_ID]: document.querySelector('label[for="ifk-id-input"]'),
+    [FIELD_KEYS.EMAIL]: document.querySelector('label[for="intern-email-input"]'),
+    [FIELD_KEYS.PHONE]: document.querySelector('label[for="phone-input"]'),
+    [FIELD_KEYS.FEDERAL_STATE]: document.querySelector('label[for="federal-state-input"]'),
+    [FIELD_KEYS.REGION]: document.querySelector('label[for="region-input"]'),
+    [FIELD_KEYS.PHOTO_URL]: document.querySelector('label[for="photo-url-input"]'),
+    [FIELD_KEYS.PAYPAL_URL]: document.querySelector('label[for="paypal-input"]'),
+  };
+
+  // Bei jeder Änderung der Materialauswahl oder der Rolle neu berechnet
+  // (siehe Aufrufer unten) — rein visueller Hinweis, welche Felder für
+  // die AKTUELLE Auswahl benötigt werden (Vorgabe Abschnitt 9).
+  function updateRequiredFieldIndicators() {
+    const requiredFields = new Set(getRequiredFieldsForMaterials(selectedMaterialKeys(), selectedRoleKey()));
+    for (const [fieldKey, labelEl] of Object.entries(requiredFieldLabelElements)) {
+      labelEl?.classList.toggle("field-label--required", requiredFields.has(fieldKey));
+    }
   }
 
   function updateMaterialAvailabilityForRole(roleKey) {
@@ -532,7 +589,13 @@ export function initGenerator() {
 
   function renderResults(person, files) {
     revokeActiveObjectUrls();
-    resultPersonName.textContent = `${person.firstName} ${person.lastName} (${person.ifkId})`;
+    // `person.ifkId` ist nur gesetzt, wenn mindestens ein erzeugtes
+    // Material sie tatsächlich benötigt (siehe `materialRequirements.js`)
+    // — z. B. bei einer ausschließlich erzeugten Urkunde fehlt sie
+    // bewusst, daher kein "(undefined)" in der Überschrift.
+    resultPersonName.textContent = person.ifkId
+      ? `${person.firstName} ${person.lastName} (${person.ifkId})`
+      : `${person.firstName} ${person.lastName}`;
     resultGrid.innerHTML = "";
 
     for (const file of files) {
@@ -1367,167 +1430,244 @@ export function initGenerator() {
       return;
     }
 
-    const firstName = firstNameInput.value.trim();
-    const lastName = lastNameInput.value.trim();
-    if (!firstName || !lastName) {
-      showError("Bitte Vor- und Nachname eintragen.");
-      return;
-    }
-
-    const ifkIdCheck = validateIfkId(ifkIdInput.value.trim());
-    if (!ifkIdCheck.valid) {
-      showError("Bitte eine gültige IFK-ID eintragen (z. B. IFK7QX).");
-      return;
-    }
-    ifkIdInput.value = ifkIdCheck.normalized;
-
-    const email = emailInput.value.trim();
-    if (!isValidEmail(email)) {
-      showError("Bitte eine gültige E-Mail-Adresse eintragen.");
-      return;
-    }
-
-    const phone = phoneInput.value.trim();
-    if (!phone) {
-      showError("Bitte eine Telefonnummer eintragen.");
-      return;
-    }
-
-    // Bundesland/Region sind ausschließlich Bestandteil der
-    // Datenerfassung, wenn die aktuell gewählte Rolle sie benötigt
-    // (aktuell nur `representative`, siehe `core/materials/roleConfig.js`)
-    // — für alle anderen Rollen bleiben beide Felder `undefined` und
-    // werden weder validiert noch ins Manifest übernommen.
-    const requiresRegion = roleRequiresRegion(role);
-    let federalState;
-    let region;
-    if (requiresRegion) {
-      federalState = federalStateInput.value.trim();
-      if (!federalState) {
-        showError("Bitte ein Bundesland eintragen.");
-        return;
-      }
-
-      region = regionInput.value.trim();
-      if (!region) {
-        showError("Bitte eine Region eintragen.");
-        return;
-      }
-    }
-
     const materialKeys = selectedMaterialKeys();
     if (materialKeys.length === 0) {
       showError("Bitte mindestens ein Material auswählen.");
       return;
     }
 
-    const needsFlyer = materialKeys.some((key) => FLYER_KEYS.has(key));
-    const needsPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key)) || needsFlyer;
-    const needsGiro = materialKeys.some((key) => GIRO_KEYS.has(key)) || needsFlyer;
-    const needsCertificate = materialKeys.some((key) => CERTIFICATE_KEYS.has(key));
-
-    // Geschlecht ist ausschließlich Pflicht, wenn die Repräsentanten-
-    // urkunde ausgewählt ist (Vorlagenauswahl männlich/weiblich) — für
-    // alle anderen Materialien bleibt das Feld optional. Fehlt es, wird
-    // NUR die Urkunde übersprungen (kein blockierender `return`) — die
-    // übrigen ausgewählten Materialien werden trotzdem erzeugt (siehe
-    // Vorgabe).
+    // ---------- Rohwerte aus dem Formular (noch ungeprüft) ----------
+    const firstName = firstNameInput.value.trim();
+    const lastName = lastNameInput.value.trim();
     const genderInput = document.querySelector('input[name="gender"]:checked');
-    const certificateBlockedMessage =
-      needsCertificate && !genderInput ? "Bitte wähle für die Urkunde das Geschlecht aus." : null;
-
-    // Foto ist ausschließlich Pflicht, wenn mindestens ein fotobasiertes
-    // Material (aktuell: einer der beiden Flyer) ausgewählt ist — für
-    // reine QR-Materialien bleibt das Feld optional (siehe Abschnitt 5
-    // der Vorgabe).
+    const ifkIdRaw = ifkIdInput.value.trim();
+    const email = emailInput.value.trim();
+    const phone = phoneInput.value.trim();
+    // Bundesland/Region sind ausschließlich Bestandteil der
+    // Datenerfassung, wenn die aktuell gewählte Rolle sie benötigt
+    // (siehe `core/materials/roleConfig.js`) — für alle anderen Rollen
+    // bleiben beide Felder leer und damit für keine Materialanforderung
+    // "vorhanden".
+    const requiresRegion = roleRequiresRegion(role);
+    const federalState = requiresRegion ? federalStateInput.value.trim() : "";
+    const region = requiresRegion ? regionInput.value.trim() : "";
     const photoUrl = photoUrlInput.value.trim();
-    if (needsFlyer) {
-      if (!isHttpUrl(photoUrl)) {
-        showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
-        showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
-        return;
-      }
-    } else if (photoUrl && !isHttpUrl(photoUrl)) {
-      showError("Der Foto-Link ist ungültig (http/https) — bitte korrigieren oder das Feld leeren.");
+    const paypalRaw = paypalInput.value.trim();
+
+    const fieldValues = {
+      firstName,
+      lastName,
+      gender: genderInput ? genderInput.value : "",
+      ifkId: ifkIdRaw,
+      email,
+      phone,
+      federalState,
+      region,
+      photoUrl,
+      paypalUrl: paypalRaw,
+    };
+
+    // ---------- Materialabhängige Pflichtfeldprüfung (siehe
+    // `core/materials/materialRequirements.js`, zentrale, DOM-freie
+    // Konfiguration statt verteilter if/else-Blöcke) ----------
+    // Ein Material gilt als "bereit", wenn alle für DIESES Material
+    // benötigten Felder oberflächlich ausgefüllt sind. Nur wenn KEIN
+    // ausgewähltes Material bereit ist, blockiert ein zusammengefasster,
+    // konkreter Hinweis die gesamte Erzeugung (Vorgabe Abschnitt 10/11)
+    // — andernfalls wird jedes bereite Material unabhängig erzeugt und
+    // für nicht bereite Materialien erscheint anschließend nur ein
+    // nicht-blockierender Hinweis (siehe unten).
+    const anyMaterialReady = materialKeys.some(
+      (key) => getMissingFields(getRequiredFieldsForMaterial(key, role), fieldValues).length === 0
+    );
+    if (!anyMaterialReady) {
+      const missingUnion = getMissingFields(getRequiredFieldsForMaterials(materialKeys, role), fieldValues);
+      showError(buildMissingFieldsMessage(materialKeys, missingUnion));
       return;
     }
 
+    const requestedFlyer = materialKeys.some((key) => FLYER_KEYS.has(key));
+    const requestedPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key));
+    const requestedGiro = materialKeys.some((key) => GIRO_KEYS.has(key));
+    const requestedCertificate = materialKeys.some((key) => CERTIFICATE_KEYS.has(key));
+
+    // GiroCode-/PayPal-Daten werden benötigt, sobald das jeweilige
+    // Material direkt ausgewählt ist ODER der Flyer sie zum Einbetten
+    // braucht (Vorgabe Abschnitt 6) — unabhängig davon bleibt eine
+    // fehlende/ungültige IFK-ID bzw. ein fehlender PayPal-Link für alle
+    // anderen (nicht darauf angewiesenen) Materialien folgenlos
+    // (Abschnitt 3/4/5/14).
+    const needsGiroData = requestedGiro || requestedFlyer;
+    const needsPaypalData = requestedPaypal || requestedFlyer;
+
+    const skipMessages = [];
+
+    let ifkId;
+    let girocodeDataReady = false;
+    if (needsGiroData) {
+      const ifkIdCheck = validateIfkId(ifkIdRaw);
+      if (ifkIdCheck.valid) {
+        ifkId = ifkIdCheck.normalized;
+        ifkIdInput.value = ifkId;
+        girocodeDataReady = true;
+      } else if (requestedGiro) {
+        skipMessages.push("GiroCode schwarz konnte nicht erzeugt werden: gültige IFK-ID fehlt.");
+      }
+    }
+
     let paypalUrl;
-    if (needsPaypal) {
-      paypalUrl = extractPaypalLink(paypalInput.value.trim());
-      if (!paypalUrl) {
-        showError("Kein gültiger PayPal-Link gefunden. Bitte einen Link wie z. B. https://www.paypal.com/donate/... einfügen.");
-        return;
+    let paypalDataReady = false;
+    if (needsPaypalData) {
+      const extracted = paypalRaw ? extractPaypalLink(paypalRaw) : null;
+      if (extracted) {
+        paypalUrl = extracted;
+        paypalDataReady = true;
+      } else if (requestedPaypal) {
+        skipMessages.push("PayPal QR schwarz konnte nicht erzeugt werden: gültiger PayPal-Link fehlt.");
+      }
+    }
+
+    let certificateReady = false;
+    if (requestedCertificate) {
+      const certMissing = getMissingFields(
+        getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, role),
+        fieldValues
+      );
+      if (certMissing.length > 0) {
+        skipMessages.push(
+          `Repräsentantenurkunde konnte nicht erzeugt werden: ${describeFieldList(certMissing)} fehlt.`
+        );
+      } else if (!isCertificateTemplateAvailableForRole(role, MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE)) {
+        skipMessages.push(
+          `Repräsentantenurkunde konnte nicht erzeugt werden: für den gewählten Wegbegleiter-Typ ist noch keine Urkunden-Vorlage hinterlegt (${getRoleConfig(role).label}).`
+        );
+      } else {
+        certificateReady = true;
       }
     }
 
     let photoAsset = null;
-    if (needsFlyer) {
-      showPhotoStatus("Foto wird geprüft …", "loading");
-      const photoResult = await fetchRepresentativePhoto(photoUrl);
-      if (!photoResult.ok) {
-        lastPhoto = null;
-        lastPhotoUrl = null;
-        updatePhotoLinkCompletionState();
-        showPhotoStatus(getPhotoRetrievalErrorMessage(photoResult.reason), "error");
-        showPhotoFieldError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
-        showError("Für den ausgewählten Flyer wird noch ein Foto benötigt.");
-        return;
+    let flyerDataReady = false;
+    if (requestedFlyer) {
+      // Foto ist ausschließlich Pflicht, wenn ein fotobasiertes Material
+      // (Flyer) ausgewählt ist (Vorgabe Abschnitt 13) — kein unnötiger
+      // Foto-Fetch, solange die übrigen Flyer-Anforderungen nicht
+      // ebenfalls erfüllt sind.
+      const flyerMissing = getMissingFields(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, role), fieldValues);
+      const reasons = flyerMissing.map((key) => FIELD_LABELS[key]);
+      if (!flyerMissing.includes(FIELD_KEYS.EMAIL) && email && !isValidEmail(email)) {
+        reasons.push("gültige E-Mail-Adresse");
       }
-      lastPhoto = photoResult;
-      lastPhotoUrl = photoUrl;
-      updatePhotoLinkCompletionState();
-      const sizeKb = Math.max(1, Math.round(photoResult.size / 1024));
-      showPhotoStatus(`Foto erfolgreich geladen (${photoResult.format}, ${sizeKb} KB).`, "success");
-      showPhotoPreview(`data:${photoResult.contentType};base64,${photoResult.content}`);
-      try {
-        photoAsset = await normalizePhotoToPng({
-          dataUrl: `data:${photoResult.contentType};base64,${photoResult.content}`,
-        });
-      } catch {
-        showPhotoFieldError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
-        showError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
-        return;
+      if (!flyerMissing.includes(FIELD_KEYS.PHOTO_URL) && photoUrl && !isHttpUrl(photoUrl)) {
+        reasons.push("gültiger Foto-Link");
       }
-      // Manueller Ausschnitt (siehe Fotoausschnitt-Editor) nur verwenden,
-      // wenn er tatsächlich zu diesem Foto-Link gehört — sonst bleibt es
-      // beim automatischen Center-Crop (siehe `renderFlyer.js`/`placeImage.js`).
-      // Home- und Druckerei-Flyer erhalten weiter unten dasselbe
-      // `photoAsset`-Objekt und damit garantiert denselben Ausschnitt.
-      if (photoCrop && photoCropSourceUrl === photoUrl) {
-        photoAsset.crop = photoCrop;
+      if (!flyerMissing.includes(FIELD_KEYS.IFK_ID) && !girocodeDataReady) {
+        reasons.push("gültige IFK-ID");
       }
+      if (!flyerMissing.includes(FIELD_KEYS.PAYPAL_URL) && !paypalDataReady) {
+        reasons.push("gültiger PayPal-Link");
+      }
+
+      if (reasons.length > 0) {
+        skipMessages.push(`Flyer konnte nicht erzeugt werden: ${reasons.join(", ")} fehlt/fehlen.`);
+      } else if (!isFlyerTemplateAvailableForRole(role, MATERIAL_TYPE_KEYS.FLYER_HOME)) {
+        skipMessages.push(
+          `Flyer konnte nicht erzeugt werden: für den gewählten Wegbegleiter-Typ ist noch keine Flyer-Vorlage hinterlegt (${getRoleConfig(role).label}).`
+        );
+      } else {
+        showPhotoStatus("Foto wird geprüft …", "loading");
+        const photoResult = await fetchRepresentativePhoto(photoUrl);
+        if (!photoResult.ok) {
+          lastPhoto = null;
+          lastPhotoUrl = null;
+          updatePhotoLinkCompletionState();
+          showPhotoStatus(getPhotoRetrievalErrorMessage(photoResult.reason), "error");
+          showPhotoFieldError("Für den Flyer wird ein gültiges, erreichbares Foto benötigt.");
+          skipMessages.push(`Flyer konnte nicht erzeugt werden: ${getPhotoRetrievalErrorMessage(photoResult.reason)}`);
+        } else {
+          lastPhoto = photoResult;
+          lastPhotoUrl = photoUrl;
+          updatePhotoLinkCompletionState();
+          const sizeKb = Math.max(1, Math.round(photoResult.size / 1024));
+          showPhotoStatus(`Foto erfolgreich geladen (${photoResult.format}, ${sizeKb} KB).`, "success");
+          showPhotoPreview(`data:${photoResult.contentType};base64,${photoResult.content}`);
+          try {
+            photoAsset = await normalizePhotoToPng({
+              dataUrl: `data:${photoResult.contentType};base64,${photoResult.content}`,
+            });
+            // Manueller Ausschnitt (siehe Fotoausschnitt-Editor) nur
+            // verwenden, wenn er tatsächlich zu diesem Foto-Link gehört —
+            // sonst bleibt es beim automatischen Center-Crop (siehe
+            // `renderFlyer.js`/`placeImage.js`). Home- und Druckerei-
+            // Flyer erhalten weiter unten dasselbe `photoAsset`-Objekt
+            // und damit garantiert denselben Ausschnitt.
+            if (photoCrop && photoCropSourceUrl === photoUrl) {
+              photoAsset.crop = photoCrop;
+            }
+            flyerDataReady = true;
+          } catch {
+            showPhotoFieldError("Foto konnte nicht für den Flyer aufbereitet werden. Bitte ein anderes Foto verwenden.");
+            skipMessages.push("Flyer konnte nicht erzeugt werden: Foto konnte nicht aufbereitet werden.");
+          }
+        }
+      }
+    }
+
+    // Nur tatsächlich erzeugbare Materialien fließen ins Manifest ein —
+    // ein nicht bereites, aber ausgewähltes Material (z. B. GiroCode
+    // ohne gültige IFK-ID) darf die Erzeugung der übrigen Materialien
+    // nicht blockieren (Vorgabe Abschnitt 11).
+    const materialKeysToGenerate = materialKeys.filter((key) => {
+      if (FLYER_KEYS.has(key)) return flyerDataReady;
+      if (PAYPAL_KEYS.has(key)) return paypalDataReady;
+      if (GIRO_KEYS.has(key)) return girocodeDataReady;
+      if (CERTIFICATE_KEYS.has(key)) return certificateReady;
+      return false;
+    });
+
+    if (materialKeysToGenerate.length === 0) {
+      // Kein einziges ausgewähltes Material konnte erzeugt werden —
+      // nichts zum Anzeigen, daher blockierender, aber konkreter Hinweis
+      // je Material (Vorgabe Abschnitt 11, zweite Alternative).
+      showError(skipMessages.join("\n"));
+      return;
     }
 
     const manifest = buildMaterialManifest({
       firstName,
       lastName,
-      ifkId: ifkIdCheck.normalized,
+      ifkId,
       role,
       gender: genderInput ? genderInput.value : undefined,
-      email,
-      phone,
-      photoUrl: photoUrl || undefined,
-      federalState,
-      region,
-      materials: materialKeys,
+      // E-Mail/Telefon/Foto/Bundesland/Region sind ausschließlich für
+      // den Flyer relevant (Vorgabe Abschnitt 6) — bei jeder anderen
+      // Materialauswahl bewusst NICHT ans Manifest übergeben, damit ein
+      // ungültiger, für die aktuelle Auswahl irrelevanter Wert in einem
+      // dieser Felder nicht versehentlich blockiert (Abschnitt 13/14).
+      email: requestedFlyer && flyerDataReady ? email : undefined,
+      phone: requestedFlyer && flyerDataReady ? phone : undefined,
+      photoUrl: requestedFlyer && flyerDataReady ? photoUrl : undefined,
+      federalState: requestedFlyer && flyerDataReady && requiresRegion ? federalState : undefined,
+      region: requestedFlyer && flyerDataReady && requiresRegion ? region : undefined,
+      materials: materialKeysToGenerate,
     });
 
     isGenerating = true;
     generateBtn.disabled = true;
 
     try {
-      // QR-Materialien: alles vom Nutzer ausgewählte, plus (nur intern,
-      // nicht Teil der Ergebnisliste/des Zips) die schwarzen PayPal-/
-      // GiroCode-Varianten, falls ein Flyer ausgewählt ist und der Nutzer
-      // diese nicht ohnehin schon separat ausgewählt hat — der Flyer
-      // benötigt exakt diese beiden Grafiken zum Einbetten (siehe
-      // `templates/*/template.config.js`, Felder `qrPaypal`/`qrGiro`).
-      // Es werden ausschließlich die schwarzen Varianten (mit grünem
-      // Logo) verwendet — die grünen QR-Varianten wurden aus dem
-      // produktiven Workflow entfernt (siehe `materialTypes.js`).
-      const selectedQrKeys = materialKeys.filter((key) => PAYPAL_KEYS.has(key) || GIRO_KEYS.has(key));
-      const extraFlyerQrKeys = needsFlyer
+      // QR-Materialien: alles vom Nutzer ausgewählte und tatsächlich
+      // bereite, plus (nur intern, nicht Teil der Ergebnisliste/des Zips)
+      // die schwarzen PayPal-/GiroCode-Varianten, falls der Flyer erzeugt
+      // wird und der Nutzer diese nicht ohnehin schon separat ausgewählt
+      // hat — der Flyer benötigt exakt diese beiden Grafiken zum
+      // Einbetten (siehe `templates/*/template.config.js`, Felder
+      // `qrPaypal`/`qrGiro`). Es werden ausschließlich die schwarzen
+      // Varianten (mit grünem Logo) verwendet — die grünen QR-Varianten
+      // wurden aus dem produktiven Workflow entfernt (siehe
+      // `materialTypes.js`).
+      const selectedQrKeys = materialKeysToGenerate.filter((key) => PAYPAL_KEYS.has(key) || GIRO_KEYS.has(key));
+      const extraFlyerQrKeys = flyerDataReady
         ? [MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK, MATERIAL_TYPE_KEYS.QR_GIRO_BLACK].filter(
             (key) => !selectedQrKeys.includes(key)
           )
@@ -1539,34 +1679,21 @@ export function initGenerator() {
         const qrManifest = buildMaterialManifest({
           firstName,
           lastName,
-          ifkId: ifkIdCheck.normalized,
+          ifkId,
           materials: allQrKeys,
         });
         qrResults = await generateQrMaterials({
           manifest: qrManifest,
           paypalUrl,
-          girocode: needsGiro ? {} : undefined,
+          girocode: allQrKeys.includes(MATERIAL_TYPE_KEYS.QR_GIRO_BLACK) ? {} : undefined,
           logo: logoUrl,
         });
       }
 
       const files = qrResults.filter((result) => selectedQrKeys.includes(result.key));
 
-      if (needsFlyer) {
+      if (flyerDataReady) {
         const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
-        // Verteidigungslinie gegen einen stillen Repräsentanten-Fallback:
-        // die Materialauswahl in der Oberfläche deaktiviert bereits
-        // Flyer-Checkboxen ohne Vorlage für die gewählte Rolle (siehe
-        // `updateMaterialAvailabilityForRole`) — dieser Check greift nur,
-        // falls ein Flyer trotzdem ausgewählt wurde (z. B. Altzustand des
-        // Formulars vor einem Rollenwechsel).
-        for (const entry of flyerEntries) {
-          if (!isFlyerTemplateAvailableForRole(role, entry.key)) {
-            throw new Error(
-              `Für den gewählten Wegbegleiter-Typ ist noch keine Flyer-Vorlage hinterlegt (${getRoleConfig(role).label}).`
-            );
-          }
-        }
 
         const qrPaypalResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK);
         const qrGiroResult = qrResults.find((result) => result.key === MATERIAL_TYPE_KEYS.QR_GIRO_BLACK);
@@ -1595,17 +1722,8 @@ export function initGenerator() {
         }
       }
 
-      // Urkunde: nur, wenn ausgewählt UND ein Geschlecht vorliegt (siehe
-      // Prüfung weiter oben) — beeinflusst keine anderen Materialien.
-      if (needsCertificate && genderInput) {
+      if (certificateReady) {
         const certificateEntry = manifest.materials.find((entry) => CERTIFICATE_KEYS.has(entry.key));
-        // Siehe Kommentar zum Flyer-Fallback-Schutz oben — dieselbe
-        // Absicherung für die Urkunde.
-        if (!isCertificateTemplateAvailableForRole(role, certificateEntry.key)) {
-          throw new Error(
-            `Für den gewählten Wegbegleiter-Typ ist noch keine Urkunden-Vorlage hinterlegt (${getRoleConfig(role).label}).`
-          );
-        }
         const certificateFile = await generateCertificateMaterial({
           entry: certificateEntry,
           templateConfig: CERTIFICATE_TEMPLATE_BY_GENDER[genderInput.value],
@@ -1615,22 +1733,15 @@ export function initGenerator() {
         files.push(certificateFile);
       }
 
-      if (certificateBlockedMessage && files.length === 0) {
-        // Einziges ausgewähltes Material war die Urkunde, die mangels
-        // Geschlecht nicht erzeugt werden konnte — nichts zum Anzeigen,
-        // daher blockierender Hinweis (wie bei anderen Pflichtfeldern).
-        showError(certificateBlockedMessage);
-        return;
-      }
-
       renderResults(manifest.person, files);
 
-      if (certificateBlockedMessage) {
+      if (skipMessages.length > 0) {
         // Nicht blockierend: die übrigen ausgewählten Materialien wurden
-        // trotzdem erzeugt und bleiben sichtbar (siehe Vorgabe) — nur
-        // die Urkunde fehlt, daher kein `showError()` (das würde
-        // `results` wieder verstecken).
-        errorMessage.textContent = certificateBlockedMessage;
+        // trotzdem erzeugt und bleiben sichtbar (Vorgabe Abschnitt 11) —
+        // daher kein `showError()` (das würde `results` wieder
+        // verstecken), sondern derselbe Hinweisbereich ohne die
+        // Ergebnisse zu verstecken.
+        errorMessage.textContent = skipMessages.join("\n");
         errorMessage.hidden = false;
       }
 
@@ -1639,10 +1750,11 @@ export function initGenerator() {
       resetDeliverySection();
       deliverySection.hidden = false;
 
-      // Bei rein optionalem Foto (kein Flyer ausgewählt, aber trotzdem
-      // ein Link eingetragen) weiterhin informativ prüfen — nicht
-      // blockierend, da für die ausgewählten Materialien nicht benötigt.
-      if (!needsFlyer && photoUrl) {
+      // Bei rein optionalem Foto (kein bereiter Flyer, aber trotzdem ein
+      // Link eingetragen) weiterhin informativ prüfen — nicht
+      // blockierend, da für die tatsächlich erzeugten Materialien nicht
+      // benötigt.
+      if (!flyerDataReady && photoUrl) {
         await checkRepresentativePhoto(photoUrl);
       }
     } catch (err) {
@@ -1766,6 +1878,10 @@ export function initGenerator() {
   photoCropOpenBtn.addEventListener("click", handleOpenPhotoCropEditor);
   photoCropResetBtn.addEventListener("click", resetPhotoCrop);
   updatePhotoCropStatusUI();
+
+  for (const checkbox of materialCheckboxes) {
+    checkbox.addEventListener("change", updateRequiredFieldIndicators);
+  }
 
   roleSelect.addEventListener("change", applyRoleToForm);
   applyRoleToForm();

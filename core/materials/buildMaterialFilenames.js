@@ -1,6 +1,7 @@
 import { validateIfkId } from "../id/validateIfkId.js";
 import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
 import { buildMaterialList } from "./buildMaterialList.js";
+import { FIELD_KEYS, getRequiredFieldsForMaterial } from "./materialRequirements.js";
 
 /**
  * Dateinamens-Suffix je Materialtyp (ohne Präfix/Namen/Endung). Bewusst
@@ -25,27 +26,37 @@ const FILESYSTEM_UNSAFE_CHARS = /[\\/:*?"<>|]/g;
  * — mit einer Ausnahme: die Repräsentantenurkunde
  * (`CERTIFICATE_REPRESENTATIVE`) folgt stattdessen dem Schema
  * `Urkunde_<Vorname>_<Nachname>.pdf` (siehe `buildCertificateFilename()`
- * unten). Die IFK-ID ist trotzdem für alle Materialien Pflicht und wird
- * geprüft, erscheint aber bewusst nie im sichtbaren Dateinamen — sie
- * wird stattdessen (normalisiert) im Rückgabeobjekt mitgeführt.
+ * unten). Die IFK-ID erscheint in keinem Dateinamen — sie wird
+ * stattdessen (normalisiert) im Rückgabeobjekt mitgeführt.
+ *
+ * Die IFK-ID ist nur dann Pflicht (und wird geprüft), wenn mindestens
+ * einer der ausgewählten Materialtypen sie laut `materialRequirements.js`
+ * fachlich benötigt (aktuell: GiroCode schwarz sowie beide Flyer-
+ * Varianten, siehe dort). Für materialauswahlen ohne diesen Bedarf
+ * (z. B. ausschließlich die Repräsentantenurkunde oder ausschließlich
+ * PayPal QR schwarz) bleibt eine fehlende oder ungültige IFK-ID
+ * folgenlos — die zurückgegebenen Einträge enthalten dann kein `ifkId`.
  *
  * @param {object} params
  * @param {string} params.firstName Pflichtfeld, wird für den Dateinamen bereinigt.
  * @param {string} params.lastName Pflichtfeld, wird für den Dateinamen bereinigt.
- * @param {string} params.ifkId Pflichtfeld, muss laut `validateIfkId` gültig sein.
+ * @param {string} [params.ifkId] Pflicht, sofern mindestens ein
+ *   ausgewählter Materialtyp die IFK-ID benötigt (siehe oben); muss dann
+ *   laut `validateIfkId` gültig sein. Andernfalls optional.
  * @param {Array<string | {key: string}>} [params.materials]
  *   Die auszugebenden Materialien, als Liste von Schlüsseln oder
  *   Materialtyp-Objekten (z. B. das Ergebnis von `buildMaterialList()`).
  *   Ohne Angabe werden alle sechs Materialtypen verwendet.
- * @returns {Array<{key: string, label: string, filename: string, extension: string, ifkId: string}>}
- * @throws {Error} Bei fehlendem Vor-/Nachnamen, ungültiger IFK-ID oder
- *   unbekanntem Materialtyp.
+ * @returns {Array<{key: string, label: string, filename: string, extension: string, ifkId?: string}>}
+ * @throws {Error} Bei fehlendem Vor-/Nachnamen, unbekanntem Materialtyp
+ *   oder — sofern von der Materialauswahl benötigt — fehlender/ungültiger
+ *   IFK-ID.
  */
 export function buildMaterialFilenames({ firstName, lastName, ifkId, materials } = {}) {
   const sanitizedFirstName = sanitizeNamePart(firstName, "firstName");
   const sanitizedLastName = sanitizeNamePart(lastName, "lastName");
-  const normalizedIfkId = assertValidIfkId(ifkId);
   const resolvedMaterials = resolveMaterials(materials);
+  const normalizedIfkId = resolveIfkId(ifkId, resolvedMaterials);
 
   return resolvedMaterials.map((type) => ({
     key: type.key,
@@ -104,7 +115,26 @@ function transliterateGermanUmlauts(value) {
   return value.replace(/[äöüÄÖÜß]/g, (char) => UMLAUT_TRANSLITERATIONS[char]);
 }
 
-function assertValidIfkId(ifkId) {
+/**
+ * Ob mindestens einer der bereits aufgelösten Materialtypen die IFK-ID
+ * fachlich benötigt (siehe `core/materials/materialRequirements.js`).
+ */
+function anyMaterialRequiresIfkId(resolvedMaterials) {
+  return resolvedMaterials.some((type) => getRequiredFieldsForMaterial(type.key).includes(FIELD_KEYS.IFK_ID));
+}
+
+/**
+ * Löst die IFK-ID auf: Pflicht (und geprüft) nur, wenn mindestens ein
+ * ausgewählter Materialtyp sie benötigt — sonst wird eine fehlende oder
+ * ungültige IFK-ID stillschweigend ignoriert (`undefined`), siehe
+ * Modul-Dokumentation oben.
+ */
+function resolveIfkId(ifkId, resolvedMaterials) {
+  if (!anyMaterialRequiresIfkId(resolvedMaterials)) {
+    const result = validateIfkId(ifkId);
+    return result.valid ? result.normalized : undefined;
+  }
+
   const result = validateIfkId(ifkId);
   if (!result.valid) {
     throw new Error(`buildMaterialFilenames: ungültige IFK-ID (${result.reason}).`);

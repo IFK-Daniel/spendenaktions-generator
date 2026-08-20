@@ -34,6 +34,15 @@ test("bereinigt Vor- und Nachname wie buildMaterialFilenames", () => {
   assert.equal(filename, "IFK_Materialien_IFK7QX_Anna_Maria_von_Beispiel.zip");
 });
 
+test("ohne IFK-ID (z. B. Urkunde-only) lässt das ID-Segment weg, statt einen Fehler zu werfen", () => {
+  const filename = buildMaterialZipFilename({
+    firstName: "Max",
+    lastName: "Mustermann",
+  });
+
+  assert.equal(filename, "IFK_Materialien_Max_Mustermann.zip");
+});
+
 test("ungültige IFK-ID wirft einen Fehler", () => {
   assert.throws(
     () =>

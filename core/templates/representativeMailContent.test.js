@@ -21,6 +21,44 @@ test("gender 'female' erzeugt die Rollenbezeichnung 'Repräsentantin' im Text", 
   assert.match(text, /Einsatz als Repräsentantin von It's for Kids/);
 });
 
+test("role 'ambassador' + gender 'female' erzeugt 'Botschafterin' im Text", () => {
+  const text = buildRepresentativeMailText({
+    firstName: "Anna",
+    gender: "female",
+    ifkId: "IFK7QX",
+    role: "ambassador",
+  });
+  assert.match(text, /Einsatz als Botschafterin von It's for Kids/);
+  assert.doesNotMatch(text, /Repräsentant/);
+});
+
+test("role 'advisory_board' erzeugt die neutrale Gremien-Bezeichnung 'Mitglied des Beirats'", () => {
+  const text = buildRepresentativeMailText({
+    firstName: "Max",
+    gender: "male",
+    ifkId: "IFK7QX",
+    role: "advisory_board",
+  });
+  assert.match(text, /Einsatz als Mitglied des Beirats von It's for Kids/);
+  assert.doesNotMatch(text, /Repräsentant/);
+});
+
+test("ohne role bleibt es beim bisherigen 'Repräsentant' (keine falsche Fallback-Anrede für tatsächlich übergebene Rollen)", () => {
+  const text = buildRepresentativeMailText({ firstName: "Max", gender: "male", ifkId: "IFK7QX" });
+  assert.match(text, /Einsatz als Repräsentant von It's for Kids/);
+});
+
+test("role 'curator' + gender 'female' erzeugt 'Kuratorin' im HTML", () => {
+  const html = buildRepresentativeMailHtml({
+    firstName: "Alexandra",
+    gender: "female",
+    ifkId: "IFK7QX",
+    role: "curator",
+    logoUrl: "https://example.com/logo.png",
+  });
+  assert.match(html, /Kuratorin/);
+});
+
 test("Text enthält Anrede, IFK-ID und Grußformel", () => {
   const text = buildRepresentativeMailText({ firstName: "Max", gender: "male", ifkId: "IFK7QX" });
   assert.match(text, /^Hallo Max,/);

@@ -1,0 +1,258 @@
+[
+  {
+    "slug": "representative-male",
+    "label": "Repräsentantenurkunde (m)",
+    "template": "CERTIFICATE_REPRESENTATIVE_MALE",
+    "name": "Kim Yu",
+    "filename": "representative-male__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-male",
+    "label": "Repräsentantenurkunde (m)",
+    "template": "CERTIFICATE_REPRESENTATIVE_MALE",
+    "name": "Daniel Feigenbutz",
+    "filename": "representative-male__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-male",
+    "label": "Repräsentantenurkunde (m)",
+    "template": "CERTIFICATE_REPRESENTATIVE_MALE",
+    "name": "Alexandra Mazur",
+    "filename": "representative-male__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-male",
+    "label": "Repräsentantenurkunde (m)",
+    "template": "CERTIFICATE_REPRESENTATIVE_MALE",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "representative-male__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-female",
+    "label": "Repräsentantenurkunde (w)",
+    "template": "CERTIFICATE_REPRESENTATIVE_FEMALE",
+    "name": "Kim Yu",
+    "filename": "representative-female__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-female",
+    "label": "Repräsentantenurkunde (w)",
+    "template": "CERTIFICATE_REPRESENTATIVE_FEMALE",
+    "name": "Daniel Feigenbutz",
+    "filename": "representative-female__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-female",
+    "label": "Repräsentantenurkunde (w)",
+    "template": "CERTIFICATE_REPRESENTATIVE_FEMALE",
+    "name": "Alexandra Mazur",
+    "filename": "representative-female__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "representative-female",
+    "label": "Repräsentantenurkunde (w)",
+    "template": "CERTIFICATE_REPRESENTATIVE_FEMALE",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "representative-female__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-male",
+    "label": "Botschafterurkunde (m)",
+    "template": "CERTIFICATE_AMBASSADOR_MALE",
+    "name": "Kim Yu",
+    "filename": "ambassador-male__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-male",
+    "label": "Botschafterurkunde (m)",
+    "template": "CERTIFICATE_AMBASSADOR_MALE",
+    "name": "Daniel Feigenbutz",
+    "filename": "ambassador-male__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-male",
+    "label": "Botschafterurkunde (m)",
+    "template": "CERTIFICATE_AMBASSADOR_MALE",
+    "name": "Alexandra Mazur",
+    "filename": "ambassador-male__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-male",
+    "label": "Botschafterurkunde (m)",
+    "template": "CERTIFICATE_AMBASSADOR_MALE",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "ambassador-male__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-female",
+    "label": "Botschafterinnenurkunde (w)",
+    "template": "CERTIFICATE_AMBASSADOR_FEMALE",
+    "name": "Kim Yu",
+    "filename": "ambassador-female__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-female",
+    "label": "Botschafterinnenurkunde (w)",
+    "template": "CERTIFICATE_AMBASSADOR_FEMALE",
+    "name": "Daniel Feigenbutz",
+    "filename": "ambassador-female__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-female",
+    "label": "Botschafterinnenurkunde (w)",
+    "template": "CERTIFICATE_AMBASSADOR_FEMALE",
+    "name": "Alexandra Mazur",
+    "filename": "ambassador-female__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "ambassador-female",
+    "label": "Botschafterinnenurkunde (w)",
+    "template": "CERTIFICATE_AMBASSADOR_FEMALE",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "ambassador-female__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "advisory-board",
+    "label": "Urkunde Beirat",
+    "template": "CERTIFICATE_ADVISORY_BOARD",
+    "name": "Kim Yu",
+    "filename": "advisory-board__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "advisory-board",
+    "label": "Urkunde Beirat",
+    "template": "CERTIFICATE_ADVISORY_BOARD",
+    "name": "Daniel Feigenbutz",
+    "filename": "advisory-board__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "advisory-board",
+    "label": "Urkunde Beirat",
+    "template": "CERTIFICATE_ADVISORY_BOARD",
+    "name": "Alexandra Mazur",
+    "filename": "advisory-board__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "advisory-board",
+    "label": "Urkunde Beirat",
+    "template": "CERTIFICATE_ADVISORY_BOARD",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "advisory-board__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "curatorium",
+    "label": "Urkunde Kuratorium",
+    "template": "CERTIFICATE_CURATORIUM",
+    "name": "Kim Yu",
+    "filename": "curatorium__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "curatorium",
+    "label": "Urkunde Kuratorium",
+    "template": "CERTIFICATE_CURATORIUM",
+    "name": "Daniel Feigenbutz",
+    "filename": "curatorium__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "curatorium",
+    "label": "Urkunde Kuratorium",
+    "template": "CERTIFICATE_CURATORIUM",
+    "name": "Alexandra Mazur",
+    "filename": "curatorium__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "curatorium",
+    "label": "Urkunde Kuratorium",
+    "template": "CERTIFICATE_CURATORIUM",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "curatorium__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "expert-council",
+    "label": "Urkunde Fachrat",
+    "template": "CERTIFICATE_EXPERT_COUNCIL",
+    "name": "Kim Yu",
+    "filename": "expert-council__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "expert-council",
+    "label": "Urkunde Fachrat",
+    "template": "CERTIFICATE_EXPERT_COUNCIL",
+    "name": "Daniel Feigenbutz",
+    "filename": "expert-council__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "expert-council",
+    "label": "Urkunde Fachrat",
+    "template": "CERTIFICATE_EXPERT_COUNCIL",
+    "name": "Alexandra Mazur",
+    "filename": "expert-council__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "expert-council",
+    "label": "Urkunde Fachrat",
+    "template": "CERTIFICATE_EXPERT_COUNCIL",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "expert-council__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "economic-council",
+    "label": "Urkunde Wirtschaftsrat",
+    "template": "CERTIFICATE_ECONOMIC_COUNCIL",
+    "name": "Kim Yu",
+    "filename": "economic-council__kim-yu.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "economic-council",
+    "label": "Urkunde Wirtschaftsrat",
+    "template": "CERTIFICATE_ECONOMIC_COUNCIL",
+    "name": "Daniel Feigenbutz",
+    "filename": "economic-council__daniel-feigenbutz.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "economic-council",
+    "label": "Urkunde Wirtschaftsrat",
+    "template": "CERTIFICATE_ECONOMIC_COUNCIL",
+    "name": "Alexandra Mazur",
+    "filename": "economic-council__alexandra-mazur.pdf",
+    "warnings": []
+  },
+  {
+    "slug": "economic-council",
+    "label": "Urkunde Wirtschaftsrat",
+    "template": "CERTIFICATE_ECONOMIC_COUNCIL",
+    "name": "Maximilian Bartholomäus-Schweighofer",
+    "filename": "economic-council__maximilian-bartholomaeus-schweighofer.pdf",
+    "warnings": []
+  }
+]

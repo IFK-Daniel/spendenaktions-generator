@@ -164,3 +164,45 @@ test("gender 'female' erzeugt 'Repräsentantin' im Mailtext an den Repräsentant
 
   assert.match(request.recipient.text, /Repräsentantin/);
 });
+
+test("person.role steuert Rollenbezeichnung in Empfänger-Mail und humbee-Betreff (Kurator, ohne Region)", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: {
+      person: {
+        firstName: "Daniel",
+        lastName: "Feigenbutz",
+        ifkId: "IFK7QX",
+        role: "curator",
+        gender: "male",
+        email: "daniel@example.com",
+      },
+    },
+    zip: fakeZip(),
+    files: fakeFiles(),
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.match(request.recipient.text, /Einsatz als Kurator von It's for Kids/);
+  assert.doesNotMatch(request.recipient.text, /Repräsentant/);
+  assert.equal(request.humbee.subject, "Kurator / Feigenbutz, Daniel");
+});
+
+test("person.role 'ambassador' + gender 'female' → 'Botschafterin' in der Empfänger-Mail", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: {
+      person: {
+        firstName: "Anna",
+        lastName: "Muster",
+        ifkId: "IFK7QX",
+        role: "ambassador",
+        gender: "female",
+        email: "anna@example.com",
+      },
+    },
+    zip: fakeZip(),
+    files: fakeFiles(),
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.match(request.recipient.text, /Botschafterin/);
+});

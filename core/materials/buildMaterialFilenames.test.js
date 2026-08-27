@@ -4,7 +4,7 @@ import { buildMaterialFilenames } from "./buildMaterialFilenames.js";
 
 const VALID_IFK_ID = "IFK7QX";
 
-test("liefert die korrekten Dateinamen für alle fünf Materialtypen", () => {
+test("liefert die korrekten Dateinamen für alle zehn Materialtypen", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
@@ -17,7 +17,14 @@ test("liefert die korrekten Dateinamen für alle fünf Materialtypen", () => {
   assert.equal(filenames.FLYER_HOME, "IFK_Max_Mustermann_Flyer_Home.pdf");
   assert.equal(filenames.QR_PAYPAL_BLACK, "IFK_Max_Mustermann_PayPal_QR_schwarz.png");
   assert.equal(filenames.QR_GIRO_BLACK, "IFK_Max_Mustermann_GiroCode_schwarz.png");
+  // Jede Urkunde (unabhängig vom Wegbegleiter-Typ) folgt demselben
+  // rollenunabhängigen Schema Urkunde_<Vorname>_<Nachname>.pdf.
   assert.equal(filenames.CERTIFICATE_REPRESENTATIVE, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(filenames.CERTIFICATE_AMBASSADOR, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(filenames.CERTIFICATE_ADVISORY_BOARD, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(filenames.CERTIFICATE_CURATORIUM, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(filenames.CERTIFICATE_EXPERT_COUNCIL, "Urkunde_Max_Mustermann.pdf");
+  assert.equal(filenames.CERTIFICATE_ECONOMIC_COUNCIL, "Urkunde_Max_Mustermann.pdf");
 
   for (const entry of result) {
     assert.equal(entry.ifkId, "IFK7QX");
@@ -111,13 +118,23 @@ test("unbekannter Materialtyp wirft einen Fehler", () => {
   );
 });
 
-test("ohne 'materials' werden alle fünf Dateinamen erzeugt", () => {
+test("ohne 'materials' werden alle zehn Dateinamen erzeugt", () => {
   const result = buildMaterialFilenames({
     firstName: "Max",
     lastName: "Mustermann",
     ifkId: VALID_IFK_ID,
   });
-  assert.equal(result.length, 5);
+  assert.equal(result.length, 10);
+});
+
+test("Kuratoriumsurkunde allein: ohne IFK-ID, ohne Geschlecht, Schema Urkunde_<Vorname>_<Nachname>.pdf", () => {
+  const result = buildMaterialFilenames({
+    firstName: "Daniel",
+    lastName: "Feigenbutz",
+    materials: ["CERTIFICATE_CURATORIUM"],
+  });
+  assert.equal(result[0].filename, "Urkunde_Daniel_Feigenbutz.pdf");
+  assert.equal(result[0].ifkId, undefined);
 });
 
 test("Urkunde: 'Daniel Feigenbutz' erzeugt 'Urkunde_Daniel_Feigenbutz.pdf'", () => {

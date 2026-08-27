@@ -41,6 +41,32 @@ test("erzeugt ein Urkunde-PDF-Material mit korrektem Dateinamen/Mimetype und ruf
   assert.equal(capturedArgs.templateConfig.key, "CERTIFICATE_REPRESENTATIVE_FEMALE");
 });
 
+test("akzeptiert auch eine geschlechtsneutrale Wegbegleiter-Urkunde (z. B. Kuratorium)", async () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Daniel",
+    lastName: "Feigenbutz",
+    materials: [MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM],
+  });
+  const entry = manifest.materials[0];
+
+  let capturedArgs = null;
+  const fakeRenderFlyer = async (args) => {
+    capturedArgs = args;
+    return { bytes: new Uint8Array([1, 2, 3]), warnings: [] };
+  };
+
+  const result = await generateCertificateMaterial({
+    entry,
+    templateConfig: { key: "CERTIFICATE_CURATORIUM" },
+    person: manifest.person,
+    deps: { renderFlyer: fakeRenderFlyer },
+  });
+
+  assert.equal(result.key, MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM);
+  assert.equal(result.filename, "Urkunde_Daniel_Feigenbutz.pdf");
+  assert.equal(capturedArgs.textValues.name, "Daniel Feigenbutz");
+});
+
 test("gibt warnings von renderFlyer unverändert durch", async () => {
   const manifest = manifestWithCertificate();
   const fakeWarnings = [{ fieldKey: "name", sizePt: 24, minSizePt: 24, reason: "..." }];

@@ -1,5 +1,5 @@
 import { validateIfkId } from "../id/validateIfkId.js";
-import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
+import { MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
 import { buildMaterialList } from "./buildMaterialList.js";
 import { FIELD_KEYS, getRequiredFieldsForMaterial } from "./materialRequirements.js";
 
@@ -7,8 +7,9 @@ import { FIELD_KEYS, getRequiredFieldsForMaterial } from "./materialRequirements
  * Dateinamens-Suffix je Materialtyp (ohne Präfix/Namen/Endung). Bewusst
  * getrennt von `materialTypes.js`, da es sich um eine reine
  * Benennungskonvention handelt, nicht um fachliche Metadaten des Typs.
- * Enthält bewusst KEINEN Eintrag für `CERTIFICATE_REPRESENTATIVE` — die
- * Urkunde folgt einem eigenen Schema, siehe `buildCertificateFilename()`.
+ * Enthält bewusst KEINEN Eintrag für die Urkunden
+ * (`category === "certificate"`) — sie folgen einem eigenen,
+ * rollenunabhängigen Schema, siehe `buildCertificateFilename()`.
  */
 const FILENAME_SUFFIX_BY_KEY = Object.freeze({
   FLYER_DRUCKEREI: "Flyer_Druckerei",
@@ -23,10 +24,11 @@ const FILESYSTEM_UNSAFE_CHARS = /[\\/:*?"<>|]/g;
  * Erzeugt die Dateinamen für die ausgewählten Materialien einer Person.
  *
  * Dateinamensschema: `IFK_<Vorname>_<Nachname>_<Materialsuffix>.<extension>`
- * — mit einer Ausnahme: die Repräsentantenurkunde
- * (`CERTIFICATE_REPRESENTATIVE`) folgt stattdessen dem Schema
+ * — mit einer Ausnahme: JEDE Urkunde (`category === "certificate"`,
+ * unabhängig vom Wegbegleiter-Typ) folgt stattdessen dem Schema
  * `Urkunde_<Vorname>_<Nachname>.pdf` (siehe `buildCertificateFilename()`
- * unten). Die IFK-ID erscheint in keinem Dateinamen — sie wird
+ * unten) — der Rollen-/Gremienname taucht im Dateinamen bewusst nicht
+ * auf. Die IFK-ID erscheint in keinem Dateinamen — sie wird
  * stattdessen (normalisiert) im Rückgabeobjekt mitgeführt.
  *
  * Die IFK-ID ist nur dann Pflicht (und wird geprüft), wenn mindestens
@@ -62,7 +64,7 @@ export function buildMaterialFilenames({ firstName, lastName, ifkId, materials }
     key: type.key,
     label: type.label,
     filename:
-      type.key === MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE
+      type.category === "certificate"
         ? buildCertificateFilename(firstName, lastName)
         : `IFK_${sanitizedFirstName}_${sanitizedLastName}_${FILENAME_SUFFIX_BY_KEY[type.key]}.${type.extension}`,
     extension: type.extension,

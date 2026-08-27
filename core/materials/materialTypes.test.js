@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES, MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
+import {
+  MATERIAL_TYPE_KEYS,
+  MATERIAL_TYPES,
+  MATERIAL_TYPES_BY_KEY,
+  CERTIFICATE_MATERIAL_KEYS,
+} from "./materialTypes.js";
 
 const EXPECTED_ORDER = [
   "FLYER_DRUCKEREI",
@@ -8,10 +13,15 @@ const EXPECTED_ORDER = [
   "QR_PAYPAL_BLACK",
   "QR_GIRO_BLACK",
   "CERTIFICATE_REPRESENTATIVE",
+  "CERTIFICATE_AMBASSADOR",
+  "CERTIFICATE_ADVISORY_BOARD",
+  "CERTIFICATE_CURATORIUM",
+  "CERTIFICATE_EXPERT_COUNCIL",
+  "CERTIFICATE_ECONOMIC_COUNCIL",
 ];
 
-test("genau fünf Materialtypen sind vorhanden (grüne QR-Varianten entfernt)", () => {
-  assert.equal(MATERIAL_TYPES.length, 5);
+test("genau zehn Materialtypen sind vorhanden (2 Flyer, 2 QR, 6 Urkunden — grüne QR-Varianten entfernt)", () => {
+  assert.equal(MATERIAL_TYPES.length, 10);
 });
 
 test("alle erwarteten Schlüssel sind vorhanden", () => {
@@ -37,6 +47,36 @@ test("jeder Materialtyp enthält die erwarteten Metadaten", () => {
       format: "pdf",
       extension: "pdf",
     },
+    CERTIFICATE_AMBASSADOR: {
+      label: "Botschafterurkunde",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
+    CERTIFICATE_ADVISORY_BOARD: {
+      label: "Urkunde Beirat",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
+    CERTIFICATE_CURATORIUM: {
+      label: "Urkunde Kuratorium",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
+    CERTIFICATE_EXPERT_COUNCIL: {
+      label: "Urkunde Fachrat",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
+    CERTIFICATE_ECONOMIC_COUNCIL: {
+      label: "Urkunde Wirtschaftsrat",
+      category: "certificate",
+      format: "pdf",
+      extension: "pdf",
+    },
   };
 
   for (const [key, meta] of Object.entries(expected)) {
@@ -47,6 +87,20 @@ test("jeder Materialtyp enthält die erwarteten Metadaten", () => {
     assert.equal(type.category, meta.category);
     assert.equal(type.format, meta.format);
     assert.equal(type.extension, meta.extension);
+  }
+});
+
+test("CERTIFICATE_MATERIAL_KEYS listet genau die sechs Urkunden-Schlüssel in fester Reihenfolge", () => {
+  assert.deepEqual(CERTIFICATE_MATERIAL_KEYS, [
+    "CERTIFICATE_REPRESENTATIVE",
+    "CERTIFICATE_AMBASSADOR",
+    "CERTIFICATE_ADVISORY_BOARD",
+    "CERTIFICATE_CURATORIUM",
+    "CERTIFICATE_EXPERT_COUNCIL",
+    "CERTIFICATE_ECONOMIC_COUNCIL",
+  ]);
+  for (const key of CERTIFICATE_MATERIAL_KEYS) {
+    assert.equal(MATERIAL_TYPES_BY_KEY[key].category, "certificate");
   }
 });
 
@@ -72,5 +126,5 @@ test("die Definition kann von außen nicht verändert werden", () => {
   }, TypeError);
 
   assert.equal(MATERIAL_TYPES[0].label, "Flyer Druckerei");
-  assert.equal(MATERIAL_TYPES.length, 5);
+  assert.equal(MATERIAL_TYPES.length, 10);
 });

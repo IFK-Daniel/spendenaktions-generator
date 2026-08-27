@@ -297,13 +297,16 @@
               <input type="checkbox" data-material-key="QR_GIRO_BLACK" checked />
               GiroCode schwarz
             </label>
+            <!-- Genau EINE Urkunden-Checkbox. `data-material-key` und der
+                 sichtbare Titel werden je nach gewähltem Wegbegleiter-Typ
+                 gesetzt (siehe `applyRoleToCertificateCheckbox` in
+                 src/intern/generator.js). Der "Geschlecht nötig"-Hinweis
+                 wird nur für Rollen mit geschlechtsspezifischer Urkunde
+                 (Repräsentant, Botschafter) eingeblendet. -->
             <label class="material-item">
-              <input type="checkbox" data-material-key="CERTIFICATE_REPRESENTATIVE" />
-              Repräsentantenurkunde
+              <input type="checkbox" data-material-key="CERTIFICATE_REPRESENTATIVE" data-material-certificate />
+              <span data-certificate-label>Repräsentantenurkunde</span>
               <span class="material-item-hint" data-default-hint>Geschlecht nötig</span>
-              <span class="material-item-hint" data-role-unavailable-hint hidden
-                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
-              >
             </label>
           </div>
         </fieldset>

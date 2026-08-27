@@ -10,7 +10,11 @@ import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRe
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
-import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES_BY_KEY } from "../../core/materials/materialTypes.js";
+import {
+  MATERIAL_TYPE_KEYS,
+  MATERIAL_TYPES_BY_KEY,
+  CERTIFICATE_MATERIAL_KEYS,
+} from "../../core/materials/materialTypes.js";
 import {
   FIELD_KEYS,
   FIELD_LABELS,
@@ -37,6 +41,13 @@ import { flyerFemalePrintBackTemplate } from "../../templates/flyer-female-print
 import { flyerFemaleHomeBackTemplate } from "../../templates/flyer-female-home-back/template.config.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
+import { certificateAmbassadorMaleTemplate } from "../../templates/certificate-ambassador-male/template.config.js";
+import { certificateAmbassadorFemaleTemplate } from "../../templates/certificate-ambassador-female/template.config.js";
+import { certificateAdvisoryBoardTemplate } from "../../templates/certificate-advisory-board/template.config.js";
+import { certificateCuratoriumTemplate } from "../../templates/certificate-curatorium/template.config.js";
+import { certificateExpertCouncilTemplate } from "../../templates/certificate-expert-council/template.config.js";
+import { certificateEconomicCouncilTemplate } from "../../templates/certificate-economic-council/template.config.js";
+import { resolveCertificateTemplateVariant } from "../../core/materials/resolveCertificateTemplateVariant.js";
 import {
   ALLOWED_SCREENSHOT_MIME_TYPES,
   extractRepresentativeDataFromScreenshot,
@@ -52,6 +63,8 @@ import {
   ROLE_KEY_LIST,
   getRoleConfig,
   roleRequiresRegion,
+  getCertificateMaterialKey,
+  certificateRequiresGender,
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
 } from "../../core/materials/roleConfig.js";
@@ -59,7 +72,10 @@ import {
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
-const CERTIFICATE_KEYS = new Set([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]);
+// Alle Urkunden-Materialschlüssel (je Wegbegleiter-Typ genau einer,
+// siehe `core/materials/materialTypes.js`) — bewusst aus der zentralen
+// Definition abgeleitet statt hier einzeln aufgezählt.
+const CERTIFICATE_KEYS = new Set(CERTIFICATE_MATERIAL_KEYS);
 
 // Flyer-Vorlage wird ausschließlich anhand des Geschlechts gewählt
 // (siehe Vorgabe, analog zu CERTIFICATE_TEMPLATE_BY_GENDER unten) — der
@@ -109,16 +125,48 @@ function resolveFlyerBackTemplate(materialKey, gender) {
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: "Druck-PDF herunterladen",
   [MATERIAL_TYPE_KEYS.FLYER_HOME]: "PDF herunterladen",
-  [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]: "Urkunde herunterladen",
 });
 
-// Urkunden-Vorlage wird ausschließlich anhand des Geschlechts gewählt
-// (siehe Vorgabe) — der Renderer (`renderFlyer.js`) selbst kennt kein
-// Geschlecht, die Auswahl passiert vollständig hier, vor dem Rendern.
-const CERTIFICATE_TEMPLATE_BY_GENDER = Object.freeze({
-  male: certificateRepresentativeMaleTemplate,
-  female: certificateRepresentativeFemaleTemplate,
+// Urkunden-Vorlagen je Materialschlüssel. `{ neutral }` = genau eine
+// geschlechtsneutrale Vorlage (Beirat/Kuratorium/Fachrat/Wirtschaftsrat);
+// `{ male, female }` = zwei geschlechtsspezifische Vorlagen
+// (Repräsentant, Botschafter — die Master-PDFs enthalten unterschiedlichen
+// Text). Der Renderer (`renderFlyer.js`) kennt kein Geschlecht — die
+// Auswahl passiert vollständig hier über `resolveCertificateTemplate`,
+// vor dem Rendern. Kein Fallback: eine unbekannte Rolle bzw. eine
+// geschlechtsspezifische Urkunde ohne `gender` wirft (siehe
+// `core/materials/resolveCertificateTemplateVariant.js`).
+//
+// Eine weitere Wegbegleiter-Urkunde ergänzen = neue PDF unter
+// `templates/certificate-…/`, neue `template.config.js`, ein Eintrag
+// hier und das Rollen-Mapping in `core/materials/roleConfig.js` — sonst
+// nichts in dieser Datei.
+const CERTIFICATE_TEMPLATES_BY_KEY = Object.freeze({
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]: Object.freeze({
+    male: certificateRepresentativeMaleTemplate,
+    female: certificateRepresentativeFemaleTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR]: Object.freeze({
+    male: certificateAmbassadorMaleTemplate,
+    female: certificateAmbassadorFemaleTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD]: Object.freeze({
+    neutral: certificateAdvisoryBoardTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM]: Object.freeze({
+    neutral: certificateCuratoriumTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL]: Object.freeze({
+    neutral: certificateExpertCouncilTemplate,
+  }),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL]: Object.freeze({
+    neutral: certificateEconomicCouncilTemplate,
+  }),
 });
+
+function resolveCertificateTemplate(materialKey, gender) {
+  return resolveCertificateTemplateVariant(CERTIFICATE_TEMPLATES_BY_KEY[materialKey], gender);
+}
 
 // Baut die zusammengefasste, blockierende Fehlermeldung, wenn KEIN
 // ausgewähltes Material erzeugt werden kann (siehe `handleGenerate`
@@ -211,13 +259,26 @@ export function initGenerator() {
   const photoCropStatusEl = document.getElementById("photo-crop-status");
   const photoCropResetBtn = document.getElementById("photo-crop-reset-btn");
   const materialCheckboxes = Array.from(document.querySelectorAll("[data-material-key]"));
-  // Checkboxen mit rollenabhängiger Vorlagenverfügbarkeit (Flyer +
-  // Urkunde) — die beiden schwarzen QR-Checkboxen sind bewusst NICHT
-  // enthalten, da QR-Codes für jeden Wegbegleiter-Typ erzeugt werden
-  // können (siehe Vorgabe, Abschnitt 9).
-  const roleGatedMaterialCheckboxes = materialCheckboxes.filter(
-    (checkbox) => checkbox.hasAttribute("data-material-flyer") || checkbox.dataset.materialKey === MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE
+  // Flyer-Checkboxen: rollenabhängige Vorlagen-VERFÜGBARKEIT (für die
+  // neuen Wegbegleiter-Typen fehlt die Flyer-Master-Vorlage noch —
+  // deaktiviert + Hinweis, KEIN Fallback auf Repräsentanten-Flyer). Die
+  // schwarzen QR-Checkboxen sind bewusst nicht enthalten (QR für jede
+  // Rolle möglich, Vorgabe Abschnitt 9); die Urkunden-Checkbox ebenfalls
+  // nicht — jede Rolle hat eine Urkundenvorlage, sie wird stattdessen
+  // rollenabhängig UMKONFIGURIERT (`applyRoleToCertificateCheckbox`).
+  const roleGatedMaterialCheckboxes = materialCheckboxes.filter((checkbox) =>
+    checkbox.hasAttribute("data-material-flyer")
   );
+  // Die eine Urkunden-Checkbox — ihr `data-material-key`, ihr sichtbarer
+  // Titel und der "Geschlecht nötig"-Hinweis richten sich nach dem
+  // gewählten Wegbegleiter-Typ (siehe `applyRoleToCertificateCheckbox`).
+  const certificateCheckbox = document.querySelector("[data-material-certificate]");
+  const certificateLabelEl = certificateCheckbox
+    ?.closest(".material-item")
+    ?.querySelector("[data-certificate-label]");
+  const certificateGenderHintEl = certificateCheckbox
+    ?.closest(".material-item")
+    ?.querySelector("[data-default-hint]");
 
   // Aktuell ausgewählter Wegbegleiter-Typ — Default `representative`
   // entspricht dem bisherigen alleinigen Verhalten der Seite (Dropdown
@@ -239,7 +300,27 @@ export function initGenerator() {
     federalStateField.hidden = !requiresRegion;
     regionField.hidden = !requiresRegion;
     updateMaterialAvailabilityForRole(roleKey);
+    applyRoleToCertificateCheckbox(roleKey);
     updateRequiredFieldIndicators();
+  }
+
+  // Richtet die eine Urkunden-Checkbox auf den gewählten Wegbegleiter-
+  // Typ aus: `data-material-key` auf dessen Urkunden-Schlüssel (steuert
+  // Pflichtfelder, Manifest, Dateiname, Erzeugung — alles generisch über
+  // diesen Schlüssel), sichtbarer Titel auf das Material-Label
+  // (Repräsentantenurkunde / Botschafterurkunde / Urkunde Beirat …), und
+  // der "Geschlecht nötig"-Hinweis nur für Rollen, deren Urkunde
+  // geschlechtsspezifischen Text enthält (Repräsentant, Botschafter).
+  function applyRoleToCertificateCheckbox(roleKey) {
+    if (!certificateCheckbox) return;
+    const certificateKey = getCertificateMaterialKey(roleKey);
+    certificateCheckbox.dataset.materialKey = certificateKey;
+    if (certificateLabelEl) {
+      certificateLabelEl.textContent = MATERIAL_TYPES_BY_KEY[certificateKey]?.label || "Urkunde";
+    }
+    if (certificateGenderHintEl) {
+      certificateGenderHintEl.hidden = !certificateRequiresGender(roleKey);
+    }
   }
 
   // Ordnet jedem Personendaten-Feld sein sichtbares `<label>`/`<legend>`
@@ -272,10 +353,7 @@ export function initGenerator() {
   function updateMaterialAvailabilityForRole(roleKey) {
     for (const checkbox of roleGatedMaterialCheckboxes) {
       const materialKey = checkbox.dataset.materialKey;
-      const isFlyerMaterial = checkbox.hasAttribute("data-material-flyer");
-      const available = isFlyerMaterial
-        ? isFlyerTemplateAvailableForRole(roleKey, materialKey)
-        : isCertificateTemplateAvailableForRole(roleKey, materialKey);
+      const available = isFlyerTemplateAvailableForRole(roleKey, materialKey);
 
       const item = checkbox.closest(".material-item");
       const defaultHint = item?.querySelector("[data-default-hint]");
@@ -666,7 +744,13 @@ export function initGenerator() {
         downloadLink.className = "download-link";
         downloadLink.href = objectUrl;
         downloadLink.download = file.filename;
-        downloadLink.textContent = FLYER_DOWNLOAD_LABEL_BY_KEY[file.key] || "PDF herunterladen";
+        // Urkunden (jede Rolle) behalten den einheitlichen Button-Text
+        // "Urkunde herunterladen" (Vorgabe Abschnitt 18); Flyer-Varianten
+        // ihren jeweiligen Text.
+        downloadLink.textContent =
+          file.category === "certificate"
+            ? "Urkunde herunterladen"
+            : FLYER_DOWNLOAD_LABEL_BY_KEY[file.key] || "PDF herunterladen";
         actions.appendChild(downloadLink);
 
         block.appendChild(actions);
@@ -1377,15 +1461,23 @@ export function initGenerator() {
       if (isAutoRecognized("phone", fields.phone)) markFieldAsImported("phone", fields.phone.value);
     }
 
-    if (isApplyable("federalState", fields.federalState)) {
-      federalStateInput.value = fields.federalState.value;
-      if (isAutoRecognized("federalState", fields.federalState))
-        markFieldAsImported("federalState", fields.federalState.value);
-    }
+    // Bundesland/Region werden aus dem Screenshot nur übernommen, wenn
+    // die aktuell gewählte Rolle sie überhaupt benötigt — für alle
+    // anderen Wegbegleiter bleiben die (ohnehin ausgeblendeten) Felder
+    // unangetastet und tauchen weder als Pflicht noch im Material auf
+    // (Vorgabe Abschnitt 15). Die OCR erkennt beide Felder weiterhin;
+    // allein die Rolle entscheidet über die Übernahme.
+    if (roleRequiresRegion(selectedRoleKey())) {
+      if (isApplyable("federalState", fields.federalState)) {
+        federalStateInput.value = fields.federalState.value;
+        if (isAutoRecognized("federalState", fields.federalState))
+          markFieldAsImported("federalState", fields.federalState.value);
+      }
 
-    if (isApplyable("region", fields.region)) {
-      regionInput.value = fields.region.value;
-      if (isAutoRecognized("region", fields.region)) markFieldAsImported("region", fields.region.value);
+      if (isApplyable("region", fields.region)) {
+        regionInput.value = fields.region.value;
+        if (isAutoRecognized("region", fields.region)) markFieldAsImported("region", fields.region.value);
+      }
     }
 
     if (fields.emailForForm.value) {
@@ -1427,6 +1519,14 @@ export function initGenerator() {
     const role = selectedRoleKey();
     if (!role) {
       showError("Bitte zuerst einen Wegbegleiter-Typ auswählen.");
+      return;
+    }
+    // Das Auswahlfeld bietet nur gültige Rollen an; diese Prüfung fängt
+    // dennoch jeden unbekannten Wert klar ab (Vorgabe Abschnitt 20:
+    // "unbekannte Rolle erzeugt klare Fehlermeldung"), statt später beim
+    // Auflösen der Vorlage in einen unbehandelten Fehler zu laufen.
+    if (!ROLE_KEY_LIST.includes(role)) {
+      showError(`Unbekannter Wegbegleiter-Typ "${role}". Bitte eine der angebotenen Rollen auswählen.`);
       return;
     }
 
@@ -1489,7 +1589,12 @@ export function initGenerator() {
     const requestedFlyer = materialKeys.some((key) => FLYER_KEYS.has(key));
     const requestedPaypal = materialKeys.some((key) => PAYPAL_KEYS.has(key));
     const requestedGiro = materialKeys.some((key) => GIRO_KEYS.has(key));
-    const requestedCertificate = materialKeys.some((key) => CERTIFICATE_KEYS.has(key));
+    // Höchstens eine Urkunde ist auswählbar (eine Checkbox, deren
+    // `data-material-key` sich nach der Rolle richtet) — der konkrete
+    // Schlüssel steuert Pflichtfelder, Manifest, Dateiname und
+    // Vorlagenauswahl generisch.
+    const certificateKey = materialKeys.find((key) => CERTIFICATE_KEYS.has(key));
+    const requestedCertificate = certificateKey !== undefined;
 
     // GiroCode-/PayPal-Daten werden benötigt, sobald das jeweilige
     // Material direkt ausgewählt ist ODER der Flyer sie zum Einbetten
@@ -1529,17 +1634,21 @@ export function initGenerator() {
 
     let certificateReady = false;
     if (requestedCertificate) {
+      const certLabel = MATERIAL_TYPES_BY_KEY[certificateKey]?.label || "Urkunde";
       const certMissing = getMissingFields(
-        getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, role),
+        getRequiredFieldsForMaterial(certificateKey, role),
         fieldValues
       );
       if (certMissing.length > 0) {
         skipMessages.push(
-          `Repräsentantenurkunde konnte nicht erzeugt werden: ${describeFieldList(certMissing)} fehlt.`
+          `${certLabel} konnte nicht erzeugt werden: ${describeFieldList(certMissing)} fehlt.`
         );
-      } else if (!isCertificateTemplateAvailableForRole(role, MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE)) {
+      } else if (!isCertificateTemplateAvailableForRole(role, certificateKey)) {
+        // Verteidigungslinie gegen einen stillen Fallback auf eine
+        // fremde Urkundenvorlage — greift z. B. bei einem Altzustand aus
+        // der Zeit vor einem Rollenwechsel.
         skipMessages.push(
-          `Repräsentantenurkunde konnte nicht erzeugt werden: für den gewählten Wegbegleiter-Typ ist noch keine Urkunden-Vorlage hinterlegt (${getRoleConfig(role).label}).`
+          `${certLabel} konnte nicht erzeugt werden: für den gewählten Wegbegleiter-Typ ist keine passende Urkunden-Vorlage hinterlegt (${getRoleConfig(role).label}).`
         );
       } else {
         certificateReady = true;
@@ -1724,9 +1833,16 @@ export function initGenerator() {
 
       if (certificateReady) {
         const certificateEntry = manifest.materials.find((entry) => CERTIFICATE_KEYS.has(entry.key));
+        // Vorlagenauswahl vollständig hier, vor dem Rendern: für die
+        // geschlechtsneutralen Gremien-Urkunden ist `genderInput` null
+        // (die einzige Vorlage wird geliefert), für Repräsentant/
+        // Botschafter entscheidet das Geschlecht — `female` liefert nie
+        // die männliche Vorlage, fehlendes Geschlecht bei einer
+        // geschlechtsspezifischen Urkunde wirft (wurde durch die
+        // Pflichtfeldprüfung oben aber bereits ausgeschlossen).
         const certificateFile = await generateCertificateMaterial({
           entry: certificateEntry,
-          templateConfig: CERTIFICATE_TEMPLATE_BY_GENDER[genderInput.value],
+          templateConfig: resolveCertificateTemplate(certificateEntry.key, genderInput ? genderInput.value : undefined),
           person: manifest.person,
           deps: { loadTemplateAssets: loadTemplateAssetsBrowser },
         });

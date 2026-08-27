@@ -109,10 +109,40 @@ const BASE_MATERIAL_REQUIREMENTS = Object.freeze({
     FIELD_KEYS.LAST_NAME,
     FIELD_KEYS.IFK_ID,
   ]),
+  // Repräsentanten- und Botschafter-Urkunde enthalten geschlechts-
+  // spezifischen Text (männlich/weiblich bzw. „zum Botschafter“ / „zur
+  // Botschafterin“) — daher ist Geschlecht für die Vorlagenauswahl
+  // Pflicht.
   [MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]: Object.freeze([
     FIELD_KEYS.FIRST_NAME,
     FIELD_KEYS.LAST_NAME,
     FIELD_KEYS.GENDER,
+  ]),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR]: Object.freeze([
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.GENDER,
+  ]),
+  // Beirat/Kuratorium/Fachrat/Wirtschaftsrat: die Vorlagen sind bewusst
+  // geschlechtsneutral formuliert („Hiermit berufen wir [Name] in den
+  // Beirat / ins Kuratorium der Stiftung“) — es gibt je genau EINE
+  // Vorlage, Geschlecht wird für die Erzeugung nicht benötigt und darf
+  // daher nicht Pflicht sein.
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD]: Object.freeze([
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+  ]),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM]: Object.freeze([
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+  ]),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL]: Object.freeze([
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+  ]),
+  [MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL]: Object.freeze([
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
   ]),
 });
 

@@ -9,18 +9,23 @@ const ALL_KEYS_IN_ORDER = [
   "QR_PAYPAL_BLACK",
   "QR_GIRO_BLACK",
   "CERTIFICATE_REPRESENTATIVE",
+  "CERTIFICATE_AMBASSADOR",
+  "CERTIFICATE_ADVISORY_BOARD",
+  "CERTIFICATE_CURATORIUM",
+  "CERTIFICATE_EXPERT_COUNCIL",
+  "CERTIFICATE_ECONOMIC_COUNCIL",
 ];
 
 function keysOf(list) {
   return list.map((type) => type.key);
 }
 
-test("ohne Optionen werden alle fünf Materialien geliefert", () => {
+test("ohne Optionen werden alle zehn Materialien geliefert", () => {
   const result = buildMaterialList();
   assert.deepEqual(keysOf(result), ALL_KEYS_IN_ORDER);
 });
 
-test("ohne Argument (undefined) werden ebenfalls alle fünf geliefert", () => {
+test("ohne Argument (undefined) werden ebenfalls alle zehn geliefert", () => {
   const result = buildMaterialList(undefined);
   assert.deepEqual(keysOf(result), ALL_KEYS_IN_ORDER);
 });
@@ -36,7 +41,17 @@ test("exclude entfernt Materialien aus der Auswahl", () => {
   const result = buildMaterialList({
     exclude: [MATERIAL_TYPE_KEYS.QR_GIRO_BLACK],
   });
-  assert.deepEqual(keysOf(result), ["FLYER_DRUCKEREI", "FLYER_HOME", "QR_PAYPAL_BLACK", "CERTIFICATE_REPRESENTATIVE"]);
+  assert.deepEqual(keysOf(result), [
+    "FLYER_DRUCKEREI",
+    "FLYER_HOME",
+    "QR_PAYPAL_BLACK",
+    "CERTIFICATE_REPRESENTATIVE",
+    "CERTIFICATE_AMBASSADOR",
+    "CERTIFICATE_ADVISORY_BOARD",
+    "CERTIFICATE_CURATORIUM",
+    "CERTIFICATE_EXPERT_COUNCIL",
+    "CERTIFICATE_ECONOMIC_COUNCIL",
+  ]);
 });
 
 test("include und exclude gemeinsam schränken die Auswahl weiter ein", () => {

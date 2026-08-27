@@ -48,7 +48,10 @@ export function resolveRepresentativeRecipient({ person, alternativeEmail } = {}
  * aus (siehe `core/mail/sendRepresentativeMaterials.js`).
  *
  * @param {object} params
- * @param {{ person: { firstName: string, lastName: string, ifkId: string, gender?: string, federalState?: string, region?: string, email?: string } }} params.manifest
+ * @param {{ person: { firstName: string, lastName: string, ifkId: string, role?: string, gender?: string, federalState?: string, region?: string, email?: string } }} params.manifest
+ *   `person.role` (technischer Wegbegleiter-Schlüssel) steuert die
+ *   Rollenbezeichnung in Betreff/Text beider Mails (siehe
+ *   `representativeMailContent.js`/`humbeeMailContent.js`).
  * @param {{ filename: string, blob: Blob }} params.zip Ergebnis von
  *   `buildMaterialZip()`.
  * @param {Array<{ filename: string, content: Blob | ArrayBuffer | Uint8Array }>} params.files
@@ -69,11 +72,17 @@ export async function buildRepresentativeDeliveryRequest({ manifest, zip, files,
   const recipient = {
     to,
     subject: buildRepresentativeMailSubject(),
-    text: buildRepresentativeMailText({ firstName: person.firstName, gender: person.gender, ifkId: person.ifkId }),
+    text: buildRepresentativeMailText({
+      firstName: person.firstName,
+      gender: person.gender,
+      ifkId: person.ifkId,
+      role: person.role,
+    }),
     html: buildRepresentativeMailHtml({
       firstName: person.firstName,
       gender: person.gender,
       ifkId: person.ifkId,
+      role: person.role,
       logoUrl,
     }),
     zipFilename: zip.filename,
@@ -95,6 +104,7 @@ export async function buildRepresentativeDeliveryRequest({ manifest, zip, files,
       region: person.region,
       lastName: person.lastName,
       firstName: person.firstName,
+      role: person.role,
     }),
     text: buildHumbeeMailText({ firstName: person.firstName, lastName: person.lastName, ifkId: person.ifkId }),
     attachments: humbeeAttachments,

@@ -22,6 +22,36 @@ test("Urkunde benötigt auch für 'representative' keine Region", () => {
   assert.equal(fields.includes(FIELD_KEYS.FEDERAL_STATE), false);
 });
 
+test("Botschafterurkunde benötigt Vorname, Nachname, Geschlecht (geschlechtsspezifischer Vorlagentext)", () => {
+  assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR), [
+    FIELD_KEYS.FIRST_NAME,
+    FIELD_KEYS.LAST_NAME,
+    FIELD_KEYS.GENDER,
+  ]);
+});
+
+test("Gremien-Urkunden (Beirat/Kuratorium/Fachrat/Wirtschaftsrat) benötigen NUR Vorname und Nachname — kein Geschlecht", () => {
+  for (const key of [
+    MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD,
+    MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM,
+    MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL,
+    MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL,
+  ]) {
+    assert.deepEqual(
+      getRequiredFieldsForMaterial(key),
+      [FIELD_KEYS.FIRST_NAME, FIELD_KEYS.LAST_NAME],
+      `${key} sollte nur Vorname/Nachname verlangen`
+    );
+  }
+});
+
+test("Gremien-Urkunden verlangen auch mit Rolle keine Region und kein Geschlecht", () => {
+  const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM, "curator");
+  for (const forbidden of [FIELD_KEYS.GENDER, FIELD_KEYS.REGION, FIELD_KEYS.FEDERAL_STATE, FIELD_KEYS.PHOTO_URL, FIELD_KEYS.IFK_ID]) {
+    assert.equal(fields.includes(forbidden), false, `${forbidden} sollte nicht verlangt werden`);
+  }
+});
+
 test("GiroCode benötigt ausschließlich Vorname, Nachname, IFK-ID", () => {
   assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.QR_GIRO_BLACK), [
     FIELD_KEYS.FIRST_NAME,

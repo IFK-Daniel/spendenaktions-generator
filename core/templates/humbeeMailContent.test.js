@@ -24,6 +24,34 @@ test("Betreff enthält immer das Wort 'Repräsentant', unabhängig vom Geschlech
   assert.match(subject, /^Repräsentant Hessen \/ Frankfurt \/ Muster, Anna$/);
 });
 
+test("andere Wegbegleiter ohne Bundesland/Region: '{Rolle} / {Nachname}, {Vorname}' statt falscher 'Repräsentant'-Kennzeichnung", () => {
+  assert.equal(
+    buildHumbeeMailSubject({ lastName: "Muster", firstName: "Anna", role: "advisory_board" }),
+    "Mitglied des Beirats / Muster, Anna"
+  );
+  assert.equal(
+    buildHumbeeMailSubject({ lastName: "Yu", firstName: "Kim", role: "ambassador" }),
+    "Botschafter / Yu, Kim"
+  );
+  assert.equal(
+    buildHumbeeMailSubject({ lastName: "Feigenbutz", firstName: "Daniel", role: "curator" }),
+    "Kurator / Feigenbutz, Daniel"
+  );
+});
+
+test("Repräsentant mit role-Angabe behält das bisherige Region-Schema", () => {
+  assert.equal(
+    buildHumbeeMailSubject({
+      federalState: "Bayern",
+      region: "Regensburg Land",
+      lastName: "Kopf",
+      firstName: "Andreas",
+      role: "representative",
+    }),
+    "Repräsentant Bayern / Regensburg Land / Kopf, Andreas"
+  );
+});
+
 test("Mailtext enthält Namen und IFK-ID, aber keine Signatur", () => {
   const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "IFK7QX" });
 

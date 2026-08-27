@@ -17,7 +17,7 @@ test("liefert ein vollständiges Manifest mit Version, Person und allen Material
     lastName: "Mustermann",
     ifkId: "IFK7QX",
   });
-  assert.equal(manifest.materials.length, 5);
+  assert.equal(manifest.materials.length, 10);
 });
 
 test("Personendaten sind korrekt, inklusive normalisierter IFK-ID", () => {
@@ -41,10 +41,18 @@ test("Materialreihenfolge im Manifest entspricht der festen Reihenfolge", () => 
     ifkId: VALID_IFK_ID,
   });
 
-  assert.deepEqual(
-    manifest.materials.map((entry) => entry.key),
-    ["FLYER_DRUCKEREI", "FLYER_HOME", "QR_PAYPAL_BLACK", "QR_GIRO_BLACK", "CERTIFICATE_REPRESENTATIVE"]
-  );
+  assert.deepEqual(manifest.materials.map((entry) => entry.key), [
+    "FLYER_DRUCKEREI",
+    "FLYER_HOME",
+    "QR_PAYPAL_BLACK",
+    "QR_GIRO_BLACK",
+    "CERTIFICATE_REPRESENTATIVE",
+    "CERTIFICATE_AMBASSADOR",
+    "CERTIFICATE_ADVISORY_BOARD",
+    "CERTIFICATE_CURATORIUM",
+    "CERTIFICATE_EXPERT_COUNCIL",
+    "CERTIFICATE_ECONOMIC_COUNCIL",
+  ]);
 });
 
 test("jeder Material-Eintrag enthält key, label, category, format, extension, filename", () => {

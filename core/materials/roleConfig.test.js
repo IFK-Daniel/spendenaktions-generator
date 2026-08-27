@@ -7,6 +7,8 @@ import {
   getRoleConfig,
   roleRequiresRegion,
   getRoleLabel,
+  getCertificateMaterialKey,
+  certificateRequiresGender,
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
 } from "./roleConfig.js";
@@ -76,14 +78,46 @@ test("representative hat Flyer- und Urkunden-Vorlagen für die bestehenden Mater
   );
 });
 
-test("alle anderen Rollen haben noch keine Flyer- oder Urkunden-Vorlage (kein stiller Fallback auf Repräsentant)", () => {
+test("jede Rolle hat genau einen eigenen Urkunden-Materialschlüssel — kein Fallback auf die Repräsentantenurkunde", () => {
+  const expected = {
+    [ROLE_KEYS.REPRESENTATIVE]: MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
+    [ROLE_KEYS.AMBASSADOR]: MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR,
+    [ROLE_KEYS.ADVISORY_BOARD]: MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD,
+    [ROLE_KEYS.CURATOR]: MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM,
+    [ROLE_KEYS.EXPERT_COUNCIL]: MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL,
+    [ROLE_KEYS.ECONOMIC_COUNCIL]: MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL,
+  };
+  for (const roleKey of ROLE_KEY_LIST) {
+    assert.equal(getCertificateMaterialKey(roleKey), expected[roleKey], `${roleKey} Urkunden-Schlüssel`);
+    // Die eigene Urkunde ist verfügbar …
+    assert.equal(isCertificateTemplateAvailableForRole(roleKey, expected[roleKey]), true);
+    // … eine fremde Rollen-Urkunde niemals (kein stiller Fallback).
+    if (roleKey !== ROLE_KEYS.REPRESENTATIVE) {
+      assert.equal(
+        isCertificateTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE),
+        false
+      );
+    }
+  }
+});
+
+test("nur Repräsentant und Botschafter benötigen Geschlecht für die Urkunde (Gremien-Urkunden sind neutral)", () => {
+  assert.equal(certificateRequiresGender(ROLE_KEYS.REPRESENTATIVE), true);
+  assert.equal(certificateRequiresGender(ROLE_KEYS.AMBASSADOR), true);
+  for (const roleKey of [
+    ROLE_KEYS.ADVISORY_BOARD,
+    ROLE_KEYS.CURATOR,
+    ROLE_KEYS.EXPERT_COUNCIL,
+    ROLE_KEYS.ECONOMIC_COUNCIL,
+  ]) {
+    assert.equal(certificateRequiresGender(roleKey), false, `${roleKey} sollte kein Geschlecht für die Urkunde verlangen`);
+  }
+});
+
+test("für andere Rollen als Repräsentant ist weiterhin keine FLYER-Vorlage hinterlegt (kein stiller Fallback)", () => {
   for (const roleKey of ROLE_KEY_LIST) {
     if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
     assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI), false);
     assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_HOME), false);
-    assert.equal(
-      isCertificateTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE),
-      false
-    );
   }
 });

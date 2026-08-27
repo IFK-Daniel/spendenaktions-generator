@@ -418,15 +418,15 @@ künftige PDF-/Grafikintegration vorgesehen (siehe
 [roadmap.md](roadmap.md), Phase 4). Alle sechs Module sind
 **vollständig implementiert**.
 
-**Klare Abgrenzung**: `core/materials` kennt ausschließlich die fünf
-unten aufgeführten individuellen Materialtypen. Logos, das Corporate
-Manual, Spendennachweise oder sonstige allgemeine Downloads sind
-bewusst **nicht** Teil dieser Definition — sie sind keine individuellen,
+**Klare Abgrenzung**: `core/materials` kennt ausschließlich die unten
+aufgeführten individuellen Materialtypen. Logos, das Corporate Manual,
+Spendennachweise oder sonstige allgemeine Downloads sind bewusst
+**nicht** Teil dieser Definition — sie sind keine individuellen,
 personalisierten Materialien und werden von diesem Modul weder erzeugt
 noch in Dateinamen, Manifest oder eine spätere Paketierung
 (`core/zip`) aufgenommen.
 
-#### Die fünf Materialtypen (`materialTypes.js`)
+#### Die Materialtypen (`materialTypes.js`)
 
 | Schlüssel | Bezeichnung | Kategorie | Format |
 |---|---|---|---|
@@ -435,6 +435,19 @@ noch in Dateinamen, Manifest oder eine spätere Paketierung
 | `QR_PAYPAL_BLACK` | PayPal QR schwarz | `qr` | `png` |
 | `QR_GIRO_BLACK` | GiroCode schwarz | `qr` | `png` |
 | `CERTIFICATE_REPRESENTATIVE` | Repräsentantenurkunde | `certificate` | `pdf` |
+| `CERTIFICATE_AMBASSADOR` | Botschafterurkunde | `certificate` | `pdf` |
+| `CERTIFICATE_ADVISORY_BOARD` | Urkunde Beirat | `certificate` | `pdf` |
+| `CERTIFICATE_CURATORIUM` | Urkunde Kuratorium | `certificate` | `pdf` |
+| `CERTIFICATE_EXPERT_COUNCIL` | Urkunde Fachrat | `certificate` | `pdf` |
+| `CERTIFICATE_ECONOMIC_COUNCIL` | Urkunde Wirtschaftsrat | `certificate` | `pdf` |
+
+Es gibt je Wegbegleiter-Typ **genau eine** Urkunde (`certificate`).
+`CERTIFICATE_MATERIAL_KEYS` (aus `materialTypes.js`) listet alle sechs
+Urkunden-Schlüssel in dieser Reihenfolge; `src/intern/generator.js`
+verwendet das als `CERTIFICATE_KEYS`-Menge, statt einzelne
+Urkunden-Schlüssel aufzuzählen. Repräsentanten- und Botschafter-Urkunde
+haben je zwei geschlechtsspezifische Vorlagen-Varianten DESSELBEN
+Schlüssels, die vier Gremien-Urkunden genau eine (siehe Abschnitt 12.4).
 
 Die vormals zusätzlich vorhandenen grünen QR-Varianten
 (`QR_PAYPAL_GREEN`, `QR_GIRO_GREEN`) wurden aus dem produktiven
@@ -1810,9 +1823,15 @@ Konfiguration ab. Jeder Rollen-Eintrag enthält:
   bewusst noch **nicht** in vorhandene Flyer eingebaut — dafür fehlt
   noch die finale Master-Vorlage mit variablem Rollen-Textfeld (siehe
   unten); die Architektur ist aber bereits darauf vorbereitet.
-- `flyerMaterialKeys`/`certificateMaterialKeys` — welche
-  Materialschlüssel aus `materialTypes.js` für diese Rolle bereits eine
-  Vorlage haben (aktuell ausschließlich bei `representative` befüllt).
+- `certificateMaterialKey` / `certificateRequiresGender` /
+  `certificateMaterialKeys` — die eine Urkunde der Rolle und ob sie
+  Geschlecht zur Vorlagenauswahl braucht (siehe Abschnitt 12.4). Jede
+  Rolle hat eine Urkundenvorlage — kein Fallback auf die
+  Repräsentantenurkunde.
+- `flyerMaterialKeys` — welche Flyer-Materialschlüssel für diese Rolle
+  bereits eine Vorlage haben (aktuell ausschließlich bei
+  `representative` befüllt; für die neuen Rollen leer, bis der Grafiker
+  die Master liefert — **kein** Fallback auf die Repräsentanten-Flyer).
 - `additionalMaterialKeys` — Platzhalter für künftige, rollenspezifische
   Zusatzmaterialien (aktuell für alle Rollen leer, um keine noch nicht
   existierenden Materialien vorzutäuschen).
@@ -1858,59 +1877,137 @@ Werte.
 
 ### 12.3 Materialverfügbarkeit ohne stillen Fallback
 
-Für Rollen außer `representative` existieren aktuell keine Flyer- oder
-Urkunden-Vorlagen. Damit nie versehentlich eine
-Repräsentanten-Vorlage für eine andere Rolle verwendet wird:
+Jede Rolle hat inzwischen eine eigene Urkundenvorlage (Abschnitt 12.4).
+Für die **Flyer** existieren für Rollen außer `representative` weiterhin
+keine Vorlagen (Grafiker erstellt die Master noch). Damit nie
+versehentlich eine Repräsentanten-Vorlage für eine andere Rolle
+verwendet wird:
 
 1. **UI-Ebene**: `updateMaterialAvailabilityForRole()` in
    `src/intern/generator.js` deaktiviert (`disabled`, unchecked) die
-   Flyer-/Urkunden-Checkboxen, sobald `isFlyerTemplateAvailableForRole()`/
-   `isCertificateTemplateAvailableForRole()` (aus `roleConfig.js`)
-   `false` liefert, und blendet statt des normalen Hinweistexts den
-   Hinweis "Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt."
-   ein (`[data-role-unavailable-hint]` in `intern/index.html`). Die
-   beiden schwarzen QR-Checkboxen sind von dieser Sperre bewusst
-   ausgenommen — QR-Codes können für jede Rolle erzeugt werden.
+   **Flyer**-Checkboxen, sobald `isFlyerTemplateAvailableForRole()`
+   (aus `roleConfig.js`) `false` liefert, und blendet statt des
+   normalen Hinweistexts den Hinweis "Vorlage für diese
+   Wegbegleiter-Art noch nicht hinterlegt." ein
+   (`[data-role-unavailable-hint]` in `intern/index.html`). Die beiden
+   schwarzen QR-Checkboxen sind von dieser Sperre ausgenommen (QR für
+   jede Rolle möglich). Die eine **Urkunden**-Checkbox wird nicht
+   gesperrt, sondern von `applyRoleToCertificateCheckbox()` rollen­
+   abhängig umkonfiguriert: `data-material-key` auf den
+   Urkunden-Schlüssel der Rolle (`getCertificateMaterialKey`), der
+   sichtbare Titel auf das Material-Label ("Repräsentantenurkunde" /
+   "Botschafterurkunde" / "Urkunde Beirat" …), der "Geschlecht
+   nötig"-Hinweis nur bei `certificateRequiresGender(role)`.
 2. **Verteidigungslinie in `handleGenerate`**: selbst falls ein Flyer-
-   oder Urkunden-Material trotzdem im Manifest landet (z. B. Altzustand
-   vor einem Rollenwechsel), prüft `generator.js` vor der eigentlichen
+   oder Urkunden-Material mit falscher Rolle im Manifest landet (z. B.
+   Altzustand vor einem Rollenwechsel), prüft `generator.js` vor der
    Erzeugung erneut `isFlyerTemplateAvailableForRole`/
-   `isCertificateTemplateAvailableForRole` und wirft andernfalls einen
-   sprechenden Fehler — es gibt **keinen** Codepfad, der in diesem Fall
-   still auf `resolveFlyerTemplate`/`CERTIFICATE_TEMPLATE_BY_GENDER`
-   (die Repräsentanten-Vorlagen) zurückfällt.
-3. Wird künftig eine Vorlage für eine weitere Rolle ergänzt, genügt es,
-   das neue Template unter `templates/` anzulegen und den
-   entsprechenden Materialschlüssel in `ROLE_CONFIG[roleKey]
-   .flyerMaterialKeys`/`.certificateMaterialKeys` in `roleConfig.js`
-   einzutragen — keine Änderung an `generator.js` nötig.
+   `isCertificateTemplateAvailableForRole` (plus ein
+   `ROLE_KEY_LIST`-Check ganz oben für unbekannte Rollen) und meldet
+   sonst einen sprechenden Fehler. Die Vorlagenauswahl selbst läuft
+   über `resolveCertificateTemplate` →
+   `core/materials/resolveCertificateTemplateVariant.js`, das bei einer
+   unbekannten Rolle bzw. einer geschlechtsspezifischen Urkunde ohne
+   `gender` wirft — es gibt **keinen** Codepfad, der still auf eine
+   Repräsentanten-/männliche Vorlage zurückfällt.
+3. Wird künftig eine Flyer-Vorlage für eine weitere Rolle ergänzt,
+   genügt: neues Template unter `templates/`, Eintrag in
+   `ROLE_CONFIG[roleKey].flyerMaterialKeys` und (für Flyer) im
+   Template-Mapping in `generator.js` — analog zu den Urkunden in
+   Abschnitt 12.4.
 
-**Aktueller Stand je Rolle**: `representative` kann bereits Flyer
-(Druckerei + Home), Urkunde und beide QR-Codes erzeugen. Alle anderen
-Rollen (`ambassador`, `economic_council`, `expert_council`, `curator`,
-`advisory_board`) können bereits die gemeinsamen Stammdaten erfassen,
-eine IFK-ID verwenden/generieren und beide QR-Codes erzeugen — Flyer
-und Urkunde sind für sie aktuell gesperrt, bis entsprechende Vorlagen
-hinterlegt werden.
+**Aktueller Stand je Rolle**: `representative` kann Flyer (Druckerei +
+Home), Urkunde und beide QR-Codes erzeugen. Alle anderen Rollen
+(`ambassador`, `economic_council`, `expert_council`, `curator`,
+`advisory_board`) können die gemeinsamen Stammdaten erfassen, eine
+IFK-ID verwenden/generieren, beide QR-Codes **und ihre jeweilige
+Urkunde** erzeugen — nur der **Flyer** ist für sie gesperrt, bis die
+Master-Vorlage vorliegt.
 
-**Tests**: `core/materials/roleConfig.test.js` deckt alle sechs Rollen,
-die Region-Anforderung ausschließlich bei `representative`, die
-Rollenbezeichnungen (inkl. neutraler Gremien-Form) sowie — als
-expliziten Regressionsschutz gegen einen stillen Fallback — ab, dass
-ausschließlich `representative` eine Flyer-/Urkunden-Vorlage hat.
-`core/materials/buildMaterialManifest.test.js` deckt das optionale
-`role`-Feld (gültig/ungültig/fehlend) ab.
+### 12.4 Wegbegleiter-Urkunden (`templates/certificate-…`, `roleConfig.js`, `generator.js`)
 
-**Bewusst nicht Teil dieses Schritts**: tatsächliche Flyer-/
-Urkunden-Vorlagen für andere Rollen als `representative`; Einbau der
-rollenabhängigen Anrede in eine Master-Flyer-Vorlage (wartet auf eine
-finale Grafikvorlage mit variablem Rollen-Textfeld); Änderungen am
-Mailversand-Textbausteine für andere Rollen als `representative`
-(`core/templates/representativeMailContent.js`/`humbeeMailContent.js`
-bleiben inhaltlich auf den Repräsentanten-Wortlaut ausgelegt, delegieren
-die Rollenbezeichnung aber bereits generisch an
-`getRoleLabel(ROLE_KEYS.REPRESENTATIVE, gender)` statt eine eigene
-Zuordnung zu duplizieren).
+Sechs Urkundenvorlagen, eine je Wegbegleiter-Typ. Master-PDFs vom
+Grafiker (`Medien/Urkunde_*.pdf`, A3 hochkant, 842.25 × 1190.25 pt) →
+`templates/certificate-<slug>/background.pdf` + `template.config.js`
+über die **generische** PDF-Rendering-Architektur (`renderFlyer.js` +
+`loadTemplateAssets*`), keine eigene Urkunden-Pipeline.
+
+| Rolle | Material­schlüssel | Template-Ordner | Geschlecht nötig? | Statischer Kerntext |
+|---|---|---|---|---|
+| `representative` | `CERTIFICATE_REPRESENTATIVE` | `certificate-representative-male` / `-female` | **ja** (m/w-Vorlage) | „… ernennen wir … zum Repräsentant / zur Repräsentantin der Stiftung“ |
+| `ambassador` | `CERTIFICATE_AMBASSADOR` | `certificate-ambassador-male` / `-female` | **ja** (m/w-Vorlage) | „… ernennen wir … zum Botschafter / zur Botschafterin der Stiftung“ |
+| `advisory_board` | `CERTIFICATE_ADVISORY_BOARD` | `certificate-advisory-board` | nein (1 neutrale Vorlage) | „Hiermit berufen wir … in den Beirat der Stiftung“ |
+| `curator` | `CERTIFICATE_CURATORIUM` | `certificate-curatorium` | nein (1 neutrale Vorlage) | „… berufen wir … ins Kuratorium der Stiftung“ |
+| `expert_council` | `CERTIFICATE_EXPERT_COUNCIL` | `certificate-expert-council` | nein (1 neutrale Vorlage) | „… berufen wir … in den Fachrat der Stiftung“ |
+| `economic_council` | `CERTIFICATE_ECONOMIC_COUNCIL` | `certificate-economic-council` | nein (1 neutrale Vorlage) | „… berufen wir … in den Wirtschaftsrat der Stiftung“ |
+
+- **Geschlecht zur Template-Auswahl** nur bei `representative` und
+  `ambassador` (`roleConfig.js`, `certificateRequiresGender`): deren
+  Master-PDFs enthalten unterschiedlichen Text (auch der Konnektor
+  „zum“/„zur“). Die vier Gremien-Urkunden sind bewusst
+  geschlechtsneutral formuliert → genau **eine** Vorlage, Geschlecht
+  ist weder nötig noch Pflicht. `materialRequirements.js`:
+  Botschafter-Urkunde braucht Vorname/Nachname/**Geschlecht**, die
+  Gremien-Urkunden nur Vorname/Nachname; **keine** Region für irgendeine
+  Urkunde.
+- **Einziger variabler Inhalt** ist der Name (`Vorname Nachname`) im
+  hellgrünen Namensbalken. Geometrie unabhängig aus jedem `background.pdf`
+  vermessen (300 dpi, Balkenfarbe #E4F1D5): x 4.32–838.08 pt, y von oben
+  382.08–462.72 pt — für alle sechs identisch und deckungsgleich mit der
+  bereits visuell abgestimmten Repräsentantenurkunde (yMm 134.79,
+  maxWidthMm 294.13). Noto Sans Bold, Startgröße 40 pt (Originalgröße der
+  Vorlage), Auto-Shrink bis 24 pt, horizontal zentriert, optische
+  Y-Korrektur `verticalOffsetMm 3.8`. Passt der Name auch bei 24 pt nicht
+  in die Balkenbreite, meldet `renderFlyer.js` eine Warnung statt zu
+  kürzen.
+- **Template-Mapping** in `generator.js`: `CERTIFICATE_TEMPLATES_BY_KEY`
+  ordnet jedem Urkunden-Schlüssel `{ male, female }` bzw. `{ neutral }`
+  zu; `resolveCertificateTemplate(key, gender)` delegiert an die reine,
+  getestete `resolveCertificateTemplateVariant()`. **Kein Rollen-Fallback**:
+  unbekannter Schlüssel / fehlendes Geschlecht bei m/w-Urkunde wirft.
+- **Eine weitere Urkunde ergänzen** = neue PDF unter
+  `templates/certificate-…/`, neue `template.config.js` (spreadet
+  `certificate-advisory-board` bzw. `-ambassador-male`), ein
+  `MATERIAL_TYPE_KEYS`-/`MATERIAL_TYPES`-Eintrag, ein Eintrag in
+  `CERTIFICATE_TEMPLATES_BY_KEY` und das Rollen-Mapping in `roleConfig.js`
+  (`certificateMaterialKey`, `certificateRequiresGender`). Sonst nichts
+  in `generator.js`.
+- **Ergebnis/Download**: die Urkunden-Ergebniskarte trägt den Rollen­
+  titel (Material-Label), der Download-Button einheitlich „Urkunde
+  herunterladen“; Dateiname rollenunabhängig `Urkunde_<Vorname>_<Nachname>.pdf`.
+
+**Flyer der neuen Rollen** sind vorbereitet, aber noch nicht aktiv: die
+gemeinsame variable Rollenbezeichnung (Flyer-Textfeld) stammt aus
+`ROLE_CONFIG[key].roleLabels` (`getRoleLabel(role, gender)`), Region/
+Bundesland sind für Nicht-Repräsentanten kein Feld. Sobald die
+Master-Flyer vorliegen: Template + `flyerMaterialKeys` + Flyer-Mapping.
+
+**Mailversand rollenfähig** (Abschnitt 9): `representativeMailContent.js`
+und `humbeeMailContent.js` leiten die Rollenbezeichnung aus
+`manifest.person.role` (+ Geschlecht) über `getRoleLabel` ab —
+Botschafter/Botschafterin, „Mitglied des Beirats“ usw. Der humbee-Betreff
+nutzt für Nicht-Repräsentanten „{Rolle} / {Nachname}, {Vorname}“ (ohne
+Bundesland/Region) statt der falschen „Repräsentant“-Kennzeichnung. Du-
+Ansprache und vollständige IFK-Signatur unverändert; humbee weiterhin
+ohne Signatur.
+
+**Tests**: `roleConfig.test.js` (Urkunden-Schlüssel + `certificateRequiresGender`
+je Rolle, kein Fallback), `materialRequirements.test.js`
+(Botschafter=Geschlecht, Gremien=nur Name), `resolveCertificateTemplateVariant.test.js`
+(m→m, w→w nie m, neutral ignoriert Geschlecht, unbekannte Rolle/fehlendes
+Geschlecht werfen), `generateCertificateMaterial.test.js` (neutrale
+Wegbegleiter-Urkunde akzeptiert), `representativeMailContent.test.js` /
+`humbeeMailContent.test.js` / `buildRepresentativeDeliveryRequest.test.js`
+(rollenabhängige Bezeichnung), `buildMaterialManifest.test.js`.
+Testartefakte: `artifacts/certificate-preview/` (32 echte Urkunden-PDFs +
+PNGs + `comparison_full.png` / `comparison_bands.png`), erzeugt von
+`scripts/render-certificate-previews.mjs` +
+`scripts/build-certificate-preview-sheet.py`.
+
+**Bewusst nicht Teil dieses Schritts**: Flyer-Master-Vorlagen der neuen
+Rollen; endgültige Flyer-Terminologie (z. B. „Kurator“/„Kuratorin“ vs.
+„Mitglied des Kuratoriums“) — die Bezeichnungen bleiben in `roleConfig.js`
+konfigurierbar, es wird kein fachlich endgültiger Flyer-Text erfunden.
 
 ## 13. Materialabhängige Datenanforderungen (`core/materials/materialRequirements.js`)
 

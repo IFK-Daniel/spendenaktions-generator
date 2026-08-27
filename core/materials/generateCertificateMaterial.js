@@ -1,5 +1,5 @@
 import { renderFlyer } from "../pdf/renderFlyer.js";
-import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+import { MATERIAL_TYPES_BY_KEY } from "./materialTypes.js";
 import { buildFileContent } from "./buildFileContent.js";
 
 /**
@@ -14,10 +14,14 @@ import { buildFileContent } from "./buildFileContent.js";
  *
  * @param {object} params
  * @param {{key: string, label: string, category: string, format: string, extension: string, filename: string}} params.entry
- *   Der `CERTIFICATE_REPRESENTATIVE`-Eintrag aus `manifest.materials`.
- * @param {object} params.templateConfig Die zum Geschlecht der Person
- *   passende Template-Config (`certificateRepresentativeMaleTemplate`/
- *   `certificateRepresentativeFemaleTemplate`).
+ *   Ein Urkunden-Eintrag (`category === "certificate"`) aus
+ *   `manifest.materials` — Repräsentant, Botschafter, Beirat,
+ *   Kuratorium, Fachrat oder Wirtschaftsrat.
+ * @param {object} params.templateConfig Die bereits aufgelöste
+ *   Template-Config: für Repräsentant/Botschafter die zum Geschlecht
+ *   passende Variante, für die geschlechtsneutralen Gremien-Urkunden die
+ *   einzige Vorlage (Auflösung siehe `src/intern/generator.js`,
+ *   `resolveCertificateTemplate`).
  * @param {{firstName: string, lastName: string}} params.person
  *   `manifest.person` — nur Vor- und Nachname werden benötigt.
  * @param {object} [params.deps] Injizierbare Abhängigkeiten für Tests.
@@ -29,7 +33,7 @@ export async function generateCertificateMaterial({ entry, templateConfig, perso
   if (!entry || typeof entry.filename !== "string" || entry.filename.trim() === "") {
     throw new Error(`generateCertificateMaterial: fehlender Dateiname für Materialtyp "${entry?.key}" im Manifest.`);
   }
-  if (entry.key !== MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE) {
+  if (MATERIAL_TYPES_BY_KEY[entry.key]?.category !== "certificate") {
     throw new Error(`generateCertificateMaterial: "${entry.key}" ist kein Urkunde-Materialtyp.`);
   }
   if (!templateConfig) {

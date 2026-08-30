@@ -202,6 +202,23 @@ function describeFieldList(fieldKeys) {
 
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
+// Rollenabhängiger Wortlaut im Screenshot-Import-Hinweis
+// ("Screenshot des humbee-…vorgangs hochladen"). Bewusst als
+// UI-Zeichenketten hier (nicht in `core/materials/roleConfig.js`, das
+// DOM-/UI-frei bleibt) — die Formen spiegeln die sichtbaren
+// Dropdown-Bezeichnungen wider (deutsche Fugen-/Genitivformen lassen
+// sich nicht zuverlässig automatisch ableiten). Fallback für unbekannte
+// Rollen: die allgemeine Wegbegleiter-Form.
+const SCREENSHOT_PROCESS_NOUN_BY_ROLE = {
+  representative: "humbee-Repräsentantenvorgangs",
+  ambassador: "humbee-Botschaftervorgangs",
+  economic_council: "humbee-Wirtschaftsratsvorgangs",
+  expert_council: "humbee-Fachratsvorgangs",
+  curator: "humbee-Kuratorvorgangs",
+  advisory_board: "humbee-Beiratsvorgangs",
+};
+const SCREENSHOT_PROCESS_NOUN_FALLBACK = "humbee-Wegbegleiter-Vorgangs";
+
 const SCREENSHOT_FIELD_LABELS = {
   firstName: "Vorname",
   lastName: "Nachname",
@@ -312,6 +329,12 @@ export function initGenerator() {
     regionField.hidden = !requiresRegion;
     updateMaterialAvailabilityForRole(roleKey);
     applyRoleToCertificateCheckbox(roleKey);
+    // Screenshot-Import-Hinweis auf den gewählten Wegbegleiter-Typ
+    // münzen ("Screenshot des humbee-Botschaftervorgangs hochladen").
+    if (screenshotProcessNounEl) {
+      screenshotProcessNounEl.textContent =
+        SCREENSHOT_PROCESS_NOUN_BY_ROLE[roleKey] || SCREENSHOT_PROCESS_NOUN_FALLBACK;
+    }
     updateRequiredFieldIndicators();
   }
 
@@ -390,6 +413,7 @@ export function initGenerator() {
   }
 
   const screenshotDropzone = document.getElementById("screenshot-dropzone");
+  const screenshotProcessNounEl = document.querySelector("[data-screenshot-process-noun]");
   const screenshotSelectBtn = document.getElementById("screenshot-select-btn");
   const screenshotFileInput = document.getElementById("screenshot-file-input");
   const screenshotImportStatus = document.getElementById("screenshot-import-status");

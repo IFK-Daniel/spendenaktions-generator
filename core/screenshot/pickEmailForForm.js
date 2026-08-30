@@ -1,27 +1,60 @@
 import { EXTRACTION_STATUS } from "./extractionStatus.js";
 
+function hasValue(field) {
+  return Boolean(field) && typeof field.value === "string" && field.value.trim() !== "";
+}
+
+function isRecognized(field) {
+  return hasValue(field) && field.status === EXTRACTION_STATUS.RECOGNIZED;
+}
+
 /**
  * Verbindliche E-Mail-Regel für das Formular, DOM-frei und unabhängig
  * vom KI-Prompt abgesichert (siehe Anforderung: diese Priorisierung
  * darf sich nicht allein auf das Modellverhalten verlassen).
  *
- * 1. Ist eine gültige IFK-Mailadresse vorhanden → diese verwenden.
- * 2. Nur wenn sie fehlt/ungültig ist → normale Mail-Adresse als
- *    Fallback verwenden (sofern gültig).
- * 3. Sind beide leer oder ungültig → leerer Wert, `source: null`.
+ * Ziel: Es soll immer die E-Mail-Adresse ins Formular übernommen
+ * werden, die im Screenshot tatsächlich VORHANDEN ist — die
+ * IFK-Verkehrsadresse hat dabei Vorrang vor der normalen Mail-Adresse.
+ * Eine manuell im Formularfeld eingetippte Adresse wird von dieser
+ * Funktion nicht berührt (die Übernahme läuft nur über den
+ * "Übernehmen"-Button und fragt bei bereits befüllten Feldern nach).
  *
- * @param {{ value: string, status: string }} ifkEmail
- * @param {{ value: string, status: string }} regularEmail
- * @returns {{ value: string, source: "ifkEmail" | "regularEmail" | null }}
+ * Priorität:
+ * 1. Sauber erkannte (gültige) IFK-Mailadresse.
+ * 2. Sonst sauber erkannte (gültige) normale Mail-Adresse.
+ * 3. Sonst irgendeine im Screenshot vorhandene IFK-Mailadresse — auch
+ *    prüfbedürftig (`needs_review`). Die "E-Mail (für Formular)"-Zeile
+ *    bleibt dann als prüfbedürftig markiert und wird beim Übernehmen
+ *    NICHT als sicher erkannt (grün) behandelt.
+ * 4. Sonst irgendeine im Screenshot vorhandene normale Mail-Adresse
+ *    (ebenfalls ggf. prüfbedürftig).
+ * 5. Sind beide leer → leerer Wert, `source: null`.
+ *
+ * @param {{ value?: string, status?: string }} [ifkEmail]
+ * @param {{ value?: string, status?: string }} [regularEmail]
+ * @returns {{ value: string, source: "ifkEmail" | "regularEmail" | null, status: string }}
+ *   `status` ist der übernommene Feldstatus (`recognized` /
+ *   `needs_review` / `not_recognized`) — er bestimmt in der UI die
+ *   Statusanzeige der Zeile und ob der Wert beim Übernehmen als sicher
+ *   erkannt gilt.
  */
 export function pickEmailForForm(ifkEmail, regularEmail) {
-  if (ifkEmail && ifkEmail.status === EXTRACTION_STATUS.RECOGNIZED && ifkEmail.value) {
-    return { value: ifkEmail.value, source: "ifkEmail" };
+  if (isRecognized(ifkEmail)) {
+    return { value: ifkEmail.value, source: "ifkEmail", status: EXTRACTION_STATUS.RECOGNIZED };
   }
 
-  if (regularEmail && regularEmail.status === EXTRACTION_STATUS.RECOGNIZED && regularEmail.value) {
-    return { value: regularEmail.value, source: "regularEmail" };
+  if (isRecognized(regularEmail)) {
+    return { value: regularEmail.value, source: "regularEmail", status: EXTRACTION_STATUS.RECOGNIZED };
   }
 
-  return { value: "", source: null };
+  if (hasValue(ifkEmail)) {
+    return { value: ifkEmail.value.trim(), source: "ifkEmail", status: EXTRACTION_STATUS.NEEDS_REVIEW };
+  }
+
+  if (hasValue(regularEmail)) {
+    return { value: regularEmail.value.trim(), source: "regularEmail", status: EXTRACTION_STATUS.NEEDS_REVIEW };
+  }
+
+  return { value: "", source: null, status: EXTRACTION_STATUS.NOT_RECOGNIZED };
 }

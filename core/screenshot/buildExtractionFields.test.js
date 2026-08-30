@@ -35,7 +35,11 @@ test("vollständiger Screenshot: alle Felder werden korrekt erkannt", () => {
     value: "https://www.paypal.com/donate/?hosted_button_id=ABC123",
     status: "recognized",
   });
-  assert.deepEqual(fields.emailForForm, { value: "d.feigenbutz@its-for-kids.de", source: "ifkEmail" });
+  assert.deepEqual(fields.emailForForm, {
+    value: "d.feigenbutz@its-for-kids.de",
+    source: "ifkEmail",
+    status: "recognized",
+  });
 });
 
 test("IFK-Mailadresse wird gegenüber normaler Mail-Adresse bevorzugt", () => {
@@ -45,12 +49,29 @@ test("IFK-Mailadresse wird gegenüber normaler Mail-Adresse bevorzugt", () => {
 
 test("Fallback auf normale Mail-Adresse, wenn IFK-Mailadresse fehlt", () => {
   const fields = buildExtractionFields({ ...FULL_RAW, ifkEmail: null });
-  assert.deepEqual(fields.emailForForm, { value: "daniel@beispiel.de", source: "regularEmail" });
+  assert.deepEqual(fields.emailForForm, {
+    value: "daniel@beispiel.de",
+    source: "regularEmail",
+    status: "recognized",
+  });
 });
 
 test("beide Mailadressen fehlen: E-Mail-Feld bleibt leer", () => {
   const fields = buildExtractionFields({ ...FULL_RAW, ifkEmail: null, regularEmail: null });
-  assert.deepEqual(fields.emailForForm, { value: "", source: null });
+  assert.deepEqual(fields.emailForForm, { value: "", source: null, status: "not_recognized" });
+});
+
+test("nur prüfbedürftige normale Mail-Adresse im Screenshot: wird trotzdem als 'für Formular' übernommen (prüfbedürftig)", () => {
+  const fields = buildExtractionFields({
+    ...FULL_RAW,
+    ifkEmail: null,
+    regularEmail: { text: "daniel@beispiel" },
+  });
+  assert.deepEqual(fields.emailForForm, {
+    value: "daniel@beispiel",
+    source: "regularEmail",
+    status: "needs_review",
+  });
 });
 
 test("IFK-ID vorhanden und gültig wird übernommen", () => {

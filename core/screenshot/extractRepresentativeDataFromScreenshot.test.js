@@ -26,6 +26,27 @@ test("gültiger Screenshot liefert erkannte Felder", async () => {
   assert.equal(result.fields.ifkId.status, "not_recognized");
 });
 
+test("nur normale Mail-Adresse im Screenshot (keine IFK-Mailadresse): sie landet als 'für Formular'-Wert", async () => {
+  const result = await extractRepresentativeDataFromScreenshot({
+    file: FAKE_FILE,
+    mimeType: "image/png",
+    runOcr: async () => ({
+      lines: [
+        { text: "Vorname", confidence: 95 },
+        { text: "Daniel", confidence: 93 },
+        { text: "Mail-Adresse", confidence: 90 },
+        { text: "daniel@beispiel.de", confidence: 90 },
+      ],
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.fields.ifkEmail.status, "not_recognized");
+  assert.equal(result.fields.emailForForm.value, "daniel@beispiel.de");
+  assert.equal(result.fields.emailForForm.source, "regularEmail");
+  assert.equal(result.fields.emailForForm.status, "recognized");
+});
+
 test("ungültiger Dateityp wird abgelehnt", async () => {
   const result = await extractRepresentativeDataFromScreenshot({
     file: FAKE_FILE,

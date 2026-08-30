@@ -6,7 +6,8 @@ import {
   getRequiredFieldsForMaterials,
   getMissingFields,
 } from "./materialRequirements.js";
-import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+import { MATERIAL_TYPE_KEYS, MATERIAL_TYPES } from "./materialTypes.js";
+import { ROLE_KEYS, ROLE_KEY_LIST } from "./roleConfig.js";
 
 test("Urkunde benötigt ausschließlich Vorname, Nachname, Geschlecht", () => {
   assert.deepEqual(getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE), [
@@ -105,6 +106,33 @@ test("Flyer benötigt für 'ambassador' KEIN Bundesland und KEINE Region", () =>
   const fields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, "ambassador");
   assert.equal(fields.includes(FIELD_KEYS.FEDERAL_STATE), false);
   assert.equal(fields.includes(FIELD_KEYS.REGION), false);
+});
+
+test("KEIN Material verlangt für einen Nicht-Repräsentanten jemals Region/Bundesland — auch die (künftigen) Flyer nicht", () => {
+  for (const roleKey of ROLE_KEY_LIST) {
+    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
+    for (const type of MATERIAL_TYPES) {
+      const fields = getRequiredFieldsForMaterial(type.key, roleKey);
+      assert.equal(
+        fields.includes(FIELD_KEYS.REGION),
+        false,
+        `${type.key} / ${roleKey} darf keine Region verlangen`
+      );
+      assert.equal(
+        fields.includes(FIELD_KEYS.FEDERAL_STATE),
+        false,
+        `${type.key} / ${roleKey} darf kein Bundesland verlangen`
+      );
+    }
+  }
+});
+
+test("nur der Repräsentanten-Flyer ergänzt Region/Bundesland (Gegenprobe)", () => {
+  for (const flyerKey of [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]) {
+    const repFields = getRequiredFieldsForMaterial(flyerKey, ROLE_KEYS.REPRESENTATIVE);
+    assert.equal(repFields.includes(FIELD_KEYS.REGION), true);
+    assert.equal(repFields.includes(FIELD_KEYS.FEDERAL_STATE), true);
+  }
 });
 
 test("Flyer benötigt weiterhin die gemeinsamen Grunddaten inklusive IFK-ID und PayPal-Link", () => {

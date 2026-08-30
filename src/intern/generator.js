@@ -72,6 +72,17 @@ import {
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
+
+// Vorübergehende, bewusst globale Sperre: die Flyer-Erzeugung ist für
+// JEDEN Wegbegleiter-Typ (auch Repräsentant) deaktiviert, bis der
+// Grafiker die überarbeiteten Master-Vorlagen liefert — die aktuelle
+// Repräsentanten-Flyer-Vorlage ist noch ein Prototyp (u. a.
+// „Repräsentantin“ fest im Hintergrund-Artwork). Zum Wiederfreischalten
+// genügt es, diese Konstante auf `false` zu setzen; die rollenabhängige
+// Vorlagen-Verfügbarkeit (`roleConfig.js`, `flyerMaterialKeys`) bleibt
+// davon unberührt und greift dann wie zuvor.
+const FLYERS_TEMPORARILY_DISABLED = true;
+const FLYER_DISABLED_HINT = "Flyer-Erzeugung ist derzeit deaktiviert (Vorlagen in Überarbeitung).";
 // Alle Urkunden-Materialschlüssel (je Wegbegleiter-Typ genau einer,
 // siehe `core/materials/materialTypes.js`) — bewusst aus der zentralen
 // Definition abgeleitet statt hier einzeln aufgezählt.
@@ -353,7 +364,10 @@ export function initGenerator() {
   function updateMaterialAvailabilityForRole(roleKey) {
     for (const checkbox of roleGatedMaterialCheckboxes) {
       const materialKey = checkbox.dataset.materialKey;
-      const available = isFlyerTemplateAvailableForRole(roleKey, materialKey);
+      // Global gesperrt (siehe `FLYERS_TEMPORARILY_DISABLED`) ODER für
+      // diese Rolle keine Flyer-Vorlage hinterlegt.
+      const available =
+        !FLYERS_TEMPORARILY_DISABLED && isFlyerTemplateAvailableForRole(roleKey, materialKey);
 
       const item = checkbox.closest(".material-item");
       const defaultHint = item?.querySelector("[data-default-hint]");
@@ -363,7 +377,15 @@ export function initGenerator() {
       if (!available) checkbox.checked = false;
       item?.classList.toggle("material-item-disabled", !available);
       if (defaultHint) defaultHint.hidden = !available;
-      if (unavailableHint) unavailableHint.hidden = available;
+      if (unavailableHint) {
+        unavailableHint.hidden = available;
+        // Bei globaler Sperre einen eindeutigen Grund anzeigen statt des
+        // rollenbezogenen „…für diese Wegbegleiter-Art noch nicht
+        // hinterlegt“-Texts (der bei Repräsentant sonst irreführend wäre).
+        unavailableHint.textContent = FLYERS_TEMPORARILY_DISABLED
+          ? FLYER_DISABLED_HINT
+          : "Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.";
+      }
     }
   }
 
@@ -1237,7 +1259,10 @@ export function initGenerator() {
       const statusCell = document.createElement("td");
       statusCell.dataset.label = "Status";
 
-      const statusValue = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
+      const statusValue =
+        key === "emailForForm"
+          ? field.status ?? (field.source ? "recognized" : "needs_review")
+          : field.status;
       renderValueCell(valueCell, statusCell, fields, key);
       renderStatusBadge(statusCell, key, statusValue);
 
@@ -1308,11 +1333,16 @@ export function initGenerator() {
   // `setFieldImportedState` oben) entfernt die Markierung wieder.
   // Reine Entscheidungslogik ("automatisch erkannt?") liegt testbar in
   // `core/screenshot/isFieldAutoRecognized.js` — hier wird nur der
-  // DOM-/Zustands-spezifische Status abgeleitet (u. a. der Sonderfall
-  // `emailForForm`, das keinen eigenen `status` besitzt, siehe
-  // `pickEmailForForm.js`) und an die reine Funktion übergeben.
+  // DOM-/Zustands-spezifische Status abgeleitet und an die reine
+  // Funktion übergeben. `emailForForm` führt seinen übernommenen
+  // Feldstatus jetzt selbst (`pickEmailForForm.js`); eine nur
+  // prüfbedürftig übernommene Adresse gilt dadurch NICHT als sicher
+  // erkannt (wird nicht grün markiert).
   function isAutoRecognized(key, field) {
-    const status = key === "emailForForm" ? (field.source ? "recognized" : "needs_review") : field.status;
+    const status =
+      key === "emailForForm"
+        ? field.status ?? (field.source ? "recognized" : "needs_review")
+        : field.status;
     return isFieldAutoRecognized({
       status,
       wasManuallyReviewed: manuallyReviewedFieldKeys.has(key),
@@ -1657,7 +1687,13 @@ export function initGenerator() {
 
     let photoAsset = null;
     let flyerDataReady = false;
-    if (requestedFlyer) {
+    if (requestedFlyer && FLYERS_TEMPORARILY_DISABLED) {
+      // Verteidigungslinie zur globalen Flyer-Sperre: die Checkbox ist
+      // bereits `disabled`, ein trotzdem im Manifest gelandeter Flyer
+      // (Altzustand) wird hier klar abgewiesen — kein Foto-Fetch, kein
+      // Rendern.
+      skipMessages.push(`Flyer konnte nicht erzeugt werden: ${FLYER_DISABLED_HINT}`);
+    } else if (requestedFlyer) {
       // Foto ist ausschließlich Pflicht, wenn ein fotobasiertes Material
       // (Flyer) ausgewählt ist (Vorgabe Abschnitt 13) — kein unnötiger
       // Foto-Fetch, solange die übrigen Flyer-Anforderungen nicht

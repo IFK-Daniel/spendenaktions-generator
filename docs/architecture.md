@@ -1181,10 +1181,17 @@ Nutzername, Erstpasswort, Aufgaben, Dokumente) werden ignoriert.
 
 **E-Mail-Priorität** (DOM-frei und unabhängig von der OCR-Engine
 abgesichert): `core/screenshot/pickEmailForForm.js` entscheidet,
-welche E-Mail-Adresse ins Formular übernommen wird — bevorzugt die
-IFK-Mailadresse, nur bei deren Fehlen/Ungültigkeit die normale
-Mail-Adresse, sonst ein leerer Wert mit `source: null` (in der UI als
-prüfbedürftig dargestellt). Diese Regel wird unverändert von
+welche E-Mail-Adresse ins Formular übernommen wird. Grundsatz: die im
+Screenshot **vorhandene** Adresse geht nie verloren. Priorität —
+(1) sauber erkannte IFK-Verkehrsadresse, (2) sonst sauber erkannte
+normale Mail-Adresse, (3) sonst eine nur prüfbedürftige
+IFK-Verkehrsadresse, (4) sonst eine nur prüfbedürftige normale
+Mail-Adresse, (5) sonst leer. Der Rückgabewert führt zusätzlich den
+übernommenen `status` (`recognized`/`needs_review`/`not_recognized`) —
+eine nur prüfbedürftig übernommene Adresse wird in der Prüf-Tabelle als
+„prüfbedürftig“ angezeigt und beim „Übernehmen“ **nicht** als sicher
+erkannt (grün) markiert; sie landet aber im Formularfeld und kann dort
+manuell korrigiert werden. Diese Regel wird unverändert von
 `core/screenshot/buildExtractionFields.js` angewendet.
 
 **IFK-ID-Regel**: Eine erkannte, aber laut `core/id/validateIfkId.js`
@@ -1885,11 +1892,14 @@ verwendet wird:
 
 1. **UI-Ebene**: `updateMaterialAvailabilityForRole()` in
    `src/intern/generator.js` deaktiviert (`disabled`, unchecked) die
-   **Flyer**-Checkboxen, sobald `isFlyerTemplateAvailableForRole()`
-   (aus `roleConfig.js`) `false` liefert, und blendet statt des
-   normalen Hinweistexts den Hinweis "Vorlage für diese
-   Wegbegleiter-Art noch nicht hinterlegt." ein
-   (`[data-role-unavailable-hint]` in `intern/index.html`). Die beiden
+   **Flyer**-Checkboxen, sobald die globale Konstante
+   `FLYERS_TEMPORARILY_DISABLED` gesetzt ist ODER
+   `isFlyerTemplateAvailableForRole()` (aus `roleConfig.js`) `false`
+   liefert. Der Hinweis `[data-role-unavailable-hint]` (aus
+   `intern/index.html`) wird eingeblendet — Text „Flyer-Erzeugung ist
+   derzeit deaktiviert (Vorlagen in Überarbeitung)." bei der globalen
+   Sperre, sonst „Vorlage für diese Wegbegleiter-Art noch nicht
+   hinterlegt.". Die beiden
    schwarzen QR-Checkboxen sind von dieser Sperre ausgenommen (QR für
    jede Rolle möglich). Die eine **Urkunden**-Checkbox wird nicht
    gesperrt, sondern von `applyRoleToCertificateCheckbox()` rollen­
@@ -1916,13 +1926,23 @@ verwendet wird:
    Template-Mapping in `generator.js` — analog zu den Urkunden in
    Abschnitt 12.4.
 
-**Aktueller Stand je Rolle**: `representative` kann Flyer (Druckerei +
-Home), Urkunde und beide QR-Codes erzeugen. Alle anderen Rollen
-(`ambassador`, `economic_council`, `expert_council`, `curator`,
-`advisory_board`) können die gemeinsamen Stammdaten erfassen, eine
-IFK-ID verwenden/generieren, beide QR-Codes **und ihre jeweilige
-Urkunde** erzeugen — nur der **Flyer** ist für sie gesperrt, bis die
-Master-Vorlage vorliegt.
+**Aktueller Stand je Rolle**: Alle Rollen können die gemeinsamen
+Stammdaten erfassen, eine IFK-ID verwenden/generieren, beide QR-Codes
+**und ihre jeweilige Urkunde** erzeugen.
+
+**Flyer aktuell global gesperrt**: `src/intern/generator.js` kennt eine
+bewusst rollenübergreifende Konstante `FLYERS_TEMPORARILY_DISABLED`
+(derzeit `true`). Solange sie gesetzt ist, sind **beide
+Flyer-Checkboxen für JEDEN Wegbegleiter-Typ — auch `representative` —
+deaktiviert** (Hinweis „Flyer-Erzeugung ist derzeit deaktiviert
+(Vorlagen in Überarbeitung)."), und `handleGenerate` weist einen
+trotzdem angeforderten Flyer vor jedem Foto-Abruf/Rendern ab. Grund:
+die vorhandene Repräsentanten-Flyer-Vorlage ist noch ein Prototyp
+(u. a. „Repräsentantin" fest im Hintergrund-Artwork); die neuen Rollen
+haben ohnehin keine Vorlage. Zum Wiederfreischalten: Konstante auf
+`false` — die rollenabhängige Verfügbarkeit (`flyerMaterialKeys`)
+greift dann wieder wie zuvor (Repräsentant an, neue Rollen weiterhin
+gesperrt bis Vorlage).
 
 ### 12.4 Wegbegleiter-Urkunden (`templates/certificate-…`, `roleConfig.js`, `generator.js`)
 

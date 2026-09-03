@@ -346,3 +346,135 @@ test("D: Beirat/Fachrat/Wirtschaftsrat — rollenunabhängige Empfängerauflösu
     assert.equal(request.recipient.to, `${role}@its-for-kids.de`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// IFK-ID: gehört zur Person, empfängerunabhängig, nie "undefined"
+// ---------------------------------------------------------------------------
+
+function companionManifest() {
+  // Manifest OHNE ifkId/email — genau die Prod-Konstellation (nur Urkunde
+  // erzeugt, kein IFK-ID-/E-Mail-pflichtiges Material).
+  return { person: { firstName: "Nadine", lastName: "Mehwitz", role: "representative", gender: "female" } };
+}
+
+test("IFK-A: direkter Versand — Mail enthält exakt die companion-IFK-ID", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: companionManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { firstName: "Nadine", lastName: "Mehwitz", role: "representative", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "n.mehwitz@its-for-kids.de");
+  assert.match(request.recipient.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
+  assert.match(request.recipient.html, /IFK7QX/);
+  assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
+});
+
+test("IFK-B: alternative Adresse — Empfänger wechselt, IFK-ID bleibt die des Wegbegleiters", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: companionManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { firstName: "Nadine", lastName: "Mehwitz", role: "representative", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
+    alternativeEmail: "mitarbeiterin@its-for-kids.de",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "mitarbeiterin@its-for-kids.de");
+  assert.match(request.recipient.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
+  assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
+  assert.doesNotMatch(request.recipient.text, /undefined/);
+});
+
+test("IFK-C: companion-IFK-ID gewinnt gegen einen abweichenden Manifest-Snapshot", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: { person: { firstName: "Max", lastName: "Muster", role: "representative", ifkId: "IFKOLD" } },
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { ifkId: "IFKNEW", email: "max@example.com" },
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.match(request.recipient.text, /IFK-ID lautet: IFKNEW\./);
+  assert.doesNotMatch(request.recipient.text, /IFKOLD/);
+  assert.match(request.humbee.text, /IFK-ID: IFKNEW/);
+});
+
+test("IFK-D: neu generierte IFK-ID im companion wird verwendet", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: companionManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { ifkId: "IFK9ZZ", email: "n.mehwitz@its-for-kids.de" },
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.match(request.recipient.text, /IFK-ID lautet: IFK9ZZ\./);
+});
+
+test("IFK-E: ohne jede IFK-ID erscheint kein 'undefined'/'null' und kein IFK-ID-Satz", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: companionManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { email: "n.mehwitz@its-for-kids.de" },
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  for (const value of [
+    request.recipient.subject,
+    request.recipient.text,
+    request.recipient.html,
+    request.humbee.subject,
+    request.humbee.text,
+  ]) {
+    assert.doesNotMatch(value, /\b(undefined|null|NaN)\b/);
+  }
+  assert.doesNotMatch(request.recipient.text, /persönliche IFK-ID lautet/);
+  assert.doesNotMatch(request.humbee.text, /IFK-ID:/);
+});
+
+test("IFK-E2: Fail-safe — ein Platzhalterwert in einem Mailfeld bricht den Versand ab", async () => {
+  await assert.rejects(
+    () =>
+      buildRepresentativeDeliveryRequest({
+        manifest: companionManifest(),
+        zip: fakeZip(),
+        files: fakeFiles(),
+        // erzwingt "Hallo undefined," im Text
+        companion: { firstName: "undefined", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
+        logoUrl: "https://example.com/logo.png",
+      }),
+    /Platzhalterwert im Mailfeld/
+  );
+});
+
+for (const role of ["representative", "ambassador", "curator"]) {
+  test(`IFK-F: IFK-ID-Logik rollenunabhängig (${role})`, async () => {
+    const request = await buildRepresentativeDeliveryRequest({
+      manifest: { person: { firstName: "Kim", lastName: "Muster", role } },
+      zip: fakeZip(),
+      files: fakeFiles(),
+      companion: { ifkId: "IFK7QX", email: `${role}@its-for-kids.de` },
+      logoUrl: "https://example.com/logo.png",
+    });
+    assert.match(request.recipient.text, /IFK-ID lautet: IFK7QX\./);
+    assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
+  });
+}
+
+test("companion überschreibt Manifest-Personendaten nur mit nicht-leeren Werten", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: { person: { firstName: "Max", lastName: "Muster", role: "representative", ifkId: "IFK7QX" } },
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companion: { firstName: "  ", ifkId: "", email: "max@example.com" },
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  // leerer companion.firstName/ifkId lässt die Manifest-Werte unangetastet
+  assert.match(request.recipient.text, /Hallo Max,/);
+  assert.match(request.recipient.text, /IFK-ID lautet: IFK7QX\./);
+});

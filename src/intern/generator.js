@@ -835,12 +835,30 @@ export function initGenerator() {
     }
 
     const target = selectedDeliveryTarget();
-    // Immer den AKTUELL im Formular sichtbaren Wert verwenden — nie den
+    // Immer die AKTUELL im Formular sichtbaren Werte verwenden — nie den
     // zum Zeitpunkt der Materialerzeugung gespeicherten Stand
-    // (`lastManifest.person.email` trägt bewusst keine E-Mail mehr) und
-    // keinen alten Screenshot-/OCR-Wert. Die Empfängerauflösung läuft
-    // rollenunabhängig zentral über `resolveCompanionRecipient`.
-    const companionEmail = emailInput.value.trim();
+    // (`lastManifest.person` trägt E-Mail/IFK-ID nur, wenn ein darauf
+    // angewiesenes Material erzeugt wurde) und keinen alten
+    // Screenshot-/OCR-Wert.
+    //
+    // Ein einziger, empfängerunabhängiger Wegbegleiter-Datensatz für
+    // beide Versandwege: Typ, Name, IFK-ID und Formular-E-Mail gehören
+    // zur Person und ändern sich NICHT, wenn an eine abweichende Adresse
+    // versendet wird. Nur `alternativeEmail` steuert den Empfänger.
+    const ifkIdCheck = validateIfkId(ifkIdInput.value);
+    const companion = {
+      role: roleSelect.value,
+      firstName: firstNameInput.value.trim(),
+      lastName: lastNameInput.value.trim(),
+      gender: (document.querySelector('input[name="gender"]:checked') || {}).value || undefined,
+      // Vorhandene IFK-ID: exakt der aktuelle Wert (normalisiert, wenn
+      // gültig). Leeres Feld → weglassen (kein "undefined" in der Mail).
+      ifkId: ifkIdCheck.valid ? ifkIdCheck.normalized : ifkIdInput.value.trim() || undefined,
+      email: emailInput.value.trim() || undefined,
+      federalState: federalStateInput.value.trim() || undefined,
+      region: regionInput.value.trim() || undefined,
+    };
+    const companionEmail = companion.email ?? "";
     const alternativeEmail = target === "alternative" ? alternativeEmailInput.value.trim() : "";
 
     try {
@@ -873,7 +891,7 @@ export function initGenerator() {
         manifest: lastManifest,
         zip,
         files: lastFiles,
-        companionEmail,
+        companion,
         alternativeEmail,
         logoUrl: `${window.location.origin}/ifk-logo-full.png`,
       });

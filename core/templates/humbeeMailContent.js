@@ -48,9 +48,10 @@ export function buildHumbeeMailSubject({ federalState, region, lastName, firstNa
  * @returns {string}
  */
 export function buildHumbeeMailText({ firstName, lastName, ifkId }) {
+  const trimmedIfkId = typeof ifkId === "string" ? ifkId.trim() : "";
   return [
     `Für ${firstName} ${lastName} wurden personalisierte Materialien erstellt und versendet.`,
-    "",
-    `IFK-ID: ${ifkId}`,
+    // IFK-ID-Zeile nur bei vorhandener ID — nie "IFK-ID: undefined".
+    ...(trimmedIfkId ? ["", `IFK-ID: ${trimmedIfkId}`] : []),
   ].join("\n");
 }

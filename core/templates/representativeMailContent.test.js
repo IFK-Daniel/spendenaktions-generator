@@ -118,3 +118,28 @@ test("Grußformel erscheint im HTML nur einmal (kein Duplikat aus Fließtext und
   const matches = html.match(/Herzliche Grüße/g) ?? [];
   assert.equal(matches.length, 1);
 });
+
+test("fehlende IFK-ID: der IFK-ID-Satz entfällt in Text und HTML, kein 'undefined'", () => {
+  for (const missing of [undefined, null, "", "   "]) {
+    const text = buildRepresentativeMailText({ firstName: "Max", gender: "male", ifkId: missing, role: "representative" });
+    const html = buildRepresentativeMailHtml({
+      firstName: "Max",
+      gender: "male",
+      ifkId: missing,
+      role: "representative",
+      logoUrl: "https://example.com/logo.png",
+    });
+    assert.doesNotMatch(text, /persönliche IFK-ID lautet/);
+    assert.doesNotMatch(text, /\b(undefined|null)\b/);
+    assert.doesNotMatch(html, /persönliche IFK-ID lautet/);
+    assert.doesNotMatch(html, /\b(undefined|null)\b/);
+    // die übrigen Absätze bleiben erhalten
+    assert.match(text, /Hallo Max,/);
+    assert.match(text, /Vielen Dank für dein Engagement/);
+  }
+});
+
+test("vorhandene IFK-ID wird getrimmt eingesetzt", () => {
+  const text = buildRepresentativeMailText({ firstName: "Max", gender: "male", ifkId: "  IFK7QX  ", role: "representative" });
+  assert.match(text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
+});

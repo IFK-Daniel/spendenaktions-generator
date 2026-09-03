@@ -29,15 +29,22 @@ export function buildRepresentativeMailSubject() {
 
 function buildBodyParagraphs({ firstName, gender, ifkId, role }) {
   const roleLabel = mailRoleLabel(role, gender);
+  // Die IFK-ID gehört zur Person, nicht zum gewählten Empfänger. Ist im
+  // Formular eine ID hinterlegt, MUSS exakt dieser Wert erscheinen; fehlt
+  // sie (z. B. reine Urkunden-Erzeugung ohne IFK-ID-Pflicht), wird der
+  // Satz ersatzlos weggelassen — niemals "undefined"/"null" ausgeben.
+  const trimmedIfkId = typeof ifkId === "string" ? ifkId.trim() : "";
 
   return [
     `Hallo ${firstName},`,
     `anbei erhältst du deine personalisierten Materialien für deinen Einsatz als ${roleLabel} von It's for Kids.`,
     "Das ZIP-Archiv enthält alle aktuell verfügbaren Materialien, die speziell für dich erstellt wurden.",
-    `Deine persönliche IFK-ID lautet: ${ifkId}. Die IFK-ID dient ausschließlich der internen eindeutigen Zuordnung. Deshalb ist sie beispielsweise auch im Verwendungszweck des GiroCodes für die Banking-App enthalten.`,
+    trimmedIfkId
+      ? `Deine persönliche IFK-ID lautet: ${trimmedIfkId}. Die IFK-ID dient ausschließlich der internen eindeutigen Zuordnung. Deshalb ist sie beispielsweise auch im Verwendungszweck des GiroCodes für die Banking-App enthalten.`
+      : null,
     "Solltest du Fragen haben oder weitere Unterstützung benötigen, sind wir jederzeit gerne für dich da.",
     "Vielen Dank für dein Engagement. Gemeinsam schenken wir Kindern Hoffnung und Zukunft.",
-  ];
+  ].filter((paragraph) => paragraph !== null);
 }
 
 /**

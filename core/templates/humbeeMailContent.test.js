@@ -70,3 +70,17 @@ test("Mailtext enthält keine Bestandteile der IFK-HTML-Signatur (Zitat, Anschri
   assert.doesNotMatch(text, /Datenschutz/);
   assert.doesNotMatch(text, /Bezirksregierung/);
 });
+
+test("fehlende IFK-ID: die IFK-ID-Zeile entfällt, kein 'undefined'", () => {
+  for (const missing of [undefined, null, "", "   "]) {
+    const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: missing });
+    assert.doesNotMatch(text, /IFK-ID/);
+    assert.doesNotMatch(text, /\b(undefined|null)\b/);
+    assert.match(text, /Für Max Mustermann wurden personalisierte Materialien erstellt und versendet\./);
+  }
+});
+
+test("IFK-ID wird getrimmt in die Zeile übernommen", () => {
+  const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "  IFK7QX  " });
+  assert.match(text, /IFK-ID: IFK7QX$/);
+});

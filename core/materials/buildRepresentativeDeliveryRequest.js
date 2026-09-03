@@ -69,6 +69,49 @@ export function resolveCompanionRecipient({ companionEmail, alternativeEmail } =
 }
 
 /**
+ * Verschmilzt die verbindlichen, aktuell im Formular sichtbaren
+ * Wegbegleiter-Daten (`companion`) über die aus dem Manifest bekannten
+ * Personendaten. Nur nicht-leere Werte aus `companion` überschreiben —
+ * so bleiben Altaufrufe ohne `companion` unverändert, und ein leeres
+ * Feld setzt keinen vorhandenen Manifest-Wert auf `undefined`.
+ *
+ * Fachlich: Die Personendaten (Typ, Name, IFK-ID) gehören zum
+ * Wegbegleiter und sind unabhängig davon, an welche Adresse versendet
+ * wird. `companion` ist für beide Versandwege identisch — nur der
+ * separat aufgelöste Empfänger (`to`) unterscheidet sich.
+ */
+function mergeCompanionData(manifestPerson = {}, companion) {
+  const merged = { ...manifestPerson };
+  if (!companion || typeof companion !== "object") return merged;
+  for (const [key, value] of Object.entries(companion)) {
+    const normalized = typeof value === "string" ? value.trim() : value;
+    if (normalized !== undefined && normalized !== null && normalized !== "") {
+      merged[key] = normalized;
+    }
+  }
+  return merged;
+}
+
+/**
+ * Fail-safe gegen "undefined"/"null"/"NaN" in einer Benutzer-Mail:
+ * scannt die menschenlesbaren Textfelder (nicht die base64-Anhänge) und
+ * bricht mit klarer Fehlermeldung ab, bevor eine solche Mail versendet
+ * wird. Fehlende Pflichtangaben müssen vorher entweder den betroffenen
+ * Satz weglassen oder den Versand blockieren.
+ */
+const PLACEHOLDER_TOKEN_RE = /\b(undefined|null|NaN)\b/;
+
+function assertNoPlaceholders(fields) {
+  for (const [label, value] of Object.entries(fields)) {
+    if (typeof value === "string" && PLACEHOLDER_TOKEN_RE.test(value)) {
+      throw new Error(
+        `buildRepresentativeDeliveryRequest: Platzhalterwert im Mailfeld "${label}" — Versand abgebrochen.`
+      );
+    }
+  }
+}
+
+/**
  * @deprecated Alter Name aus der reinen Repräsentanten-Phase. Der
  * direkte Versand ist inzwischen für alle Wegbegleiter-Rollen gültig —
  * bitte `resolveCompanionRecipient` verwenden. Bleibt als dünner
@@ -101,11 +144,15 @@ export function resolveRepresentativeRecipient({ person, companionEmail, alterna
  * @param {Array<{ filename: string, content: Blob | ArrayBuffer | Uint8Array }>} params.files
  *   Die tatsächlich erzeugten Materialdateien (Ergebnis von
  *   `generateQrMaterials()`) — werden humbee einzeln angehängt.
- * @param {string} [params.companionEmail] Aktueller Wert des
- *   Wegbegleiter-E-Mail-Feldes im Formular — siehe
- *   `resolveCompanionRecipient`. Fällt ausschließlich als
- *   Rückwärtskompatibilität auf `manifest.person.email` zurück, wenn
- *   nicht angegeben.
+ * @param {{ firstName?: string, lastName?: string, ifkId?: string, role?: string, gender?: string, email?: string, federalState?: string, region?: string }} [params.companion]
+ *   Die AKTUELL im Formular sichtbaren Wegbegleiter-Daten. Verbindliche
+ *   Quelle für Anrede, Rollenbezeichnung und IFK-ID in beiden Mails —
+ *   unabhängig vom gewählten Empfänger. Nicht-leere Werte überschreiben
+ *   die aus dem Manifest bekannten (siehe `mergeCompanionData`); ohne
+ *   `companion` bleibt alles wie bisher aus dem Manifest.
+ * @param {string} [params.companionEmail] Rückwärtskompatibler
+ *   Einzelwert des Wegbegleiter-E-Mail-Feldes. `companion.email` hat
+ *   Vorrang; danach dieser Wert; zuletzt `manifest.person.email`.
  * @param {string} [params.alternativeEmail] Siehe `resolveCompanionRecipient`.
  * @param {string} params.logoUrl Für die HTML-Mail an den Wegbegleiter.
  * @returns {Promise<{
@@ -118,13 +165,16 @@ export async function buildRepresentativeDeliveryRequest({
   manifest,
   zip,
   files,
+  companion,
   companionEmail,
   alternativeEmail,
   logoUrl,
 } = {}) {
-  const { person } = manifest;
+  // Eine einzige, empfängerunabhängige Personendaten-Quelle für beide
+  // Mails. Der Empfänger (`to`) wird davon getrennt aufgelöst.
+  const person = mergeCompanionData(manifest?.person, companion);
   const to = resolveCompanionRecipient({
-    companionEmail: companionEmail ?? person?.email,
+    companionEmail: companion?.email ?? companionEmail ?? person.email,
     alternativeEmail,
   });
 
@@ -168,6 +218,14 @@ export async function buildRepresentativeDeliveryRequest({
     text: buildHumbeeMailText({ firstName: person.firstName, lastName: person.lastName, ifkId: person.ifkId }),
     attachments: humbeeAttachments,
   };
+
+  assertNoPlaceholders({
+    "recipient.subject": recipient.subject,
+    "recipient.text": recipient.text,
+    "recipient.html": recipient.html,
+    "humbee.subject": humbee.subject,
+    "humbee.text": humbee.text,
+  });
 
   return { recipient, humbee };
 }

@@ -1,10 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  resolveCompanionRecipient,
   resolveRepresentativeRecipient,
+  RECIPIENT_ERROR_CODES,
   buildRepresentativeDeliveryRequest,
 } from "./buildRepresentativeDeliveryRequest.js";
 
+// Das Manifest trägt bewusst KEINE E-Mail mehr (sie ist nur für den —
+// aktuell global deaktivierten — Flyer relevant). Der direkte Versand
+// bezieht die Adresse ausschließlich aus dem aktuellen Formularwert,
+// der als `companionEmail` übergeben wird.
 function fakeManifest(overrides = {}) {
   return {
     person: {
@@ -12,9 +18,9 @@ function fakeManifest(overrides = {}) {
       lastName: "Mustermann",
       ifkId: "IFK7QX",
       gender: "male",
+      role: "representative",
       federalState: "Bayern",
       region: "Regensburg Land",
-      email: "max@example.com",
       ...overrides,
     },
   };
@@ -31,53 +37,140 @@ function fakeFiles() {
   ];
 }
 
-test("resolveRepresentativeRecipient nutzt standardmäßig person.email", () => {
-  const to = resolveRepresentativeRecipient({ person: { email: "max@example.com" } });
+// ---------------------------------------------------------------------------
+// resolveCompanionRecipient — zentrale, rollenunabhängige Empfängerauflösung
+// ---------------------------------------------------------------------------
+
+test("resolveCompanionRecipient nutzt standardmäßig den aktuellen companionEmail-Wert", () => {
+  const to = resolveCompanionRecipient({ companionEmail: "n.mehwitz@its-for-kids.de" });
+  assert.equal(to, "n.mehwitz@its-for-kids.de");
+});
+
+test("resolveCompanionRecipient trimmt den Formularwert", () => {
+  const to = resolveCompanionRecipient({ companionEmail: "  max@example.com  " });
   assert.equal(to, "max@example.com");
 });
 
-test("resolveRepresentativeRecipient nutzt die abweichende Adresse, wenn angegeben", () => {
-  const to = resolveRepresentativeRecipient({
-    person: { email: "max@example.com" },
+test("resolveCompanionRecipient nutzt die abweichende Adresse, wenn angegeben", () => {
+  const to = resolveCompanionRecipient({
+    companionEmail: "max@example.com",
     alternativeEmail: "mitarbeiter@example.com",
   });
   assert.equal(to, "mitarbeiter@example.com");
 });
 
-test("resolveRepresentativeRecipient lehnt eine ungültige abweichende Adresse ab", () => {
-  assert.throws(
-    () =>
-      resolveRepresentativeRecipient({
-        person: { email: "max@example.com" },
-        alternativeEmail: "keine-email",
-      }),
-    /ungültige abweichende E-Mail-Adresse/
+test("resolveCompanionRecipient: abweichende Adresse gewinnt auch ohne companionEmail", () => {
+  const to = resolveCompanionRecipient({ alternativeEmail: "mitarbeiter@example.com" });
+  assert.equal(to, "mitarbeiter@example.com");
+});
+
+test("resolveCompanionRecipient: leere abweichende Adresse fällt auf den Wegbegleiter zurück", () => {
+  const to = resolveCompanionRecipient({ companionEmail: "max@example.com", alternativeEmail: "   " });
+  assert.equal(to, "max@example.com");
+});
+
+test("resolveCompanionRecipient lehnt eine ungültige abweichende Adresse ab (mit code)", () => {
+  try {
+    resolveCompanionRecipient({ companionEmail: "max@example.com", alternativeEmail: "keine-email" });
+    assert.fail("hätte werfen müssen");
+  } catch (err) {
+    assert.equal(err.code, RECIPIENT_ERROR_CODES.ALTERNATIVE_EMAIL_INVALID);
+    assert.match(err.message, /abweichende E-Mail-Adresse/);
+  }
+});
+
+test("resolveCompanionRecipient wirft ohne gültige companionEmail und ohne Alternative (mit code)", () => {
+  try {
+    resolveCompanionRecipient({ companionEmail: "" });
+    assert.fail("hätte werfen müssen");
+  } catch (err) {
+    assert.equal(err.code, RECIPIENT_ERROR_CODES.COMPANION_EMAIL_INVALID);
+  }
+});
+
+test("resolveCompanionRecipient wirft bei ungültiger companionEmail", () => {
+  try {
+    resolveCompanionRecipient({ companionEmail: "kein-at-zeichen" });
+    assert.fail("hätte werfen müssen");
+  } catch (err) {
+    assert.equal(err.code, RECIPIENT_ERROR_CODES.COMPANION_EMAIL_INVALID);
+  }
+});
+
+test("resolveCompanionRecipient wirft bei komplett fehlenden Angaben", () => {
+  assert.throws(() => resolveCompanionRecipient(), (err) => err.code === RECIPIENT_ERROR_CODES.COMPANION_EMAIL_INVALID);
+});
+
+// A–D: rollenunabhängig — dieselbe Auflösung für jeden Wegbegleiter-Typ.
+for (const role of [
+  "representative",
+  "ambassador",
+  "curator",
+  "advisory_board",
+  "expert_council",
+  "economic_council",
+]) {
+  test(`resolveCompanionRecipient ist rollenunabhängig (${role})`, () => {
+    const to = resolveCompanionRecipient({ companionEmail: `${role}@its-for-kids.de` });
+    assert.equal(to, `${role}@its-for-kids.de`);
+  });
+}
+
+// Rückwärtskompatibler Adapter.
+test("resolveRepresentativeRecipient (deprecated) delegiert an person.email", () => {
+  assert.equal(
+    resolveRepresentativeRecipient({ person: { email: "legacy@example.com" } }),
+    "legacy@example.com"
   );
 });
 
-test("resolveRepresentativeRecipient wirft ohne gültige person.email und ohne Alternative", () => {
-  assert.throws(
-    () => resolveRepresentativeRecipient({ person: { email: undefined } }),
-    /keine gültige E-Mail-Adresse/
-  );
-});
+// ---------------------------------------------------------------------------
+// buildRepresentativeDeliveryRequest — bezieht die Adresse aus companionEmail
+// ---------------------------------------------------------------------------
 
-test("buildRepresentativeDeliveryRequest: Standardempfänger stammt aus person.email", async () => {
+test("buildRepresentativeDeliveryRequest: Standardempfänger stammt aus companionEmail", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
   assert.equal(request.recipient.to, "max@example.com");
 });
 
-test("buildRepresentativeDeliveryRequest: abweichende Adresse überschreibt person.email", async () => {
+test("E: nachträglich geänderter Formularwert gewinnt (kein Snapshot)", async () => {
+  // Manifest wurde mit alt@example.de erzeugt, Formular steht jetzt auf neu@example.de.
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest({ email: "alt@example.de" }),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "neu@example.de",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "neu@example.de");
+});
+
+test("F: screenshot-importierte Adresse im Formular wird verwendet", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "ocr.import@its-for-kids.de",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "ocr.import@its-for-kids.de");
+});
+
+test("G: abweichende Adresse überschreibt den Wegbegleiter-Wert", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
     alternativeEmail: "mitarbeiter@example.com",
     logoUrl: "https://example.com/logo.png",
   });
@@ -85,18 +178,44 @@ test("buildRepresentativeDeliveryRequest: abweichende Adresse überschreibt pers
   assert.equal(request.recipient.to, "mitarbeiter@example.com");
 });
 
-test("buildRepresentativeDeliveryRequest: ungültige abweichende Adresse wirft einen Fehler", async () => {
+test("H: ungültige abweichende Adresse wirft mit code ALTERNATIVE_EMAIL_INVALID", async () => {
   await assert.rejects(
     () =>
       buildRepresentativeDeliveryRequest({
         manifest: fakeManifest(),
         zip: fakeZip(),
         files: fakeFiles(),
+        companionEmail: "max@example.com",
         alternativeEmail: "keine-email",
         logoUrl: "https://example.com/logo.png",
       }),
-    /ungültige abweichende E-Mail-Adresse/
+    (err) => err.code === RECIPIENT_ERROR_CODES.ALTERNATIVE_EMAIL_INVALID
   );
+});
+
+test("I: leere Wegbegleiter-Adresse wirft mit code COMPANION_EMAIL_INVALID", async () => {
+  await assert.rejects(
+    () =>
+      buildRepresentativeDeliveryRequest({
+        manifest: fakeManifest(),
+        zip: fakeZip(),
+        files: fakeFiles(),
+        companionEmail: "   ",
+        logoUrl: "https://example.com/logo.png",
+      }),
+    (err) => err.code === RECIPIENT_ERROR_CODES.COMPANION_EMAIL_INVALID
+  );
+});
+
+test("buildRepresentativeDeliveryRequest: fällt ohne companionEmail auf manifest.person.email zurück", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest({ email: "fallback@example.com" }),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "fallback@example.com");
 });
 
 test("Repräsentant erhält genau das ZIP-Archiv, keine Einzeldateien", async () => {
@@ -104,6 +223,7 @@ test("Repräsentant erhält genau das ZIP-Archiv, keine Einzeldateien", async ()
     manifest: fakeManifest(),
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
@@ -126,6 +246,7 @@ test("humbee erhält die Einzeldateien und keine ZIP-Datei", async () => {
     manifest: fakeManifest(),
     zip: fakeZip(),
     files,
+    companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
@@ -147,6 +268,7 @@ test("humbee-Empfänger und -Betreff werden aus dem Manifest gebildet", async ()
     manifest: fakeManifest(),
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
@@ -154,40 +276,19 @@ test("humbee-Empfänger und -Betreff werden aus dem Manifest gebildet", async ()
   assert.equal(request.humbee.subject, "Repräsentant Bayern / Regensburg Land / Mustermann, Max");
 });
 
-test("gender 'female' erzeugt 'Repräsentantin' im Mailtext an den Repräsentanten", async () => {
+test("gender 'female' erzeugt 'Repräsentantin' im Mailtext an den Wegbegleiter", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest({ gender: "female", firstName: "Anna" }),
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "anna@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
   assert.match(request.recipient.text, /Repräsentantin/);
 });
 
-test("person.role steuert Rollenbezeichnung in Empfänger-Mail und humbee-Betreff (Kurator, ohne Region)", async () => {
-  const request = await buildRepresentativeDeliveryRequest({
-    manifest: {
-      person: {
-        firstName: "Daniel",
-        lastName: "Feigenbutz",
-        ifkId: "IFK7QX",
-        role: "curator",
-        gender: "male",
-        email: "daniel@example.com",
-      },
-    },
-    zip: fakeZip(),
-    files: fakeFiles(),
-    logoUrl: "https://example.com/logo.png",
-  });
-
-  assert.match(request.recipient.text, /Einsatz als Kurator von It's for Kids/);
-  assert.doesNotMatch(request.recipient.text, /Repräsentant/);
-  assert.equal(request.humbee.subject, "Kurator / Feigenbutz, Daniel");
-});
-
-test("person.role 'ambassador' + gender 'female' → 'Botschafterin' in der Empfänger-Mail", async () => {
+test("B: Botschafter — direkter Versand löst die Formularadresse auf", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: {
       person: {
@@ -196,13 +297,52 @@ test("person.role 'ambassador' + gender 'female' → 'Botschafterin' in der Empf
         ifkId: "IFK7QX",
         role: "ambassador",
         gender: "female",
-        email: "anna@example.com",
       },
     },
     zip: fakeZip(),
     files: fakeFiles(),
+    companionEmail: "anna.botschafter@its-for-kids.de",
     logoUrl: "https://example.com/logo.png",
   });
 
+  assert.equal(request.recipient.to, "anna.botschafter@its-for-kids.de");
   assert.match(request.recipient.text, /Botschafterin/);
+});
+
+test("C: Kurator — direkter Versand löst die Formularadresse auf, ohne Region", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: {
+      person: {
+        firstName: "Daniel",
+        lastName: "Feigenbutz",
+        ifkId: "IFK7QX",
+        role: "curator",
+        gender: "male",
+      },
+    },
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "kurator@its-for-kids.de",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipient.to, "kurator@its-for-kids.de");
+  assert.match(request.recipient.text, /Einsatz als Kurator von It's for Kids/);
+  assert.doesNotMatch(request.recipient.text, /Repräsentant/);
+  assert.equal(request.humbee.subject, "Kurator / Feigenbutz, Daniel");
+});
+
+test("D: Beirat/Fachrat/Wirtschaftsrat — rollenunabhängige Empfängerauflösung", async () => {
+  for (const role of ["advisory_board", "expert_council", "economic_council"]) {
+    const request = await buildRepresentativeDeliveryRequest({
+      manifest: {
+        person: { firstName: "Kim", lastName: "Muster", ifkId: "IFK7QX", role },
+      },
+      zip: fakeZip(),
+      files: fakeFiles(),
+      companionEmail: `${role}@its-for-kids.de`,
+      logoUrl: "https://example.com/logo.png",
+    });
+    assert.equal(request.recipient.to, `${role}@its-for-kids.de`);
+  }
 });

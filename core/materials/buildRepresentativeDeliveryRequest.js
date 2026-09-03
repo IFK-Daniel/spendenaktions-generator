@@ -10,31 +10,75 @@ import { buildHumbeeMailSubject, buildHumbeeMailText } from "../templates/humbee
 const HUMBEE_RECIPIENT = "office@its-for-kids.de";
 
 /**
- * Ermittelt die Empfängeradresse für die Repräsentanten-Mail:
- * Standardmäßig `person.email`, bei Angabe einer abweichenden Adresse
- * (nicht-leerer String) stattdessen diese — nach Prüfung über die
- * bestehende `core/mail/validateEmail.js`.
+ * Maschinenlesbare Fehlerursachen der Empfängerauflösung. Die
+ * Aufrufer-UI bildet diese auf verständliche Meldungen ab — der
+ * technische `Error.message` (mit Funktionsnamen) erscheint nur im Log.
+ */
+export const RECIPIENT_ERROR_CODES = Object.freeze({
+  COMPANION_EMAIL_INVALID: "companion_email_invalid",
+  ALTERNATIVE_EMAIL_INVALID: "alternative_email_invalid",
+});
+
+function recipientError(message, code) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+/**
+ * Ermittelt die Empfängeradresse für den direkten Materialversand an
+ * einen Wegbegleiter — rollenunabhängig (Repräsentant, Botschafter,
+ * Kurator, Beirat, Fachrat, Wirtschaftsrat).
+ *
+ * Maßgeblich ist ausschließlich die übergebene, AKTUELL im Formular
+ * sichtbare Adresse (`companionEmail`) — kein Wert aus dem Manifest,
+ * kein Snapshot aus dem Zeitpunkt der Materialerzeugung, kein alter
+ * OCR-/Screenshot-Wert. Bei Angabe einer nicht-leeren abweichenden
+ * Adresse (`alternativeEmail`) gewinnt diese. Beide werden über die
+ * bestehende `core/mail/validateEmail.js` geprüft.
  *
  * @param {object} params
- * @param {{ email?: string }} params.person
- * @param {string} [params.alternativeEmail]
+ * @param {string} [params.companionEmail] Der aktuelle Wert des
+ *   Wegbegleiter-E-Mail-Feldes.
+ * @param {string} [params.alternativeEmail] Der aktuelle Wert des
+ *   Feldes „Abweichende E-Mail-Adresse“.
  * @returns {string}
- * @throws {Error} Wenn weder eine gültige abweichende Adresse noch eine
- *   gültige `person.email` vorliegt.
+ * @throws {Error} Mit `code` aus `RECIPIENT_ERROR_CODES`, wenn die
+ *   maßgebliche Adresse fehlt oder ungültig ist.
  */
-export function resolveRepresentativeRecipient({ person, alternativeEmail } = {}) {
+export function resolveCompanionRecipient({ companionEmail, alternativeEmail } = {}) {
   if (typeof alternativeEmail === "string" && alternativeEmail.trim() !== "") {
     const trimmed = alternativeEmail.trim();
     if (!isValidEmail(trimmed)) {
-      throw new Error("resolveRepresentativeRecipient: ungültige abweichende E-Mail-Adresse.");
+      throw recipientError(
+        "resolveCompanionRecipient: ungültige abweichende E-Mail-Adresse.",
+        RECIPIENT_ERROR_CODES.ALTERNATIVE_EMAIL_INVALID
+      );
     }
     return trimmed;
   }
 
-  if (!person || !isValidEmail(person.email)) {
-    throw new Error("resolveRepresentativeRecipient: keine gültige E-Mail-Adresse im Formular hinterlegt.");
+  const trimmedCompanion = typeof companionEmail === "string" ? companionEmail.trim() : "";
+  if (!isValidEmail(trimmedCompanion)) {
+    throw recipientError(
+      "resolveCompanionRecipient: keine gültige E-Mail-Adresse im Formular hinterlegt.",
+      RECIPIENT_ERROR_CODES.COMPANION_EMAIL_INVALID
+    );
   }
-  return person.email;
+  return trimmedCompanion;
+}
+
+/**
+ * @deprecated Alter Name aus der reinen Repräsentanten-Phase. Der
+ * direkte Versand ist inzwischen für alle Wegbegleiter-Rollen gültig —
+ * bitte `resolveCompanionRecipient` verwenden. Bleibt als dünner
+ * Adapter erhalten, um evtl. externe Aufrufer nicht zu brechen.
+ */
+export function resolveRepresentativeRecipient({ person, companionEmail, alternativeEmail } = {}) {
+  return resolveCompanionRecipient({
+    companionEmail: companionEmail ?? person?.email,
+    alternativeEmail,
+  });
 }
 
 /**
@@ -57,17 +101,32 @@ export function resolveRepresentativeRecipient({ person, alternativeEmail } = {}
  * @param {Array<{ filename: string, content: Blob | ArrayBuffer | Uint8Array }>} params.files
  *   Die tatsächlich erzeugten Materialdateien (Ergebnis von
  *   `generateQrMaterials()`) — werden humbee einzeln angehängt.
- * @param {string} [params.alternativeEmail] Siehe `resolveRepresentativeRecipient`.
- * @param {string} params.logoUrl Für die HTML-Mail an den Repräsentanten.
+ * @param {string} [params.companionEmail] Aktueller Wert des
+ *   Wegbegleiter-E-Mail-Feldes im Formular — siehe
+ *   `resolveCompanionRecipient`. Fällt ausschließlich als
+ *   Rückwärtskompatibilität auf `manifest.person.email` zurück, wenn
+ *   nicht angegeben.
+ * @param {string} [params.alternativeEmail] Siehe `resolveCompanionRecipient`.
+ * @param {string} params.logoUrl Für die HTML-Mail an den Wegbegleiter.
  * @returns {Promise<{
  *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipContent: string },
  *   humbee: { to: string, subject: string, text: string, attachments: Array<{ filename: string, content: string }> }
  * }>}
- * @throws {Error} Siehe `resolveRepresentativeRecipient`.
+ * @throws {Error} Siehe `resolveCompanionRecipient`.
  */
-export async function buildRepresentativeDeliveryRequest({ manifest, zip, files, alternativeEmail, logoUrl } = {}) {
+export async function buildRepresentativeDeliveryRequest({
+  manifest,
+  zip,
+  files,
+  companionEmail,
+  alternativeEmail,
+  logoUrl,
+} = {}) {
   const { person } = manifest;
-  const to = resolveRepresentativeRecipient({ person, alternativeEmail });
+  const to = resolveCompanionRecipient({
+    companionEmail: companionEmail ?? person?.email,
+    alternativeEmail,
+  });
 
   const recipient = {
     to,

@@ -6,7 +6,11 @@ import { isValidEmail } from "../../core/mail/validateEmail.js";
 import { sendRepresentativeMaterials } from "../../core/mail/sendRepresentativeMaterials.js";
 import { buildMaterialManifest } from "../../core/materials/buildMaterialManifest.js";
 import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
-import { buildRepresentativeDeliveryRequest } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
+import {
+  buildRepresentativeDeliveryRequest,
+  resolveCompanionRecipient,
+  RECIPIENT_ERROR_CODES,
+} from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
@@ -831,13 +835,25 @@ export function initGenerator() {
     }
 
     const target = selectedDeliveryTarget();
-    let alternativeEmail;
-    if (target === "alternative") {
-      alternativeEmail = alternativeEmailInput.value.trim();
-      if (!isValidEmail(alternativeEmail)) {
-        showDeliveryError("Bitte eine gültige abweichende E-Mail-Adresse eintragen.");
-        return;
-      }
+    // Immer den AKTUELL im Formular sichtbaren Wert verwenden — nie den
+    // zum Zeitpunkt der Materialerzeugung gespeicherten Stand
+    // (`lastManifest.person.email` trägt bewusst keine E-Mail mehr) und
+    // keinen alten Screenshot-/OCR-Wert. Die Empfängerauflösung läuft
+    // rollenunabhängig zentral über `resolveCompanionRecipient`.
+    const companionEmail = emailInput.value.trim();
+    const alternativeEmail = target === "alternative" ? alternativeEmailInput.value.trim() : "";
+
+    try {
+      resolveCompanionRecipient({ companionEmail, alternativeEmail });
+    } catch (err) {
+      // Technischer Funktionsname/Details nur ins Log, nie in die UI.
+      console.error("Empfängerauflösung fehlgeschlagen:", err);
+      showDeliveryError(
+        err.code === RECIPIENT_ERROR_CODES.ALTERNATIVE_EMAIL_INVALID
+          ? "Bitte gib eine gültige alternative E-Mail-Adresse ein."
+          : "Bitte gib eine gültige E-Mail-Adresse für den Wegbegleiter ein."
+      );
+      return;
     }
 
     isSending = true;
@@ -857,6 +873,7 @@ export function initGenerator() {
         manifest: lastManifest,
         zip,
         files: lastFiles,
+        companionEmail,
         alternativeEmail,
         logoUrl: `${window.location.origin}/ifk-logo-full.png`,
       });

@@ -2106,3 +2106,124 @@ ab. `core/materials/buildMaterialFilenames.test.js`,
 `buildMaterialManifest.test.js`, `generateQrMaterials.test.js` und
 `buildMaterialZipFilename.test.js` decken die optionale IFK-ID (nur bei
 tatsächlichem Bedarf Pflicht) ab.
+
+## 15. Repräsentanten-Flyer: Druckerei-/Home-Ausgabeformate und Materialhinweise
+
+Verbindliche technische Grundlage für die Druckerei-Geometrie:
+`Medien/flyer_a5_mass.pdf` (Flyeralarm-Datenblatt "Flyer DIN A5,
+Hochformat"), per PyMuPDF verifiziert — Endformat 148×210mm,
+Datenformat 150×212mm, Beschnittzugabe 1mm umlaufend,
+Sicherheitsabstand 4mm.
+
+### Flyer output formats
+
+**Druckerei** (`FLYER_DRUCKEREI`):
+- A5-Endformat 148×210mm, 1mm Beschnitt umlaufend, 150×212mm
+  Datenformat (siehe oben).
+- Vorlagen: `templates/flyer-representative-*-print/` (vier
+  Geschlecht/Ansprache-Varianten) + `templates/flyer-shared-back-print/`.
+  Gemeinsame Seiten-/Feld-Definition in
+  `templates/_shared/representativeFlyerPrintBase.js` — verwendet
+  DIESELBEN Feldkoordinaten wie die Home-/Bildschirmfassung
+  (`representativeFlyerFrontBase.js`), da `sourceBleedMm`/
+  `outputBleedMm = 1` die bestehende Bleed-Logik in
+  `core/pdf/renderFlyer.js` (`addBackgroundPage`,
+  `trimCoordinateToPdfPoint`) unverändert nutzt.
+- Die 150×212mm-Hintergründe wurden NICHT durch Skalieren des
+  148×210mm-Artworks erzeugt (das hätte alle Positionen verschoben).
+  Stattdessen bleibt das Original unskaliert, 1mm versetzt, als
+  Vektor-Layer erhalten; der zusätzliche 1mm-Beschnittring entsteht per
+  Edge-Clamp (Randpixel nach außen wiederholt) aus einer
+  hochauflösenden Rasterung der vier Kanten — siehe
+  `scripts/extract-flyer-bleed-strips.py` (Python/PyMuPDF, extrahiert
+  die vier schmalen Kanten-Streifenbilder) und
+  `scripts/build-flyer-print-bleed-backgrounds.mjs` (Node/pdf-lib,
+  komponiert Streifen + unskalierten Vektor-Layer zur finalen
+  `background.pdf` je Master — bewusst mit pdf-lib statt PyMuPDFs
+  `show_pdf_page`, das bei versetzter Platzierung in Tests einen
+  Geometrie-Fehler zeigte). Verifiziert per Pixel-Diff gegen das
+  Original (0 Abweichung im unmittelbaren Randbereich, nur
+  Anti-Aliasing-Rauschen bei größerflächigem Vergleich).
+- Bekannte Sicherheitsabstand-Verletzungen (nur dokumentiert, nicht
+  selbst korrigiert — Aufgabe für den Grafiker): die Kontaktzeile
+  "info@its-for-kids.de - www.its-for-kids.de" auf allen vier
+  Vorderseiten reicht bis ca. 1mm vor die untere Trim-Kante (statt der
+  vorgegebenen 4mm); die gemeinsame Rückseite beginnt mit ihrer
+  Überschrift bereits ca. 1mm unter der oberen Trim-Kante.
+- Ausgabe bleibt ein zweiseitiges PDF (Vorderseite + gemeinsame
+  Rückseite), beide Seiten exakt 150×212mm.
+
+**Home** (`FLYER_HOME`):
+- Kein einzelnes DIN-A5-PDF mehr, sondern ein DIN-A4-quer-Bogen
+  (297×210mm), 2 Seiten: Seite 1 = zweimal dieselbe personalisierte
+  DIN-A5-Vorderseite nebeneinander, Seite 2 = zweimal dieselbe
+  Rückseite. Nach Duplexdruck und mittigem Schnitt entstehen zwei
+  identische, zweiseitige DIN-A5-Flyer.
+- Geometrie: 2×148mm = 296mm, DIN-A4-quer = 297mm → 1mm Rest,
+  symmetrisch verteilt: 0,5mm Außenrand, A5-Fläche bis 148,5mm
+  (Schnittmitte), zweite A5-Fläche bis 296,5mm, 0,5mm Außenrand.
+  Vertikal exakt 210mm. Keine Skalierung der A5-Flächen — nutzt die
+  UNVERÄNDERTEN 148×210mm-Bildschirm-/Trimformat-Vorlagen
+  (`templates/flyer-representative-*-front/`,
+  `templates/flyer-shared-back/`).
+- Erzeugung: `core/materials/generateFlyerHomeSheet.js` rendert Front/
+  Back je einmal (`core/pdf/renderFlyer.js`) und platziert sie über die
+  generische Imposition `core/pdf/imposePagesOnSheet.js` (keine
+  erzeugte Skalierung, Platzierungen explizit in mm, wiederverwendbar
+  für künftige Druckbögen) zweimal auf je einen A4-Bogen; beide Bögen
+  werden zu einem 2-seitigen PDF zusammengeführt.
+- Schnittmarkierung: zwei sehr dezente graue Striche (3mm, 0,5pt) bei
+  x=148,5mm, oben und unten am Seitenrand — kein durchgehender Strich
+  durchs Artwork.
+- **Duplex-Einstellung — geometrisch hergeleitet, nicht angenommen:**
+  "An der kurzen Kante wenden" (Short-Edge-Binding). Herleitung: ein
+  Bogen, der über eine Achse gespiegelt wird, kann auf zwei Arten
+  gefaltet werden — Faltlinie parallel zur langen Kante (297mm, oben/
+  unten) = "lange Kante" = Oben-Unten-Spiegelung, oder Faltlinie
+  parallel zur kurzen Kante (210mm, links/rechts) = "kurze Kante" =
+  Links-Rechts-Spiegelung. Rechnet man nach, was beim Umdrehen einer
+  A5-Hälfte (Nutzer dreht die Karte um ihre eigene vertikale
+  Mittelachse) tatsächlich sichtbar wird, hebt sich bei "kurzer Kante"
+  die Drucker-Spiegelung mit der Nutzer-Spiegelung exakt auf — die
+  Rückseite erscheint seitenrichtig und unspiegelt. Bei "langer Kante"
+  bliebe sie kopfüber UND gespiegelt. Per Pixel-Vergleich empirisch
+  bestätigt (identisches Ergebnis wie ein eigenständiger
+  Rückseiten-Render, nur Anti-Aliasing-Rauschen als Differenz). Deckt
+  sich mit der etablierten Druck-Faustregel "Querformat → kurze Kante,
+  Hochformat → lange Kante". Die Anleitung
+  (`core/materials/companionMaterialGuideContent.js`, Abschnitt
+  `flyerHome`) nennt exakt diese Einstellung.
+
+**Beide Ausgabearten** — Du-/Sie-Automatik (siehe Abschnitt 12
+"Mehrere Wegbegleiter-Typen" oben, `roleConfig.js`,
+`flyerSalutationVariants`) bleibt unverändert: pro gewähltem
+Flyer-Material entstehen automatisch beide Ansprachevarianten,
+Dateinamen bekommen ein `_Du`/`_Sie`-Suffix
+(`core/materials/buildFlyerVariantFilename.js`,
+`buildFlyerVariantEntries.js`).
+
+### Companion material guide
+
+`core/materials/generateCompanionMaterialGuide.js` erzeugt
+"Hinweise_zur_Verwendung_der_Materialien.pdf" — ein statisches,
+NICHT personenbezogenes Begleitdokument (kein Name, keine IFK-ID,
+keine Kontaktdaten), reines pdf-lib-Text-Layout (kein Hintergrund-
+Master). Inhalt modular über
+`core/materials/companionMaterialGuideContent.js` (Sections
+`flyerPrint`/`flyerHome`/`paypalQr`/`giroCode`) — weitere Materialien
+lassen sich als zusätzlicher Abschnitt ergänzen, ohne den Renderer
+anzufassen.
+
+- Wird in `src/intern/generator.js` **genau einmal** pro erfolgreichem
+  Erzeugungsdurchlauf erzeugt (sobald mindestens ein Material
+  tatsächlich erzeugt wurde) — unabhängig von der Anzahl erzeugter
+  Du-/Sie-Varianten. Eigene Ergebniskarte im Ergebnisbereich
+  ("PDF herunterladen"), separat von der `files`-Liste
+  (`lastGuideFile`, nicht Teil von `lastFiles`).
+- **Empfänger-Mail: ja** — beim Versand zusätzlich ins ZIP an den
+  Wegbegleiter gepackt (`buildMaterialZip`, siehe `handleSendDelivery`).
+- **humbee: nein** — die humbee-Dokumentationsmail
+  (`buildRepresentativeDeliveryRequest`s `files`-Parameter) bekommt
+  weiterhin ausschließlich `lastFiles` (die tatsächlich individuell
+  erzeugten Materialien), da die Anleitung kein individuelles,
+  personenbezogenes Material ist.

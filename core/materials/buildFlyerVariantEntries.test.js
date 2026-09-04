@@ -3,11 +3,6 @@ import assert from "node:assert/strict";
 import { buildFlyerVariantEntries } from "./buildFlyerVariantEntries.js";
 import { ROLE_KEYS } from "./roleConfig.js";
 
-const TABLE = {
-  female: { du: { key: "F_DU" }, sie: { key: "F_SIE" } },
-  male: { du: { key: "M_DU" }, sie: { key: "M_SIE" } },
-};
-
 function druckereiEntry() {
   return {
     key: "FLYER_DRUCKEREI",
@@ -30,17 +25,12 @@ function homeEntry() {
   };
 }
 
-test("female + Flyer Druckerei → genau female-du + female-sie", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [druckereiEntry()],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "female",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
+test("Flyer Druckerei → genau zwei Aufträge, du + sie, mit variantenspezifischem Dateinamen/Label", () => {
+  const jobs = buildFlyerVariantEntries({ entries: [druckereiEntry()], roleKey: ROLE_KEYS.REPRESENTATIVE });
   assert.equal(jobs.length, 2);
   assert.deepEqual(
-    jobs.map((j) => j.templateConfig.key),
-    ["F_DU", "F_SIE"]
+    jobs.map((j) => j.salutation),
+    ["du", "sie"]
   );
   assert.deepEqual(
     jobs.map((j) => j.entry.filename),
@@ -50,54 +40,24 @@ test("female + Flyer Druckerei → genau female-du + female-sie", () => {
     jobs.map((j) => j.entry.label),
     ["Flyer Druckerei – Du", "Flyer Druckerei – Sie"]
   );
+  // key/category/format/extension bleiben je Auftrag unverändert (nur
+  // filename/label sind ansprache-spezifisch).
+  for (const job of jobs) {
+    assert.equal(job.entry.key, "FLYER_DRUCKEREI");
+    assert.equal(job.entry.category, "flyer");
+  }
 });
 
-test("male + Flyer Druckerei → genau male-du + male-sie", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [druckereiEntry()],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "male",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
-  assert.deepEqual(
-    jobs.map((j) => j.templateConfig.key),
-    ["M_DU", "M_SIE"]
-  );
-});
-
-test("female + Flyer Home → genau female-du + female-sie", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [homeEntry()],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "female",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
+test("Flyer Home → genau zwei Aufträge, du + sie", () => {
+  const jobs = buildFlyerVariantEntries({ entries: [homeEntry()], roleKey: ROLE_KEYS.REPRESENTATIVE });
   assert.deepEqual(
     jobs.map((j) => j.entry.filename),
     ["IFK_Max_Mustermann_Flyer_Home_Du.pdf", "IFK_Max_Mustermann_Flyer_Home_Sie.pdf"]
   );
 });
 
-test("male + Flyer Home → genau male-du + male-sie", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [homeEntry()],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "male",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
-  assert.deepEqual(
-    jobs.map((j) => j.templateConfig.key),
-    ["M_DU", "M_SIE"]
-  );
-});
-
 test("Druckerei UND Home ausgewählt → vier Aufträge (2 Materialien × 2 Ansprachen)", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [druckereiEntry(), homeEntry()],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "female",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
+  const jobs = buildFlyerVariantEntries({ entries: [druckereiEntry(), homeEntry()], roleKey: ROLE_KEYS.REPRESENTATIVE });
   assert.equal(jobs.length, 4);
   assert.deepEqual(
     jobs.map((j) => j.entry.filename),
@@ -111,37 +71,17 @@ test("Druckerei UND Home ausgewählt → vier Aufträge (2 Materialien × 2 Ansp
 });
 
 test("keine Flyer-Einträge → keine Aufträge, keine Doppelung", () => {
-  const jobs = buildFlyerVariantEntries({
-    entries: [],
-    roleKey: ROLE_KEYS.REPRESENTATIVE,
-    gender: "female",
-    frontTemplatesByGenderAndSalutation: TABLE,
-  });
+  const jobs = buildFlyerVariantEntries({ entries: [], roleKey: ROLE_KEYS.REPRESENTATIVE });
   assert.deepEqual(jobs, []);
 });
 
-test("Rolle ohne konfigurierte Ansprache-Variante wirft (kein stiller Fallback auf eine Variante)", () => {
+test("Rolle ohne konfigurierte Ansprache-Variante wirft (kein stiller Fallback auf eine Variante) — z. B. Urkunde/QR-only Rollen betrifft das nicht, da dort keine Flyer-Einträge existieren", () => {
   assert.throws(
-    () =>
-      buildFlyerVariantEntries({
-        entries: [druckereiEntry()],
-        roleKey: ROLE_KEYS.AMBASSADOR,
-        gender: "female",
-        frontTemplatesByGenderAndSalutation: TABLE,
-      }),
+    () => buildFlyerVariantEntries({ entries: [druckereiEntry()], roleKey: ROLE_KEYS.AMBASSADOR }),
     /keine Flyer-Ansprachevariante hinterlegt/
   );
 });
 
-test("ungültiges Geschlecht wirft (über resolveRepresentativeFlyerFrontTemplate)", () => {
-  assert.throws(
-    () =>
-      buildFlyerVariantEntries({
-        entries: [druckereiEntry()],
-        roleKey: ROLE_KEYS.REPRESENTATIVE,
-        gender: undefined,
-        frontTemplatesByGenderAndSalutation: TABLE,
-      }),
-    /Geschlecht/
-  );
+test("unbekannte Rolle wirft ebenfalls (über getFlyerSalutationVariants -> getRoleConfig)", () => {
+  assert.throws(() => buildFlyerVariantEntries({ entries: [druckereiEntry()], roleKey: "not-a-role" }));
 });

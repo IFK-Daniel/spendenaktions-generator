@@ -1,4 +1,3 @@
-import { resolveRepresentativeFlyerFrontTemplate } from "./resolveRepresentativeFlyerFrontTemplate.js";
 import { buildFlyerVariantFilename, buildFlyerVariantLabel } from "./buildFlyerVariantFilename.js";
 import { getFlyerSalutationVariants } from "./roleConfig.js";
 
@@ -12,10 +11,17 @@ import { getFlyerSalutationVariants } from "./roleConfig.js";
  * Repräsentanten, entstehen hier automatisch die Aufträge für
  * "…Druckerei_Du.pdf" UND "…Druckerei_Sie.pdf".
  *
+ * Löst bewusst NUR die Ansprache-Variante auf — NICHT die passende
+ * Vorderseiten-Template-Config: Druckerei (mit Beschnitt) und Home
+ * (ohne Beschnitt, imponiert) brauchen unterschiedliche Template-
+ * Tabellen für denselben `entry.key`/dieselbe Ansprache (siehe
+ * `src/intern/generator.js`, `resolveFlyerFrontTemplateForJob`) — die
+ * Auswahl DER Vorlagen-Tabelle bleibt daher beim Aufrufer, diese
+ * Funktion kennt nur "welche Ansprachen" und "wie heißt die Datei je
+ * Ansprache".
+ *
  * DOM-frei und unabhängig von `src/intern/generator.js` testbar — die
- * einzige Stelle, die weiß, dass es mehrere Ansprache-Varianten gibt;
- * `generator.js` iteriert nur noch über das Ergebnis und ruft
- * `generateFlyerMaterial()` je Auftrag auf.
+ * einzige Stelle, die weiß, dass es mehrere Ansprache-Varianten gibt.
  *
  * Kein stiller Fallback: eine Rolle mit Flyer-Vorlage, aber ohne
  * konfigurierte Ansprache-Variante(n), wirft — statt clammheimlich nur
@@ -26,18 +32,13 @@ import { getFlyerSalutationVariants } from "./roleConfig.js";
  *   Die ausgewählten Flyer-Einträge aus `manifest.materials`
  *   (`FLYER_DRUCKEREI` und/oder `FLYER_HOME`).
  * @param {string} params.roleKey Wegbegleiter-Typ (siehe `roleConfig.js`).
- * @param {"male" | "female"} params.gender
- * @param {{ female: {du: object, sie: object}, male: {du: object, sie: object} }} params.frontTemplatesByGenderAndSalutation
- *   Siehe `resolveRepresentativeFlyerFrontTemplate`.
- * @returns {Array<{entry: object, salutation: "du"|"sie", templateConfig: object}>}
+ * @returns {Array<{entry: object, salutation: "du"|"sie"}>}
  *   Ein Eintrag je (Flyer-Manifest-Eintrag × Ansprache-Variante), in
  *   dieser Reihenfolge — `entry` trägt bereits den variantenspezifischen
  *   `filename`/`label`, sonst identisch zum Ursprungseintrag.
- * @throws {Error} Wenn für `roleKey` keine Ansprache-Variante hinterlegt
- *   ist, oder über `resolveRepresentativeFlyerFrontTemplate` bei
- *   fehlendem/ungültigem `gender`.
+ * @throws {Error} Wenn für `roleKey` keine Ansprache-Variante hinterlegt ist.
  */
-export function buildFlyerVariantEntries({ entries, roleKey, gender, frontTemplatesByGenderAndSalutation }) {
+export function buildFlyerVariantEntries({ entries, roleKey }) {
   const variants = getFlyerSalutationVariants(roleKey);
   if (!Array.isArray(variants) || variants.length === 0) {
     throw new Error(
@@ -48,11 +49,6 @@ export function buildFlyerVariantEntries({ entries, roleKey, gender, frontTempla
   const jobs = [];
   for (const entry of entries ?? []) {
     for (const salutation of variants) {
-      const templateConfig = resolveRepresentativeFlyerFrontTemplate(
-        frontTemplatesByGenderAndSalutation,
-        gender,
-        salutation
-      );
       jobs.push({
         entry: {
           ...entry,
@@ -60,7 +56,6 @@ export function buildFlyerVariantEntries({ entries, roleKey, gender, frontTempla
           label: buildFlyerVariantLabel(entry.label, salutation),
         },
         salutation,
-        templateConfig,
       });
     }
   }

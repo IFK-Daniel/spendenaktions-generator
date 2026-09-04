@@ -13,7 +13,11 @@ import {
 } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
+import { generateFlyerHomeSheet } from "../../core/materials/generateFlyerHomeSheet.js";
 import { buildFlyerVariantEntries } from "../../core/materials/buildFlyerVariantEntries.js";
+import { resolveRepresentativeFlyerFrontTemplate } from "../../core/materials/resolveRepresentativeFlyerFrontTemplate.js";
+import { generateCompanionMaterialGuide } from "../../core/materials/generateCompanionMaterialGuide.js";
+import { loadFontFileBrowser } from "../../core/pdf/loadFontFileBrowser.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
 import {
   MATERIAL_TYPE_KEYS,
@@ -41,6 +45,11 @@ import { flyerRepresentativeFemaleSieFrontTemplate } from "../../templates/flyer
 import { flyerRepresentativeMaleDuFrontTemplate } from "../../templates/flyer-representative-male-du-front/template.config.js";
 import { flyerRepresentativeMaleSieFrontTemplate } from "../../templates/flyer-representative-male-sie-front/template.config.js";
 import { sharedFlyerBackTemplate } from "../../templates/flyer-shared-back/template.config.js";
+import { flyerRepresentativeFemaleDuPrintTemplate } from "../../templates/flyer-representative-female-du-print/template.config.js";
+import { flyerRepresentativeFemaleSiePrintTemplate } from "../../templates/flyer-representative-female-sie-print/template.config.js";
+import { flyerRepresentativeMaleDuPrintTemplate } from "../../templates/flyer-representative-male-du-print/template.config.js";
+import { flyerRepresentativeMaleSiePrintTemplate } from "../../templates/flyer-representative-male-sie-print/template.config.js";
+import { sharedFlyerBackPrintTemplate } from "../../templates/flyer-shared-back-print/template.config.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import { certificateAmbassadorMaleTemplate } from "../../templates/certificate-ambassador-male/template.config.js";
@@ -89,22 +98,18 @@ const FLYER_DISABLED_HINT = "Flyer-Erzeugung ist derzeit deaktiviert (Vorlagen i
 // Definition abgeleitet statt hier einzeln aufgezählt.
 const CERTIFICATE_KEYS = new Set(CERTIFICATE_MATERIAL_KEYS);
 
-// Repräsentanten-Flyer-VORDERSEITE: eine zentrale, verschachtelte
-// Tabelle Geschlecht × Ansprache statt vier `if`-Blöcken. Die vier
-// final korrigierten Master sind geometrisch identisch (ein gemeinsamer
-// Koordinatensatz, siehe `templates/_shared/representativeFlyerFrontBase.js`).
-// Druckerei und Home teilen sich dieselbe Vorderseite — der Master hat
-// keinen Anschnitt, der Unterschied bleibt technisch (`page.outputBleedMm`,
-// generische Trim-/Bleed-Logik in `core/pdf/renderFlyer.js`).
-//
-// Ansprache (Du/Sie) ist KEINE Nutzerauswahl — für jedes gewählte
-// Flyer-Material werden automatisch beide Varianten erzeugt (siehe
-// `core/materials/buildFlyerVariantEntries.js`, das diese Tabelle
-// zusammen mit `core/materials/roleConfig.js`,
-// `flyerSalutationVariants`, verwendet; Auflösung inkl. klarer Fehler
-// bei fehlendem/ungültigem Geschlecht liegt in
-// `core/materials/resolveRepresentativeFlyerFrontTemplate.js`).
-const REPRESENTATIVE_FLYER_FRONT_TEMPLATES = Object.freeze({
+// Repräsentanten-Flyer-VORDERSEITE, je AUSGABEART:
+// - HOME (Bildschirm-/Trimformat, 148×210mm, kein Beschnitt) — wird
+//   unskaliert zweimal auf einen DIN-A4-Bogen imponiert, siehe
+//   `generateFlyerHomeSheet`.
+// - DRUCKEREI (150×212mm, 1mm Beschnitt gemäß Flyeralarm-Datenblatt
+//   `Medien/flyer_a5_mass.pdf`, siehe
+//   `templates/_shared/representativeFlyerPrintBase.js`).
+// Beide Tabellen sind Geschlecht × Ansprache, mit derselben zentralen
+// Auflösung (`resolveRepresentativeFlyerFrontTemplate`) — Ansprache ist
+// KEINE Nutzerauswahl, `buildFlyerVariantEntries` erzeugt automatisch
+// beide Varianten je gewähltem Flyer-Material.
+const REPRESENTATIVE_FLYER_FRONT_TEMPLATES_HOME = Object.freeze({
   female: Object.freeze({
     du: flyerRepresentativeFemaleDuFrontTemplate,
     sie: flyerRepresentativeFemaleSieFrontTemplate,
@@ -114,14 +119,41 @@ const REPRESENTATIVE_FLYER_FRONT_TEMPLATES = Object.freeze({
     sie: flyerRepresentativeMaleSieFrontTemplate,
   }),
 });
+const REPRESENTATIVE_FLYER_FRONT_TEMPLATES_PRINT = Object.freeze({
+  female: Object.freeze({
+    du: flyerRepresentativeFemaleDuPrintTemplate,
+    sie: flyerRepresentativeFemaleSiePrintTemplate,
+  }),
+  male: Object.freeze({
+    du: flyerRepresentativeMaleDuPrintTemplate,
+    sie: flyerRepresentativeMaleSiePrintTemplate,
+  }),
+});
+
+/**
+ * Wählt Vorderseiten-Tabelle UND Rückseite anhand der Ausgabeart
+ * (`entry.key`) — die eine zentrale Stelle, die weiß, dass Druckerei
+ * die Beschnitt-Fassung braucht und Home die Trimformat-Fassung (für
+ * die Imposition). `resolveRepresentativeFlyerFrontTemplate` selbst
+ * bleibt unverändert Geschlecht/Ansprache-only (kein Fallback).
+ */
+function resolveFlyerFrontTemplateForJob(materialKey, gender, salutation) {
+  const table =
+    materialKey === MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI
+      ? REPRESENTATIVE_FLYER_FRONT_TEMPLATES_PRINT
+      : REPRESENTATIVE_FLYER_FRONT_TEMPLATES_HOME;
+  return resolveRepresentativeFlyerFrontTemplate(table, gender, salutation);
+}
 
 // Flyer-RÜCKSEITE: EINE gemeinsame, rollen-, geschlechts- und
-// ansprache-unabhängige Vorlage (`templates/flyer-shared-back/`),
-// vorbereitet für künftige Wegbegleiter-Flyer (siehe
-// `roleConfig.js`, `getFlyerBackTemplateKey`). Kein Materialschlüssel-
-// oder Geschlechts-Mapping mehr, keine vier Kopien derselben Datei.
-function resolveFlyerBackTemplate() {
-  return sharedFlyerBackTemplate;
+// ansprache-unabhängige Vorlage — je Ausgabeart in Trimformat
+// (`templates/flyer-shared-back/`, für Home) oder mit Beschnitt
+// (`templates/flyer-shared-back-print/`, für Druckerei). Vorbereitet
+// für künftige Wegbegleiter-Flyer (siehe `roleConfig.js`,
+// `getFlyerBackTemplateKey`). Kein Materialschlüssel- oder
+// Geschlechts-Mapping mehr, keine vier Kopien derselben Datei.
+function resolveFlyerBackTemplateForJob(materialKey) {
+  return materialKey === MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI ? sharedFlyerBackPrintTemplate : sharedFlyerBackTemplate;
 }
 
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
@@ -459,6 +491,16 @@ export function initGenerator() {
 
   let lastManifest = null;
   let lastFiles = null;
+  // Die Materialhinweise ("Hinweise zur Verwendung Deiner Materialien")
+  // sind KEIN personenbezogenes, individuelles Material — sie werden je
+  // erfolgreichem Erzeugungsdurchlauf genau EINMAL erzeugt (unabhängig
+  // von der Anzahl erzeugter Du-/Sie-Varianten) und separat vorgehalten,
+  // NICHT in `lastFiles` gemischt: `lastFiles` bleibt die Liste der
+  // tatsächlich individuell erzeugten Materialien (Ergebnis-Karten,
+  // humbee-Dokumentation); die Anleitung bekommt eine eigene Ergebnis-
+  // karte und wird erst beim Versand zusätzlich ins ZIP an den
+  // Wegbegleiter gepackt (siehe `renderResults`/`handleSendDelivery`).
+  let lastGuideFile = null;
   let lastPhoto = null;
   // Foto-Link, zu dem `lastPhoto` gehört — erlaubt es, beim Öffnen des
   // Fotoausschnitt-Editors ein bereits geladenes Foto wiederzuverwenden,
@@ -702,7 +744,7 @@ export function initGenerator() {
     return materialCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.materialKey);
   }
 
-  function renderResults(person, files) {
+  function renderResults(person, files, guideFile) {
     revokeActiveObjectUrls();
     // `person.ifkId` ist nur gesetzt, wenn mindestens ein erzeugtes
     // Material sie tatsächlich benötigt (siehe `materialRequirements.js`)
@@ -714,17 +756,32 @@ export function initGenerator() {
     resultGrid.innerHTML = "";
 
     for (const file of files) {
-      const objectUrl = URL.createObjectURL(file.content);
-      activeObjectUrls.push(objectUrl);
+      resultGrid.appendChild(buildResultBlock(file));
+    }
 
-      const block = document.createElement("div");
-      block.className = "result-block";
+    // Materialhinweise: genau EINE Ergebniskarte, unabhängig von der
+    // Anzahl erzeugter Du-/Sie-Varianten (Vorgabe Abschnitt 17) — daher
+    // bewusst NICHT Teil der obigen `files`-Schleife, sondern separat
+    // am Ende angehängt.
+    if (guideFile) {
+      resultGrid.appendChild(buildResultBlock(guideFile));
+    }
 
-      const heading = document.createElement("h4");
-      heading.textContent = file.label;
-      block.appendChild(heading);
+    results.hidden = false;
+  }
 
-      if (file.format === "pdf") {
+  function buildResultBlock(file) {
+    const objectUrl = URL.createObjectURL(file.content);
+    activeObjectUrls.push(objectUrl);
+
+    const block = document.createElement("div");
+    block.className = "result-block";
+
+    const heading = document.createElement("h4");
+    heading.textContent = file.label;
+    block.appendChild(heading);
+
+    if (file.format === "pdf") {
         // PDF-Ergebnisse (Flyer, Repräsentantenurkunde) nehmen im
         // Ergebnisraster doppelt so viel Breite ein wie eine QR-Karte
         // (siehe `#result-grid`/`.result-block--flyer` in style.css) —
@@ -805,10 +862,7 @@ export function initGenerator() {
         block.appendChild(downloadLink);
       }
 
-      resultGrid.appendChild(block);
-    }
-
-    results.hidden = false;
+    return block;
   }
 
   async function handleSendDelivery() {
@@ -867,11 +921,18 @@ export function initGenerator() {
     showDeliveryStatus("Versand läuft …", "loading");
 
     try {
+      // Die Materialhinweise gehen mit ins ZIP an den Wegbegleiter (siehe
+      // Vorgabe Abschnitt 18) — die humbee-Dokumentationsmail bekommt
+      // weiterhin ausschließlich die tatsächlich individuell erzeugten
+      // Materialien (`lastFiles`, OHNE Anleitung, siehe Abschnitt 19 und
+      // `buildRepresentativeDeliveryRequest`s `files`-Parameter unten).
+      const filesForZip = lastGuideFile ? [...lastFiles, lastGuideFile] : lastFiles;
+
       const zip = await buildMaterialZip({
         ifkId: lastManifest.person.ifkId,
         firstName: lastManifest.person.firstName,
         lastName: lastManifest.person.lastName,
-        files: lastFiles,
+        files: filesForZip,
       });
 
       const request = await buildRepresentativeDeliveryRequest({
@@ -1588,6 +1649,7 @@ export function initGenerator() {
     deliverySection.hidden = true;
     lastManifest = null;
     lastFiles = null;
+    lastGuideFile = null;
     lastPhoto = null;
     lastPhotoUrl = null;
     updatePhotoLinkCompletionState();
@@ -1900,25 +1962,32 @@ export function initGenerator() {
         // Ansprache (Du/Sie) ist KEINE Nutzerauswahl: für jede gewählte
         // Flyer-Materialart werden automatisch ALLE für diese Rolle
         // konfigurierten Ansprache-Varianten erzeugt (aktuell ["du","sie"]
-        // beim Repräsentanten). Die gesamte Aufschlüsselung (welche
-        // Varianten, Dateiname/Label je Variante, passende Vorderseite)
-        // steckt in `buildFlyerVariantEntries` (DOM-frei, unabhängig
-        // testbar) — hier nur noch Rendern + Sammeln. Rückseite ist
-        // immer die eine gemeinsame; Druckerei und Home teilen sich
-        // dieselbe Vorderseite je Variante (Unterschied bleibt rein
-        // technisch über `page.outputBleedMm`).
-        const flyerVariantJobs = buildFlyerVariantEntries({
-          entries: flyerEntries,
-          roleKey: role,
-          gender: manifest.person.gender,
-          frontTemplatesByGenderAndSalutation: REPRESENTATIVE_FLYER_FRONT_TEMPLATES,
-        });
+        // beim Repräsentanten) — siehe `buildFlyerVariantEntries` (DOM-frei,
+        // unabhängig testbar; kennt nur "welche Ansprachen", nicht die
+        // Vorlagen). Druckerei und Home brauchen JEWEILS eigene Vorder-/
+        // Rückseiten-Vorlagen (Beschnitt vs. Trimformat-Imposition, siehe
+        // `resolveFlyerFrontTemplateForJob`/`resolveFlyerBackTemplateForJob`)
+        // und unterschiedliche Renderer:
+        // - FLYER_DRUCKEREI → `generateFlyerMaterial` (zweiseitiges
+        //   150×212mm-PDF mit Beschnitt, wie bisher).
+        // - FLYER_HOME → `generateFlyerHomeSheet` (DIN-A4-quer-Bogen mit
+        //   Front/Back je zweimal imponiert, siehe dort für Geometrie/
+        //   Duplex-Begründung).
+        const flyerVariantJobs = buildFlyerVariantEntries({ entries: flyerEntries, roleKey: role });
 
         for (const job of flyerVariantJobs) {
-          const flyerFile = await generateFlyerMaterial({
+          const gender = manifest.person.gender;
+          const frontTemplateConfig = resolveFlyerFrontTemplateForJob(job.entry.key, gender, job.salutation);
+          const backTemplateConfig = resolveFlyerBackTemplateForJob(job.entry.key);
+          const generateFn = job.entry.key === MATERIAL_TYPE_KEYS.FLYER_HOME ? generateFlyerHomeSheet : generateFlyerMaterial;
+          const flyerFile = await generateFn({
             entry: job.entry,
-            templateConfig: job.templateConfig,
-            backTemplateConfig: resolveFlyerBackTemplate(),
+            // `generateFlyerMaterial` erwartet `templateConfig`,
+            // `generateFlyerHomeSheet` `frontTemplateConfig` — beide
+            // Schlüssel mitgeben, jede Funktion liest nur ihren eigenen.
+            frontTemplateConfig,
+            templateConfig: frontTemplateConfig,
+            backTemplateConfig,
             person: manifest.person,
             photoAsset,
             qrPaypalAsset,
@@ -1947,7 +2016,16 @@ export function initGenerator() {
         files.push(certificateFile);
       }
 
-      renderResults(manifest.person, files);
+      // Begleit-Anleitung: genau einmal, sobald mindestens ein Material
+      // tatsächlich erzeugt wurde — unabhängig von Materialart/-anzahl
+      // (Vorgabe Abschnitt 17). Kein personenbezogener Inhalt, daher
+      // ohne `person`/`manifest`-Bezug erzeugt.
+      lastGuideFile =
+        files.length > 0
+          ? await generateCompanionMaterialGuide({ deps: { loadFontBytes: loadFontFileBrowser } })
+          : null;
+
+      renderResults(manifest.person, files, lastGuideFile);
 
       if (skipMessages.length > 0) {
         // Nicht blockierend: die übrigen ausgewählten Materialien wurden

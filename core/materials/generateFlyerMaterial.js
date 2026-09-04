@@ -1,42 +1,7 @@
 import { renderMultiPageDocument } from "../pdf/renderMultiPageDocument.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { buildFileContent } from "./buildFileContent.js";
-
-/**
- * Bildet `manifest.person`-Felder auf die generischen `textValues`-
- * Feldschlüssel der Flyer-Template-Configs ab (siehe
- * `templates/*​/template.config.js`, Abschnitt `fields`). Bewusst hier
- * zentralisiert (statt im UI-Code verteilt) — die einzige Stelle, die
- * weiß, dass der Flyer intern zwei Textfelder für den Regionsnamen hat
- * (Kopfzeile + Fließtext, siehe Template-Config-Kommentar).
- *
- * Das `region`-Feld mancher Vorlagen (siehe z. B.
- * `templates/flyer-female-print-front/template.config.js`) steht für
- * den ganzen Satz "für die Region {Region}", nicht nur den Regionsnamen
- * — dort, wo "für die Region" im Master-PDF nicht bereits als
- * statischer Text vorgedruckt ist (anders als bei der männlichen
- * Vorlage). Die Config markiert das über `fields.region.regionPrefix`;
- * hier wird dieser Präfix (falls vorhanden) vor den Regionsnamen
- * gesetzt, damit der Aufrufer (`generateFlyerMaterial`) keine
- * Kenntnis von der jeweiligen Master-Grafik braucht.
- *
- * @param {{firstName: string, lastName: string, region?: string, phone?: string, email?: string}} person
- * @param {object} templateConfig Vorderseiten-Template-Config, aus der
- *   ein optionaler `fields.region.regionPrefix` gelesen wird.
- * @returns {Record<string, string>}
- */
-function buildFlyerTextValues(person, templateConfig) {
-  const name = `${person.firstName ?? ""} ${person.lastName ?? ""}`.trim();
-  const region = person.region ?? "";
-  const regionPrefix = templateConfig?.fields?.region?.regionPrefix ?? "";
-  return {
-    name,
-    region: region ? `${regionPrefix}${region}` : "",
-    regionInParagraph: region,
-    phone: person.phone ?? "",
-    email: person.email ?? "",
-  };
-}
+import { buildFlyerTextValues } from "./buildFlyerTextValues.js";
 
 /**
  * Erzeugt aus einem bereits aufgelösten Flyer-Materialtyp-Eintrag, den

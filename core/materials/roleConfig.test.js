@@ -11,8 +11,11 @@ import {
   certificateRequiresGender,
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
+  getFlyerBackTemplateKey,
+  SHARED_FLYER_BACK_KEY,
 } from "./roleConfig.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
+import { sharedFlyerBackTemplate, SHARED_FLYER_BACK_KEY as TEMPLATE_BACK_KEY } from "../../templates/flyer-shared-back/template.config.js";
 
 test("alle sechs Wegbegleiter-Typen sind vorhanden", () => {
   assert.deepEqual(
@@ -120,4 +123,27 @@ test("für andere Rollen als Repräsentant ist weiterhin keine FLYER-Vorlage hin
     assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI), false);
     assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_HOME), false);
   }
+});
+
+test("jede Rolle verweist auf die eine gemeinsame Flyer-Rückseite (Rollenarchitektur ist auf shared back vorbereitet)", () => {
+  for (const roleKey of ROLE_KEY_LIST) {
+    assert.equal(
+      getFlyerBackTemplateKey(roleKey),
+      SHARED_FLYER_BACK_KEY,
+      `${roleKey} sollte die gemeinsame Rückseite referenzieren`
+    );
+  }
+});
+
+test("der shared-back-Schlüssel in roleConfig stimmt mit der Template-Config überein", () => {
+  assert.equal(SHARED_FLYER_BACK_KEY, TEMPLATE_BACK_KEY);
+  assert.equal(sharedFlyerBackTemplate.key, SHARED_FLYER_BACK_KEY);
+});
+
+test("die gemeinsame Rückseite ist statisch: keine dynamischen Felder, keine Cover", () => {
+  assert.deepEqual(sharedFlyerBackTemplate.fields, {});
+  assert.deepEqual(sharedFlyerBackTemplate.legacyContentCovers, []);
+  assert.equal(sharedFlyerBackTemplate.page.trimWidthMm, 148);
+  assert.equal(sharedFlyerBackTemplate.page.trimHeightMm, 210);
+  assert.equal(sharedFlyerBackTemplate.page.outputBleedMm, 0);
 });

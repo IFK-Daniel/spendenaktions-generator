@@ -615,7 +615,8 @@
   grid-column: 1 / -1;
 }
 
-.gender-fieldset {
+.gender-fieldset,
+.salutation-fieldset {
   margin: 0;
   padding: 0;
   border: none;

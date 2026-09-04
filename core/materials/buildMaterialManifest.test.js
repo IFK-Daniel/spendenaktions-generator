@@ -167,6 +167,44 @@ test("ungültiger gender-Wert wirft einen Fehler", () => {
   );
 });
 
+test("ohne Angabe von salutation enthält person kein salutation-Feld", () => {
+  const manifest = buildMaterialManifest({
+    firstName: "Max",
+    lastName: "Mustermann",
+    ifkId: VALID_IFK_ID,
+    gender: "male",
+  });
+
+  assert.equal("salutation" in manifest.person, false);
+});
+
+test("salutation 'du' / 'sie' wird unverändert in person übernommen", () => {
+  for (const salutation of ["du", "sie"]) {
+    const manifest = buildMaterialManifest({
+      firstName: "Max",
+      lastName: "Mustermann",
+      ifkId: VALID_IFK_ID,
+      gender: "male",
+      salutation,
+    });
+    assert.equal(manifest.person.salutation, salutation);
+  }
+});
+
+test("ungültiger salutation-Wert wirft einen Fehler", () => {
+  assert.throws(
+    () =>
+      buildMaterialManifest({
+        firstName: "Max",
+        lastName: "Mustermann",
+        ifkId: VALID_IFK_ID,
+        gender: "male",
+        salutation: "ihr",
+      }),
+    /ungültiger Wert für 'salutation'/
+  );
+});
+
 test("email, phone, photoUrl, federalState und region werden getrimmt in person übernommen", () => {
   const manifest = buildMaterialManifest({
     firstName: "Max",

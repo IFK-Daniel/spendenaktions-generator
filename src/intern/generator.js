@@ -35,14 +35,12 @@ import { extractPaypalLink } from "../../core/text/extractPaypalLink.js";
 import { isHttpUrl } from "../../core/text/isHttpUrl.js";
 import { initPhotoCropEditor } from "./photoCropEditor.js";
 import { loadTemplateAssetsBrowser } from "../../core/pdf/loadTemplateAssetsBrowser.js";
-import { flyerPrintFrontTemplate } from "../../templates/flyer-print-front/template.config.js";
-import { flyerHomeFrontTemplate } from "../../templates/flyer-home-front/template.config.js";
-import { flyerFemalePrintFrontTemplate } from "../../templates/flyer-female-print-front/template.config.js";
-import { flyerFemaleHomeFrontTemplate } from "../../templates/flyer-female-home-front/template.config.js";
-import { flyerPrintBackTemplate } from "../../templates/flyer-print-back/template.config.js";
-import { flyerHomeBackTemplate } from "../../templates/flyer-home-back/template.config.js";
-import { flyerFemalePrintBackTemplate } from "../../templates/flyer-female-print-back/template.config.js";
-import { flyerFemaleHomeBackTemplate } from "../../templates/flyer-female-home-back/template.config.js";
+import { flyerRepresentativeFemaleDuFrontTemplate } from "../../templates/flyer-representative-female-du-front/template.config.js";
+import { flyerRepresentativeFemaleSieFrontTemplate } from "../../templates/flyer-representative-female-sie-front/template.config.js";
+import { flyerRepresentativeMaleDuFrontTemplate } from "../../templates/flyer-representative-male-du-front/template.config.js";
+import { flyerRepresentativeMaleSieFrontTemplate } from "../../templates/flyer-representative-male-sie-front/template.config.js";
+import { sharedFlyerBackTemplate } from "../../templates/flyer-shared-back/template.config.js";
+import { resolveRepresentativeFlyerFrontTemplate } from "../../core/materials/resolveRepresentativeFlyerFrontTemplate.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import { certificateAmbassadorMaleTemplate } from "../../templates/certificate-ambassador-male/template.config.js";
@@ -77,64 +75,52 @@ const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
 const GIRO_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_GIRO_BLACK]);
 const FLYER_KEYS = new Set([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
 
-// Vorübergehende, bewusst globale Sperre: die Flyer-Erzeugung ist für
-// JEDEN Wegbegleiter-Typ (auch Repräsentant) deaktiviert, bis der
-// Grafiker die überarbeiteten Master-Vorlagen liefert — die aktuelle
-// Repräsentanten-Flyer-Vorlage ist noch ein Prototyp (u. a.
-// „Repräsentantin“ fest im Hintergrund-Artwork). Zum Wiederfreischalten
-// genügt es, diese Konstante auf `false` zu setzen; die rollenabhängige
-// Vorlagen-Verfügbarkeit (`roleConfig.js`, `flyerMaterialKeys`) bleibt
-// davon unberührt und greift dann wie zuvor.
-const FLYERS_TEMPORARILY_DISABLED = true;
+// Frühere globale Flyer-Sperre — seit Integration der vier final
+// korrigierten Repräsentanten-Master (Sept. 2026, siehe
+// `templates/flyer-representative-*-front/` und
+// `templates/flyer-shared-back/`) aufgehoben. Die Konstante bleibt als
+// Not-Schalter erhalten (`true` sperrt die Flyer-Erzeugung wieder für
+// jeden Wegbegleiter-Typ); die rollenabhängige Vorlagen-Verfügbarkeit
+// (`roleConfig.js`, `flyerMaterialKeys`) ist davon unberührt.
+const FLYERS_TEMPORARILY_DISABLED = false;
 const FLYER_DISABLED_HINT = "Flyer-Erzeugung ist derzeit deaktiviert (Vorlagen in Überarbeitung).";
 // Alle Urkunden-Materialschlüssel (je Wegbegleiter-Typ genau einer,
 // siehe `core/materials/materialTypes.js`) — bewusst aus der zentralen
 // Definition abgeleitet statt hier einzeln aufgezählt.
 const CERTIFICATE_KEYS = new Set(CERTIFICATE_MATERIAL_KEYS);
 
-// Flyer-Vorlage wird ausschließlich anhand des Geschlechts gewählt
-// (siehe Vorgabe, analog zu CERTIFICATE_TEMPLATE_BY_GENDER unten) — der
-// Renderer (`renderFlyer.js`) selbst kennt kein Geschlecht, die Auswahl
-// passiert vollständig hier, vor dem Rendern. Geschlecht ist Teil der
-// für den Flyer benötigten Grunddaten (siehe
-// `core/materials/materialRequirements.js`) und wird daher vor der
-// Erzeugung bereits geprüft — ohne Angabe würde die männliche Vorlage
-// verwendet (Fallback in `resolveFlyerTemplate` unten).
-const FLYER_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
-  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze({
-    male: flyerPrintFrontTemplate,
-    female: flyerFemalePrintFrontTemplate,
+// Repräsentanten-Flyer-VORDERSEITE: eine zentrale, verschachtelte
+// Tabelle Geschlecht × Ansprache statt vier `if`-Blöcken. Die vier
+// final korrigierten Master sind geometrisch identisch (ein gemeinsamer
+// Koordinatensatz, siehe `templates/_shared/representativeFlyerFrontBase.js`).
+// Druckerei und Home teilen sich dieselbe Vorderseite — der Master hat
+// keinen Anschnitt, der Unterschied bleibt technisch (`page.outputBleedMm`,
+// generische Trim-/Bleed-Logik in `core/pdf/renderFlyer.js`). Die
+// Auflösung selbst (inkl. klarer Fehler bei fehlendem/ungültigem
+// Geschlecht oder fehlender Ansprache, kein stiller Fallback) liegt in
+// `core/materials/resolveRepresentativeFlyerFrontTemplate.js`.
+const REPRESENTATIVE_FLYER_FRONT_TEMPLATES = Object.freeze({
+  female: Object.freeze({
+    du: flyerRepresentativeFemaleDuFrontTemplate,
+    sie: flyerRepresentativeFemaleSieFrontTemplate,
   }),
-  [MATERIAL_TYPE_KEYS.FLYER_HOME]: Object.freeze({
-    male: flyerHomeFrontTemplate,
-    female: flyerFemaleHomeFrontTemplate,
+  male: Object.freeze({
+    du: flyerRepresentativeMaleDuFrontTemplate,
+    sie: flyerRepresentativeMaleSieFrontTemplate,
   }),
 });
 
-function resolveFlyerTemplate(materialKey, gender) {
-  const byGender = FLYER_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
-  return byGender[gender === "female" ? "female" : "male"];
+function resolveFlyerFrontTemplate({ gender, salutation }) {
+  return resolveRepresentativeFlyerFrontTemplate(REPRESENTATIVE_FLYER_FRONT_TEMPLATES, gender, salutation);
 }
 
-// Rückseiten-Vorlagen: inhaltlich für alle vier Kombinationen identisch
-// (siehe `templates/flyer-print-back/template.config.js`) — trotzdem
-// pro Materialschlüssel/Geschlecht eine eigene Config-Referenz, analog
-// zu `FLYER_TEMPLATES_BY_KEY_AND_GENDER` oben, damit die Auswahl
-// weiterhin vollständig hier (statt im Renderer) passiert.
-const FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER = Object.freeze({
-  [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze({
-    male: flyerPrintBackTemplate,
-    female: flyerFemalePrintBackTemplate,
-  }),
-  [MATERIAL_TYPE_KEYS.FLYER_HOME]: Object.freeze({
-    male: flyerHomeBackTemplate,
-    female: flyerFemaleHomeBackTemplate,
-  }),
-});
-
-function resolveFlyerBackTemplate(materialKey, gender) {
-  const byGender = FLYER_BACK_TEMPLATES_BY_KEY_AND_GENDER[materialKey];
-  return byGender[gender === "female" ? "female" : "male"];
+// Flyer-RÜCKSEITE: EINE gemeinsame, rollen-, geschlechts- und
+// ansprache-unabhängige Vorlage (`templates/flyer-shared-back/`),
+// vorbereitet für künftige Wegbegleiter-Flyer (siehe
+// `roleConfig.js`, `getFlyerBackTemplateKey`). Kein Materialschlüssel-
+// oder Geschlechts-Mapping mehr, keine vier Kopien derselben Datei.
+function resolveFlyerBackTemplate() {
+  return sharedFlyerBackTemplate;
 }
 
 const FLYER_DOWNLOAD_LABEL_BY_KEY = Object.freeze({
@@ -278,6 +264,7 @@ export function initGenerator() {
   const federalStateInput = document.getElementById("federal-state-input");
   const regionField = document.getElementById("region-field");
   const regionInput = document.getElementById("region-input");
+  const salutationField = document.getElementById("salutation-field");
   const paypalInput = document.getElementById("paypal-input");
   const generateBtn = document.getElementById("generate-btn");
   const errorMessage = document.getElementById("error-message");
@@ -369,6 +356,7 @@ export function initGenerator() {
     [FIELD_KEYS.FIRST_NAME]: document.querySelector('label[for="first-name-input"]'),
     [FIELD_KEYS.LAST_NAME]: document.querySelector('label[for="last-name-input"]'),
     [FIELD_KEYS.GENDER]: document.querySelector(".gender-fieldset legend"),
+    [FIELD_KEYS.SALUTATION]: document.querySelector(".salutation-fieldset legend"),
     [FIELD_KEYS.IFK_ID]: document.querySelector('label[for="ifk-id-input"]'),
     [FIELD_KEYS.EMAIL]: document.querySelector('label[for="intern-email-input"]'),
     [FIELD_KEYS.PHONE]: document.querySelector('label[for="phone-input"]'),
@@ -386,6 +374,20 @@ export function initGenerator() {
     for (const [fieldKey, labelEl] of Object.entries(requiredFieldLabelElements)) {
       labelEl?.classList.toggle("field-label--required", requiredFields.has(fieldKey));
     }
+    updateSalutationVisibility(requiredFields);
+  }
+
+  // Die Ansprache-Auswahl (Du/Sie) ist nur sichtbar, wenn mindestens ein
+  // aktuell ausgewähltes Material sie benötigt (aktuell ausschließlich
+  // der Repräsentanten-Flyer, siehe `materialRequirements.js`). Andere
+  // Materialien (Urkunde, QR) werden dadurch nicht blockiert — sie
+  // führen `salutation` gar nicht als Pflichtfeld (Vorgabe Abschnitt 2).
+  function updateSalutationVisibility(requiredFields) {
+    if (!salutationField) return;
+    const fields =
+      requiredFields ||
+      new Set(getRequiredFieldsForMaterials(selectedMaterialKeys(), selectedRoleKey()));
+    salutationField.hidden = !fields.has(FIELD_KEYS.SALUTATION);
   }
 
   function updateMaterialAvailabilityForRole(roleKey) {
@@ -1629,6 +1631,7 @@ export function initGenerator() {
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
     const genderInput = document.querySelector('input[name="gender"]:checked');
+    const salutationInput = document.querySelector('input[name="salutation"]:checked');
     const ifkIdRaw = ifkIdInput.value.trim();
     const email = emailInput.value.trim();
     const phone = phoneInput.value.trim();
@@ -1647,6 +1650,7 @@ export function initGenerator() {
       firstName,
       lastName,
       gender: genderInput ? genderInput.value : "",
+      salutation: salutationInput ? salutationInput.value : "",
       ifkId: ifkIdRaw,
       email,
       phone,
@@ -1843,6 +1847,11 @@ export function initGenerator() {
       ifkId,
       role,
       gender: genderInput ? genderInput.value : undefined,
+      // Ansprache (Du/Sie) ist ausschließlich für die Flyer-Vorderseite
+      // relevant — nur bei einem tatsächlich bereiten Flyer ans Manifest
+      // übergeben, damit sie keine andere Materialauswahl blockiert
+      // (Urkunde/QR brauchen keine Ansprache, Vorgabe Abschnitt 13).
+      salutation: requestedFlyer && flyerDataReady && salutationInput ? salutationInput.value : undefined,
       // E-Mail/Telefon/Foto/Bundesland/Region sind ausschließlich für
       // den Flyer relevant (Vorgabe Abschnitt 6) — bei jeder anderen
       // Materialauswahl bewusst NICHT ans Manifest übergeben, damit ein
@@ -1910,12 +1919,22 @@ export function initGenerator() {
           mimeType: "image/png",
         };
 
+        // Vorderseite je Geschlecht × Ansprache, Rückseite immer die eine
+        // gemeinsame — für beide Flyer-Materialschlüssel (Druckerei/Home)
+        // dieselbe Vorder-/Rückseite; der Unterschied ist rein technisch
+        // (`page.outputBleedMm`). Beides ist durch die materialabhängige
+        // Pflichtfeldprüfung oben bereits abgesichert (Geschlecht +
+        // Ansprache sind für den Flyer Pflicht) — der Resolver wirft
+        // trotzdem klar, falls eines fehlt (kein stiller Fallback).
+        const flyerFront = resolveFlyerFrontTemplate({
+          gender: manifest.person.gender,
+          salutation: manifest.person.salutation,
+        });
         for (const entry of flyerEntries) {
-          const gender = genderInput ? genderInput.value : undefined;
           const flyerFile = await generateFlyerMaterial({
             entry,
-            templateConfig: resolveFlyerTemplate(entry.key, gender),
-            backTemplateConfig: resolveFlyerBackTemplate(entry.key, gender),
+            templateConfig: flyerFront,
+            backTemplateConfig: resolveFlyerBackTemplate(),
             person: manifest.person,
             photoAsset,
             qrPaypalAsset,

@@ -18,6 +18,20 @@ export const GENDER_VALUES = Object.freeze({
 const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
 
 /**
+ * Zulässige Werte für `salutation` (Anrede-Variante Du/Sie). Bewusst
+ * genau zwei feste Werte, kein Freitext — wählt beim Repräsentanten-
+ * Flyer die Vorderseite (siehe
+ * `core/materials/resolveRepresentativeFlyerFrontTemplate.js`). Für
+ * Urkunden und QR-Codes ohne Bedeutung.
+ */
+export const SALUTATION_VALUES = Object.freeze({
+  DU: "du",
+  SIE: "sie",
+});
+
+const VALID_SALUTATION_VALUES = new Set(Object.values(SALUTATION_VALUES));
+
+/**
  * Baut aus Materialauswahl und Dateinamen ein vollständiges, rein
  * fachliches Manifest der für eine Person zu erzeugenden individuellen
  * Materialien.
@@ -51,6 +65,12 @@ const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
  *   Urkunden-Vorlage ausgewertet (siehe
  *   `core/materials/generateCertificateMaterial.js`) — für alle
  *   anderen Materialien weiterhin ohne Wirkung.
+ * @param {"du" | "sie"} [params.salutation] Optional. Anrede-Variante.
+ *   Wird, sofern angegeben, gegen `SALUTATION_VALUES` geprüft und
+ *   unverändert im Manifest mitgeführt. Ohne Angabe enthält `person`
+ *   kein `salutation`-Feld (kein Default). Wählt beim Repräsentanten-
+ *   Flyer die Vorderseite (Du/Sie) — für Urkunden und QR-Codes ohne
+ *   Wirkung.
  * @param {string} [params.email] Optional. Wird, sofern angegeben,
  *   getrimmt und als gültige E-Mail-Adresse geprüft (siehe
  *   `core/mail/validateEmail.js`). Aktuell von keiner Funktion
@@ -71,7 +91,7 @@ const VALID_GENDER_VALUES = new Set(Object.values(GENDER_VALUES));
  *   Materialtypen verwendet.
  * @returns {{
  *   version: number,
- *   person: { firstName: string, lastName: string, ifkId: string, gender?: "male" | "female", email?: string, phone?: string, photoUrl?: string, federalState?: string, region?: string },
+ *   person: { firstName: string, lastName: string, ifkId: string, gender?: "male" | "female", salutation?: "du" | "sie", email?: string, phone?: string, photoUrl?: string, federalState?: string, region?: string },
  *   materials: Array<{ key: string, label: string, category: string, format: string, extension: string, filename: string }>
  * }}
  * @throws {Error} Siehe `buildMaterialFilenames` (fehlender Name,
@@ -85,6 +105,7 @@ export function buildMaterialManifest({
   ifkId,
   role,
   gender,
+  salutation,
   email,
   phone,
   photoUrl,
@@ -122,6 +143,13 @@ export function buildMaterialManifest({
       throw new Error(`buildMaterialManifest: ungültiger Wert für 'gender' ("${gender}").`);
     }
     person.gender = gender;
+  }
+
+  if (salutation !== undefined) {
+    if (!VALID_SALUTATION_VALUES.has(salutation)) {
+      throw new Error(`buildMaterialManifest: ungültiger Wert für 'salutation' ("${salutation}").`);
+    }
+    person.salutation = salutation;
   }
 
   if (email !== undefined) {

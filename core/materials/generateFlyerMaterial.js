@@ -50,15 +50,21 @@ function buildFlyerTextValues(person, templateConfig) {
  * das den bestehenden QR-Generator wiederverwendet statt einen
  * zweiten zu bauen).
  *
- * Seit Einführung der Rückseite (siehe Konversation) liefert diese
- * Funktion IMMER ein 2-seitiges PDF (Seite 1 = Vorderseite mit den
- * personalisierten Feldern, Seite 2 = die für alle Wegbegleiter:innen
- * gleiche, statische Rückseite) — es gibt keinen separaten, einseitigen
- * Flyer-Download mehr. Die früher auf Seite 2 personalisiert erzeugten
- * statischen QR-Codes ("Partner werden"/"Mehr erfahren") wurden
- * entfernt (siehe `templates/flyer-print-back/template.config.js`) —
- * sie werden künftig vom Grafiker fest in die Vorlage eingebaut, da sie
- * ohnehin nicht individualisiert sind.
+ * Diese Funktion liefert IMMER ein 2-seitiges PDF (Seite 1 =
+ * Vorderseite mit den personalisierten Feldern, Seite 2 = die für alle
+ * Wegbegleiter:innen gleiche, statische Rückseite) — es gibt keinen
+ * separaten, einseitigen Flyer-Download mehr.
+ *
+ * Vorder- UND Rückseiten-Config werden bereits fertig aufgelöst
+ * übergeben (siehe `resolveRepresentativeFlyerFrontTemplate` für die
+ * Vorderseite je Geschlecht × Ansprache und `sharedFlyerBackTemplate`
+ * für die eine gemeinsame Rückseite, beides in `src/intern/generator.js`
+ * verdrahtet). Diese Funktion kennt weder Geschlecht noch Ansprache.
+ *
+ * Die beiden statischen Rückseiten-QR-Codes ("Partner werden"/"Mehr
+ * erfahren") sind fester Bestandteil des Rückseiten-Artworks
+ * (`templates/flyer-shared-back/`) — sie werden hier NICHT zusätzlich
+ * gerendert, es gibt keine doppelten QR-Codes.
  *
  * @param {object} params
  * @param {{key: string, label: string, category: string, format: string, extension: string, filename: string}} params.entry
@@ -67,12 +73,10 @@ function buildFlyerTextValues(person, templateConfig) {
  * @param {object} params.templateConfig Die zum `entry.key`/Geschlecht
  *   passende Vorderseiten-Template-Config
  *   (`flyerPrintFrontTemplate`/`flyerHomeFrontTemplate`/…).
- * @param {object} params.backTemplateConfig Die zugehörige Rückseiten-
- *   Template-Config (`flyerPrintBackTemplate`/`flyerHomeBackTemplate`/…) —
- *   inhaltlich für alle Geschlechter/Druckvarianten identisch (siehe
- *   dortige Doku), aber je Materialschlüssel/Geschlecht als eigene
- *   Config-Referenz übergeben (Auswahl passiert vollständig beim
- *   Aufrufer, siehe `resolveFlyerTemplate` in `src/intern/generator.js`).
+ * @param {object} params.backTemplateConfig Die gemeinsame Rückseiten-
+ *   Template-Config (`sharedFlyerBackTemplate`) — rollen-, geschlechts-
+ *   und ansprache-unabhängig, ein einziges Asset (siehe
+ *   `templates/flyer-shared-back/template.config.js`).
  * @param {{firstName: string, lastName: string, region?: string, phone?: string, email?: string}} params.person
  *   `manifest.person` — die für den Flyer benötigten Felder müssen
  *   bereits vorab geprüft sein (siehe `assertFlyerPersonFieldsPresent`).

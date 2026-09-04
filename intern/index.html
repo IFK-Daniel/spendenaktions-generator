@@ -48,9 +48,7 @@
               Personendaten und PayPal-Link eintragen, Materialien auswählen und erzeugen.
             </p>
             <p class="intern-notice">
-              Nur für den internen Gebrauch. Die Flyer-Erzeugung ist ein technischer
-              Prototyp: Hintergrund-PDF und Schriften sind vorläufige Übergangslösungen,
-              siehe Hinweis nach der Vorschau.
+              Nur für den internen Gebrauch.
             </p>
           </div>
         </div>
@@ -141,6 +139,23 @@
               <label class="gender-option" data-gender-option="female">
                 <input type="radio" name="gender" value="female" />
                 Weiblich
+              </label>
+            </div>
+          </fieldset>
+          <!-- Nur sichtbar, wenn ein ausgewähltes Material eine
+               Anredevariante braucht (aktuell der Repräsentanten-Flyer,
+               siehe generator.js `updateSalutationVisibility`). Urkunde
+               und QR-Codes benötigen keine Ansprache. -->
+          <fieldset class="person-field salutation-fieldset" id="salutation-field" hidden>
+            <legend class="field-label">Ansprache</legend>
+            <div class="gender-options">
+              <label class="gender-option" data-salutation-option="du">
+                <input type="radio" name="salutation" value="du" />
+                Du
+              </label>
+              <label class="gender-option" data-salutation-option="sie">
+                <input type="radio" name="salutation" value="sie" />
+                Sie
               </label>
             </div>
           </fieldset>
@@ -276,7 +291,7 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
               Flyer – Druckerei
-              <span class="material-item-hint" data-default-hint>Prototyp, Foto nötig</span>
+              <span class="material-item-hint" data-default-hint>Foto &amp; Ansprache nötig</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >
@@ -284,7 +299,7 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
               Flyer – Home
-              <span class="material-item-hint" data-default-hint>Prototyp, Foto nötig</span>
+              <span class="material-item-hint" data-default-hint>Foto &amp; Ansprache nötig</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >

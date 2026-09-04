@@ -18,6 +18,20 @@ export const ROLE_KEYS = Object.freeze({
 });
 
 /**
+ * Technischer Schlüssel der EINEN gemeinsamen Flyer-Rückseite
+ * (`templates/flyer-shared-back/template.config.js`,
+ * `SHARED_FLYER_BACK_KEY`). Bewusst rollen-, geschlechts- und
+ * ansprache-NEUTRAL benannt: dieselbe Rückseite gilt für den
+ * Repräsentanten-Flyer und ist für künftige Wegbegleiter-Flyer
+ * (Botschafter, Kuratorium, Beirat, Fachrat, Wirtschaftsrat)
+ * vorbereitet — es wird keine Kopie pro Rolle erzeugt. Hier als
+ * String-Literal gehalten, damit `core/` nicht von `templates/`
+ * abhängt; ein Test stellt die Übereinstimmung mit der Template-Config
+ * sicher.
+ */
+export const SHARED_FLYER_BACK_KEY = "SHARED_FLYER_BACK";
+
+/**
  * Rollenbezeichnung für Gremien mit bewusst EINER neutralen Form für
  * alle Geschlechter ("Mitglied des …") statt einer erfundenen
  * männlichen/weiblichen Form (siehe Vorgabe: "keine sprachlich
@@ -59,10 +73,16 @@ function neutralRoleLabel(label) {
  *   Urkundenvorlage, es gibt hier keinen stillen Fallback auf die
  *   Repräsentantenurkunde.
  * - `flyerMaterialKeys` — Materialschlüssel aus `materialTypes.js`, für
- *   die diese Rolle bereits eine Flyer-Vorlage hat. Leer = noch keine
- *   Vorlage hinterlegt (Grafiker erstellt die Master noch), siehe
+ *   die diese Rolle bereits eine Flyer-VORDERSEITE hat. Leer = noch
+ *   keine Vorlage hinterlegt (Grafiker erstellt die Master noch), siehe
  *   `isFlyerTemplateAvailableForRole` — KEIN Fallback auf die
  *   Repräsentanten-Flyer.
+ * - `flyerBackTemplateKey` — Schlüssel der Flyer-RÜCKSEITE dieser Rolle.
+ *   Aktuell für ALLE Rollen die eine gemeinsame, neutrale Rückseite
+ *   (`SHARED_FLYER_BACK_KEY`) — hier bereits pro Rolle hinterlegt, damit
+ *   künftige Wegbegleiter-Flyer (rollenabhängige Vorderseite + dieselbe
+ *   gemeinsame Rückseite) ohne Architekturänderung darauf verweisen
+ *   können. Siehe `getFlyerBackTemplateKey`.
  * - `additionalMaterialKeys` — Platzhalter für künftige, rollenspezifische
  *   Zusatzmaterialien (aktuell für alle Rollen leer — es werden bewusst
  *   keine noch nicht existierenden Materialien erfunden).
@@ -77,6 +97,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: true,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]),
     flyerMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.AMBASSADOR]: Object.freeze({
@@ -88,6 +109,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: true,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR]),
     flyerMaterialKeys: Object.freeze([]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ECONOMIC_COUNCIL]: Object.freeze({
@@ -99,6 +121,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL]),
     flyerMaterialKeys: Object.freeze([]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.EXPERT_COUNCIL]: Object.freeze({
@@ -110,6 +133,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL]),
     flyerMaterialKeys: Object.freeze([]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.CURATOR]: Object.freeze({
@@ -126,6 +150,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM]),
     flyerMaterialKeys: Object.freeze([]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ADVISORY_BOARD]: Object.freeze({
@@ -137,6 +162,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD]),
     flyerMaterialKeys: Object.freeze([]),
+    flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     additionalMaterialKeys: Object.freeze([]),
   }),
 });
@@ -202,9 +228,21 @@ export function certificateRequiresGender(roleKey) {
   return getRoleConfig(roleKey).certificateRequiresGender;
 }
 
-/** Ob für diese Rolle bereits eine Flyer-Vorlage für `materialKey` hinterlegt ist. */
+/** Ob für diese Rolle bereits eine Flyer-Vorderseite für `materialKey` hinterlegt ist. */
 export function isFlyerTemplateAvailableForRole(roleKey, materialKey) {
   return getRoleConfig(roleKey).flyerMaterialKeys.includes(materialKey);
+}
+
+/**
+ * Schlüssel der Flyer-Rückseite dieser Rolle — aktuell für jede Rolle
+ * die eine gemeinsame, neutrale Rückseite (`SHARED_FLYER_BACK_KEY`).
+ * Eigene Funktion, damit ein späterer rollenspezifischer Rückseiten-
+ * Wechsel nur hier passiert, nicht verteilt im Generator.
+ * @param {string} roleKey
+ * @returns {string}
+ */
+export function getFlyerBackTemplateKey(roleKey) {
+  return getRoleConfig(roleKey).flyerBackTemplateKey;
 }
 
 /** Ob für diese Rolle bereits eine Urkunden-Vorlage für `materialKey` hinterlegt ist. */

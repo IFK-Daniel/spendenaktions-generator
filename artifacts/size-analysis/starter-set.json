@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "filename": "IFK_Daniel_Feigenbutz_Flyer_Druckerei_Du.pdf",
+      "size": 1296223
+    },
+    {
+      "filename": "IFK_Daniel_Feigenbutz_Flyer_Home_Du.pdf",
+      "size": 1293758
+    },
+    {
+      "filename": "IFK_Daniel_Feigenbutz_Repraesentantenurkunde.pdf",
+      "size": 973303
+    },
+    {
+      "filename": "IFK_Daniel_Feigenbutz_PayPal_QR_schwarz.png",
+      "size": 3400
+    },
+    {
+      "filename": "IFK_Daniel_Feigenbutz_GiroCode_schwarz.png",
+      "size": 2020
+    },
+    {
+      "filename": "Hinweise_zur_Verwendung_der_Materialien.pdf",
+      "size": 645844
+    }
+  ],
+  "totalRawBytes": 4214548,
+  "zipBytes": 4215544,
+  "multipartPayloadBytes": 4215987,
+  "maxRequestBytes": 4450000,
+  "percentOfLimit": 94.7412808988764,
+  "reservePercent": 5.258719101123599,
+  "fitsWith10PercentReserve": false
+}

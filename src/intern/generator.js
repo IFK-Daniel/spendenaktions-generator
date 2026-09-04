@@ -78,6 +78,9 @@ import {
   certificateRequiresGender,
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
+  getFlyerSalutationVariants,
+  getStarterSetMaterialKeys,
+  hasStarterSet,
 } from "../../core/materials/roleConfig.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
@@ -331,6 +334,24 @@ export function initGenerator() {
     ?.closest(".material-item")
     ?.querySelector("[data-default-hint]");
 
+  // Standard-Starter-Set: reine Komfort-Vorauswahl der bestehenden
+  // Checkboxen oben (siehe `applyStarterSet`), keine eigene
+  // Erzeugungs-Pipeline. Button + Hinweistext sind nur für Rollen mit
+  // definiertem Starter-Set sichtbar (aktuell nur Repräsentant, siehe
+  // `hasStarterSet`/`applyRoleToForm`).
+  const starterSetBtn = document.getElementById("starter-set-btn");
+  const starterSetHint = document.getElementById("starter-set-hint");
+  // Ansprache-Variante(n): ZWEI Checkboxen steuern beide Flyer-
+  // Materialien gemeinsam (Druckerei + Home teilen sich dieselben
+  // Ansprache-Varianten, siehe `roleConfig.js`) — drei sich
+  // gegenseitig ausschließende Radio-Optionen ("du"/"du_sie"/"sie")
+  // statt zweier unabhängiger Checkboxen: vermeidet Reihenfolge-
+  // Abhängigkeiten beim Erreichen von "nur Sie" (Vorgabe Abschnitt 14).
+  // Standard ist "du" (Du-Stiftung). Nur sichtbar, wenn die aktuell
+  // gewählte Rolle überhaupt eine Sie-Variante hat.
+  const flyerSieOption = document.getElementById("flyer-sie-option");
+  const flyerSalutationRadios = Array.from(document.querySelectorAll('input[name="flyer-salutation-mode"]'));
+
   // Aktuell ausgewählter Wegbegleiter-Typ — Default `representative`
   // entspricht dem bisherigen alleinigen Verhalten der Seite (Dropdown
   // steht trotzdem sichtbar ganz am Anfang, siehe intern/index.html).
@@ -352,12 +373,83 @@ export function initGenerator() {
     regionField.hidden = !requiresRegion;
     updateMaterialAvailabilityForRole(roleKey);
     applyRoleToCertificateCheckbox(roleKey);
+    applyRoleToStarterSetButton(roleKey);
+    applyRoleToFlyerSalutationOption(roleKey);
     // Screenshot-Import-Hinweis auf den gewählten Wegbegleiter-Typ
     // münzen ("Screenshot des humbee-Botschaftervorgangs hochladen").
     if (screenshotProcessNounEl) {
       screenshotProcessNounEl.textContent =
         SCREENSHOT_PROCESS_NOUN_BY_ROLE[roleKey] || SCREENSHOT_PROCESS_NOUN_FALLBACK;
     }
+    updateRequiredFieldIndicators();
+  }
+
+  // Standard-Starter-Set-Button nur für Rollen mit definiertem
+  // Starter-Set sichtbar/aktiv (aktuell nur Repräsentant, siehe
+  // Vorgabe Abschnitt 15 — Botschafter/Kuratorium/Beirat/Fachrat/
+  // Wirtschaftsrat haben noch kein vollständig definiertes
+  // Materialpaket). Rein UI-seitig deaktiviert statt entfernt, damit
+  // ein späteres Ergänzen weiterer Starter-Sets (`roleConfig.js`,
+  // `starterSetMaterialKeys`) ohne HTML-Änderung sichtbar wird.
+  function applyRoleToStarterSetButton(roleKey) {
+    if (!starterSetBtn) return;
+    const available = hasStarterSet(roleKey);
+    starterSetBtn.hidden = !available;
+    if (starterSetHint) starterSetHint.hidden = !available;
+  }
+
+  // Die Du/Sie-Auswahl ist nur sinnvoll, wenn die aktuelle Rolle
+  // überhaupt mehr als eine Ansprache-Variante hat (aktuell nur
+  // Repräsentant). Beim Ausblenden wird bewusst auf den Standardfall
+  // (nur Du) zurückgesetzt, damit ein vorheriger Rollenwechsel keine
+  // "unsichtbar aktivierte Sie-Variante" hinterlässt.
+  function applyRoleToFlyerSalutationOption(roleKey) {
+    if (!flyerSieOption) return;
+    const available = getFlyerSalutationVariants(roleKey).length > 1;
+    flyerSieOption.hidden = !available;
+    if (!available) {
+      setFlyerSalutationMode("du");
+    }
+  }
+
+  function setFlyerSalutationMode(mode) {
+    for (const radio of flyerSalutationRadios) {
+      radio.checked = radio.value === mode;
+    }
+  }
+
+  // Ansprache-Varianten, die beim nächsten Erzeugungsdurchlauf für
+  // Flyer-Materialien angefordert werden — aus dem angehakten Radio
+  // (nur relevant/sichtbar, wenn die Rolle mehrere Varianten hat, siehe
+  // `applyRoleToFlyerSalutationOption`). Ohne sichtbare Auswahl-
+  // möglichkeit (Rolle mit nur einer Variante) oder ohne jede Auswahl
+  // (sollte durch das `checked`-Standardattribut im HTML nicht
+  // vorkommen) liefert diese Funktion `["du"]`, den Standardfall.
+  function selectedFlyerSalutationVariants() {
+    if (!flyerSieOption || flyerSieOption.hidden) return ["du"];
+    const checked = flyerSalutationRadios.find((radio) => radio.checked);
+    if (checked?.value === "du_sie") return ["du", "sie"];
+    if (checked?.value === "sie") return ["sie"];
+    return ["du"];
+  }
+
+  // Setzt die Materialauswahl exakt auf das Standard-Starter-Set der
+  // aktuellen Rolle (reine Komfort-Vorbelegung bestehender Checkboxen,
+  // keine eigene Erzeugungs-Pipeline, siehe Vorgabe Abschnitt 2): die
+  // Starter-Set-Materialien werden angehakt, alle anderen abgewählt,
+  // und die Ansprache wird auf "nur Du" zurückgesetzt (Vorgabe
+  // Abschnitt 1/3 — Sie bleibt technisch verfügbar, aber nicht Teil
+  // des Starter-Sets).
+  function applyStarterSet() {
+    const roleKey = selectedRoleKey();
+    const starterSetKeys = new Set(getStarterSetMaterialKeys(roleKey));
+    if (starterSetKeys.size === 0) return;
+
+    for (const checkbox of materialCheckboxes) {
+      if (checkbox.disabled) continue;
+      checkbox.checked = starterSetKeys.has(checkbox.dataset.materialKey);
+    }
+    setFlyerSalutationMode("du");
     updateRequiredFieldIndicators();
   }
 
@@ -501,6 +593,12 @@ export function initGenerator() {
   // karte und wird erst beim Versand zusätzlich ins ZIP an den
   // Wegbegleiter gepackt (siehe `renderResults`/`handleSendDelivery`).
   let lastGuideFile = null;
+  // Die für den zuletzt erfolgreichen Erzeugungsdurchlauf tatsächlich
+  // erzeugten Flyer-Ansprache-Varianten (z. B. `["du"]` oder
+  // `["du", "sie"]`, leer ohne Flyer) — an `buildRepresentativeDeliveryRequest`
+  // durchgereicht, damit der Mailtext den Sie-Hinweis nur zeigt, wenn er
+  // tatsächlich zutrifft (siehe `core/materials/buildRepresentativeDeliveryRequest.js`).
+  let lastFlyerSalutationVariants = [];
   let lastPhoto = null;
   // Foto-Link, zu dem `lastPhoto` gehört — erlaubt es, beim Öffnen des
   // Fotoausschnitt-Editors ein bereits geladenes Foto wiederzuverwenden,
@@ -942,6 +1040,7 @@ export function initGenerator() {
         companion,
         alternativeEmail,
         logoUrl: `${window.location.origin}/ifk-logo-full.png`,
+        flyerSalutationVariants: lastFlyerSalutationVariants,
       });
 
       const result = await sendRepresentativeMaterials(request);
@@ -1650,6 +1749,7 @@ export function initGenerator() {
     lastManifest = null;
     lastFiles = null;
     lastGuideFile = null;
+    lastFlyerSalutationVariants = [];
     lastPhoto = null;
     lastPhotoUrl = null;
     updatePhotoLinkCompletionState();
@@ -1945,6 +2045,12 @@ export function initGenerator() {
 
       const files = qrResults.filter((result) => selectedQrKeys.includes(result.key));
 
+      // Für den späteren Versand-Mailtext (Sie-Hinweis, siehe
+      // `buildRepresentativeDeliveryRequest.js`) außerhalb des
+      // `if (flyerDataReady)`-Blocks sichtbar — bleibt `[]`, wenn kein
+      // Flyer erzeugt wurde.
+      let flyerSalutationVariantsUsed = [];
+
       if (flyerDataReady) {
         const flyerEntries = manifest.materials.filter((entry) => FLYER_KEYS.has(entry.key));
 
@@ -1962,7 +2068,11 @@ export function initGenerator() {
         // Ansprache (Du/Sie) ist KEINE Nutzerauswahl: für jede gewählte
         // Flyer-Materialart werden automatisch ALLE für diese Rolle
         // konfigurierten Ansprache-Varianten erzeugt (aktuell ["du","sie"]
-        // beim Repräsentanten) — siehe `buildFlyerVariantEntries` (DOM-frei,
+        // Ansprache (Du/Sie): Standard ist ausschließlich "du" (Du-
+        // Stiftung) — die Sie-Variante entsteht nur, wenn die Checkbox
+        // "Sie-Variante zusätzlich erstellen" bewusst angehakt ist
+        // (nur sichtbar für Rollen mit Sie-Vorlage, siehe
+        // `applyRoleToForm`). Siehe `buildFlyerVariantEntries` (DOM-frei,
         // unabhängig testbar; kennt nur "welche Ansprachen", nicht die
         // Vorlagen). Druckerei und Home brauchen JEWEILS eigene Vorder-/
         // Rückseiten-Vorlagen (Beschnitt vs. Trimformat-Imposition, siehe
@@ -1973,7 +2083,9 @@ export function initGenerator() {
         // - FLYER_HOME → `generateFlyerHomeSheet` (DIN-A4-quer-Bogen mit
         //   Front/Back je zweimal imponiert, siehe dort für Geometrie/
         //   Duplex-Begründung).
-        const flyerVariantJobs = buildFlyerVariantEntries({ entries: flyerEntries, roleKey: role });
+        const salutationVariants = selectedFlyerSalutationVariants();
+        const flyerVariantJobs = buildFlyerVariantEntries({ entries: flyerEntries, roleKey: role, salutationVariants });
+        flyerSalutationVariantsUsed = [...new Set(flyerVariantJobs.map((job) => job.salutation))];
 
         for (const job of flyerVariantJobs) {
           const gender = manifest.person.gender;
@@ -2042,6 +2154,7 @@ export function initGenerator() {
 
       lastManifest = manifest;
       lastFiles = files;
+      lastFlyerSalutationVariants = flyerSalutationVariantsUsed;
       resetDeliverySection();
       deliverySection.hidden = false;
 
@@ -2176,6 +2289,11 @@ export function initGenerator() {
 
   for (const checkbox of materialCheckboxes) {
     checkbox.addEventListener("change", updateRequiredFieldIndicators);
+  }
+
+  starterSetBtn?.addEventListener("click", applyStarterSet);
+  for (const radio of flyerSalutationRadios) {
+    radio.addEventListener("change", updateRequiredFieldIndicators);
   }
 
   roleSelect.addEventListener("change", applyRoleToForm);

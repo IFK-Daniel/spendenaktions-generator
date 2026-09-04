@@ -143,3 +143,38 @@ test("vorhandene IFK-ID wird getrimmt eingesetzt", () => {
   const text = buildRepresentativeMailText({ firstName: "Max", gender: "male", ifkId: "  IFK7QX  ", role: "representative" });
   assert.match(text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
 });
+
+test("includeFlyerSieHint: true → kurzer Hinweis zur optional erhältlichen Sie-Version erscheint in Du-Ton (Text + HTML)", () => {
+  const text = buildRepresentativeMailText({
+    firstName: "Max",
+    gender: "male",
+    ifkId: "IFK7QX",
+    role: "representative",
+    includeFlyerSieHint: true,
+  });
+  const html = buildRepresentativeMailHtml({
+    firstName: "Max",
+    gender: "male",
+    ifkId: "IFK7QX",
+    role: "representative",
+    logoUrl: "https://example.com/logo.png",
+    includeFlyerSieHint: true,
+  });
+  assert.match(text, /grundsätzlich per Du sind/);
+  assert.match(text, /Sie/);
+  assert.match(text, /erstellen wir sie dir gerne separat/);
+  assert.match(html, /grundsätzlich per Du sind/);
+});
+
+test("includeFlyerSieHint: false oder fehlend → kein Hinweis auf die Sie-Version", () => {
+  for (const value of [false, undefined]) {
+    const text = buildRepresentativeMailText({
+      firstName: "Max",
+      gender: "male",
+      ifkId: "IFK7QX",
+      role: "representative",
+      includeFlyerSieHint: value,
+    });
+    assert.doesNotMatch(text, /grundsätzlich per Du sind/);
+  }
+});

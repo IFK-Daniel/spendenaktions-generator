@@ -270,11 +270,24 @@
 
         <fieldset class="material-fieldset">
           <legend class="field-label">Materialien auswählen</legend>
+
+          <!-- Nur eine Komfort-Vorauswahl der bestehenden Checkboxen unten
+               (keine eigene Erzeugungs-Pipeline) — sichtbar/aktiv nur für
+               Rollen mit definiertem Starter-Set (aktuell nur Repräsentant,
+               siehe `hasStarterSet` in core/materials/roleConfig.js und
+               `applyRoleToForm` in src/intern/generator.js). -->
+          <button type="button" id="starter-set-btn" class="starter-set-btn" hidden>
+            Standard-Starter-Set auswählen
+          </button>
+          <p class="material-item-hint starter-set-hint" id="starter-set-hint" hidden>
+            Wählt Flyer Druckerei (Du), Flyer Home (Du), PayPal QR schwarz, GiroCode schwarz und die Urkunde aus.
+          </p>
+
           <div class="material-list">
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
               Flyer – Druckerei
-              <span class="material-item-hint" data-default-hint>Foto nötig, Du/Sie automatisch</span>
+              <span class="material-item-hint" data-default-hint>Foto nötig, standardmäßig Du-Version</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >
@@ -282,11 +295,38 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
               Flyer – Home
-              <span class="material-item-hint" data-default-hint>Foto nötig, Du/Sie automatisch</span>
+              <span class="material-item-hint" data-default-hint>Foto nötig, standardmäßig Du-Version</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >
             </label>
+            <!-- Steuert für BEIDE Flyer-Materialien gemeinsam, welche
+                 Ansprache-Variante(n) erzeugt werden. Drei eindeutige,
+                 sich gegenseitig ausschließende Optionen (Radio) statt
+                 zwei unabhängiger Checkboxen — vermeidet Reihenfolge-
+                 Abhängigkeiten beim Erreichen von "nur Sie" (z. B.
+                 nachträglich für einen bereits ausgestatteten
+                 Repräsentanten, Vorgabe Abschnitt 14). Wir sind eine
+                 Du-Stiftung — Standardfall ist "Nur Du". Nur sichtbar,
+                 wenn die aktuell gewählte Rolle überhaupt eine
+                 Sie-Variante hat (siehe `getFlyerSalutationVariants` in
+                 generator.js). -->
+            <div class="material-item material-item--sub" id="flyer-sie-option" hidden role="radiogroup" aria-label="Ansprache-Variante für Flyer">
+              <span class="salutation-variant-label">Ansprache:</span>
+              <label class="salutation-variant-choice">
+                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-du" value="du" checked />
+                Nur Du (Standard)
+              </label>
+              <label class="salutation-variant-choice">
+                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-both" value="du_sie" />
+                Du + Sie
+              </label>
+              <label class="salutation-variant-choice">
+                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-sie" value="sie" />
+                Nur Sie
+              </label>
+              <span class="material-item-hint">Wir sind eine Du-Stiftung – Sie nur bei Bedarf.</span>
+            </div>
             <label class="material-item">
               <input type="checkbox" data-material-key="QR_PAYPAL_BLACK" checked />
               PayPal QR schwarz

@@ -158,6 +158,15 @@ export function resolveRepresentativeRecipient({ person, companionEmail, alterna
  *   Vorrang; danach dieser Wert; zuletzt `manifest.person.email`.
  * @param {string} [params.alternativeEmail] Siehe `resolveCompanionRecipient`.
  * @param {string} params.logoUrl Für die HTML-Mail an den Wegbegleiter.
+ * @param {string[]} [params.flyerSalutationVariants] Die tatsächlich für
+ *   diesen Versand erzeugten Flyer-Ansprache-Varianten (z. B. `["du"]`
+ *   oder `["du", "sie"]`, siehe `buildFlyerVariantEntries.js`) — leer
+ *   oder weggelassen, wenn kein Flyer Teil dieses Versands ist. Steuert
+ *   ausschließlich, ob der Mailtext den kurzen Hinweis zur optional
+ *   zusätzlich erhältlichen Sie-Version enthält (nur wenn "du" ohne
+ *   "sie" enthalten ist — sonst wäre der Hinweis inhaltlich falsch:
+ *   entweder gibt es keinen Flyer, oder die Sie-Version ist ohnehin
+ *   schon dabei).
  * @returns {Promise<{
  *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipBlob: Blob },
  *   humbee: { to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Blob }> }
@@ -176,6 +185,7 @@ export async function buildRepresentativeDeliveryRequest({
   companionEmail,
   alternativeEmail,
   logoUrl,
+  flyerSalutationVariants,
 } = {}) {
   // Eine einzige, empfängerunabhängige Personendaten-Quelle für beide
   // Mails. Der Empfänger (`to`) wird davon getrennt aufgelöst.
@@ -185,6 +195,9 @@ export async function buildRepresentativeDeliveryRequest({
     alternativeEmail,
   });
 
+  const variants = Array.isArray(flyerSalutationVariants) ? flyerSalutationVariants : [];
+  const includeFlyerSieHint = variants.includes("du") && !variants.includes("sie");
+
   const recipient = {
     to,
     subject: buildRepresentativeMailSubject(),
@@ -193,6 +206,7 @@ export async function buildRepresentativeDeliveryRequest({
       gender: person.gender,
       ifkId: person.ifkId,
       role: person.role,
+      includeFlyerSieHint,
     }),
     html: buildRepresentativeMailHtml({
       firstName: person.firstName,
@@ -200,6 +214,7 @@ export async function buildRepresentativeDeliveryRequest({
       ifkId: person.ifkId,
       role: person.role,
       logoUrl,
+      includeFlyerSieHint,
     }),
     zipFilename: zip.filename,
     zipBlob: zip.blob,

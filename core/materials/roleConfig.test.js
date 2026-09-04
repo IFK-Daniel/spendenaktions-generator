@@ -15,6 +15,9 @@ import {
   getFlyerSalutationVariants,
   SHARED_FLYER_BACK_KEY,
   REPRESENTATIVE_FLYER_SALUTATION_VARIANTS,
+  DEFAULT_FLYER_SALUTATION_VARIANTS,
+  getStarterSetMaterialKeys,
+  hasStarterSet,
 } from "./roleConfig.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { sharedFlyerBackTemplate, SHARED_FLYER_BACK_KEY as TEMPLATE_BACK_KEY } from "../../templates/flyer-shared-back/template.config.js";
@@ -150,9 +153,32 @@ test("die gemeinsame Rückseite ist statisch: keine dynamischen Felder, keine Co
   assert.equal(sharedFlyerBackTemplate.page.outputBleedMm, 0);
 });
 
-test("Repräsentant hat genau die Ansprache-Varianten Du/Sie hinterlegt — automatische Erzeugung, keine Nutzerauswahl", () => {
+test("Repräsentant hat genau die Ansprache-Varianten Du/Sie GRUNDSÄTZLICH VERFÜGBAR (nicht mehr automatisch beide erzeugt, siehe DEFAULT_FLYER_SALUTATION_VARIANTS)", () => {
   assert.deepEqual(getFlyerSalutationVariants(ROLE_KEYS.REPRESENTATIVE), ["du", "sie"]);
   assert.deepEqual(getFlyerSalutationVariants(ROLE_KEYS.REPRESENTATIVE), REPRESENTATIVE_FLYER_SALUTATION_VARIANTS);
+});
+
+test("Standard-Ansprache-Variante ist ausschließlich 'du' (Du-Stiftung, Sie nur bei bewusster Zusatzauswahl)", () => {
+  assert.deepEqual(DEFAULT_FLYER_SALUTATION_VARIANTS, ["du"]);
+});
+
+test("Starter-Set: Repräsentant hat genau Flyer Druckerei, Flyer Home, beide QR-Codes und die Repräsentantenurkunde hinterlegt", () => {
+  assert.deepEqual(getStarterSetMaterialKeys(ROLE_KEYS.REPRESENTATIVE), [
+    "FLYER_DRUCKEREI",
+    "FLYER_HOME",
+    "QR_PAYPAL_BLACK",
+    "QR_GIRO_BLACK",
+    "CERTIFICATE_REPRESENTATIVE",
+  ]);
+  assert.equal(hasStarterSet(ROLE_KEYS.REPRESENTATIVE), true);
+});
+
+test("Starter-Set: keine andere Rolle hat aktuell ein Starter-Set definiert", () => {
+  for (const roleKey of ROLE_KEY_LIST) {
+    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
+    assert.deepEqual(getStarterSetMaterialKeys(roleKey), [], `${roleKey} sollte kein Starter-Set hinterlegt haben`);
+    assert.equal(hasStarterSet(roleKey), false, `${roleKey} sollte hasStarterSet() === false liefern`);
+  }
 });
 
 test("jede andere Rolle hat (noch) keine Ansprache-Varianten hinterlegt (keine Flyer-Vorlage vorhanden)", () => {

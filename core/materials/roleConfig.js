@@ -41,6 +41,20 @@ export const SHARED_FLYER_BACK_KEY = "SHARED_FLYER_BACK";
 export const REPRESENTATIVE_FLYER_SALUTATION_VARIANTS = Object.freeze(["du", "sie"]);
 
 /**
+ * Standard-Ansprache-Variante(n), die ohne bewusste Zusatzauswahl
+ * erzeugt werden, sobald ein Flyer-Material gewählt ist — sowohl bei
+ * manueller Auswahl als auch im Standard-Starter-Set (siehe
+ * `REPRESENTATIVE_STARTER_SET_MATERIAL_KEYS` unten). Wir sind eine
+ * Du-Stiftung: Standardfall ist ausschließlich "du"; die Sie-Variante
+ * entsteht nur, wenn sie bewusst zusätzlich angefordert wird (UI:
+ * Checkbox "Sie-Variante zusätzlich erstellen", siehe
+ * `src/intern/generator.js`). Frühere Version dieser Datei erzeugte
+ * beide Varianten immer automatisch — das wurde auf ausdrücklichen
+ * Wunsch geändert.
+ */
+export const DEFAULT_FLYER_SALUTATION_VARIANTS = Object.freeze(["du"]);
+
+/**
  * Rollenbezeichnung für Gremien mit bewusst EINER neutralen Form für
  * alle Geschlechter ("Mitglied des …") statt einer erfundenen
  * männlichen/weiblichen Form (siehe Vorgabe: "keine sprachlich
@@ -105,6 +119,15 @@ function neutralRoleLabel(label) {
  * - `additionalMaterialKeys` — Platzhalter für künftige, rollenspezifische
  *   Zusatzmaterialien (aktuell für alle Rollen leer — es werden bewusst
  *   keine noch nicht existierenden Materialien erfunden).
+ * - `starterSetMaterialKeys` — Materialschlüssel des "Standard-Starter-
+ *   Sets" dieser Rolle (Komfort-Vorauswahl für die erstmalige
+ *   Ausstattung, siehe `src/intern/generator.js`, "Standard-Starter-Set
+ *   auswählen"-Button) — KEIN eigener Materialtyp, nur eine
+ *   Vorbelegung der bestehenden Checkboxen (Vorgabe: keine zweite
+ *   Erzeugungs-Pipeline). Leer = für diese Rolle (noch) kein
+ *   definiertes Starter-Set (aktuell nur `representative` — Botschafter/
+ *   Kuratorium/Beirat/Fachrat/Wirtschaftsrat haben noch kein
+ *   vollständig definiertes Materialpaket, siehe `hasStarterSet`).
  */
 export const ROLE_CONFIG = Object.freeze({
   [ROLE_KEYS.REPRESENTATIVE]: Object.freeze({
@@ -119,6 +142,20 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: REPRESENTATIVE_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
+    // Standardfall für die erstmalige Ausstattung eines neuen
+    // Repräsentanten: Flyer (Du-Variante, siehe
+    // `DEFAULT_FLYER_SALUTATION_VARIANTS`), beide schwarzen QR-Codes,
+    // Repräsentantenurkunde. Die Anleitung gehört NICHT hierher — sie
+    // ist kein auswählbares Material, sondern automatisches
+    // Begleitmaterial jeder Materialerzeugung (siehe
+    // `core/materials/staticCompanionMaterialGuide.js`).
+    starterSetMaterialKeys: Object.freeze([
+      MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI,
+      MATERIAL_TYPE_KEYS.FLYER_HOME,
+      MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK,
+      MATERIAL_TYPE_KEYS.QR_GIRO_BLACK,
+      MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
+    ]),
   }),
   [ROLE_KEYS.AMBASSADOR]: Object.freeze({
     key: ROLE_KEYS.AMBASSADOR,
@@ -132,6 +169,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
+    starterSetMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ECONOMIC_COUNCIL]: Object.freeze({
     key: ROLE_KEYS.ECONOMIC_COUNCIL,
@@ -145,6 +183,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
+    starterSetMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.EXPERT_COUNCIL]: Object.freeze({
     key: ROLE_KEYS.EXPERT_COUNCIL,
@@ -158,6 +197,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
+    starterSetMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.CURATOR]: Object.freeze({
     key: ROLE_KEYS.CURATOR,
@@ -176,6 +216,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
+    starterSetMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ADVISORY_BOARD]: Object.freeze({
     key: ROLE_KEYS.ADVISORY_BOARD,
@@ -189,6 +230,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
+    starterSetMaterialKeys: Object.freeze([]),
   }),
 });
 
@@ -271,9 +313,14 @@ export function getFlyerBackTemplateKey(roleKey) {
 }
 
 /**
- * Ansprache-Varianten, die für den Flyer dieser Rolle automatisch ALLE
- * erzeugt werden sollen (z. B. `["du", "sie"]` beim Repräsentanten) —
- * kein Anwender-Auswahlfeld, siehe Modul-Doku oben. Leeres Array =
+ * ALLE für den Flyer dieser Rolle grundsätzlich verfügbaren Ansprache-
+ * Varianten (z. B. `["du", "sie"]` beim Repräsentanten) — NICHT
+ * automatisch alle davon erzeugt (das war das Verhalten vor der
+ * Du/Sie-Auswahl, siehe `DEFAULT_FLYER_SALUTATION_VARIANTS`). Dient
+ * als (a) Validierungsgrundlage für `buildFlyerVariantEntries.js`
+ * (welche Varianten `salutationVariants` dort enthalten darf) und (b)
+ * UI-Grundlage, ob eine "Sie-Variante zusätzlich erstellen"-Option
+ * überhaupt angezeigt wird (`src/intern/generator.js`). Leeres Array =
  * diese Rolle hat keine Ansprache-Varianten (aktuell jede Rolle außer
  * Repräsentant, da sie ohnehin noch keine Flyer-Vorlage hat).
  * @param {string} roleKey
@@ -286,4 +333,26 @@ export function getFlyerSalutationVariants(roleKey) {
 /** Ob für diese Rolle bereits eine Urkunden-Vorlage für `materialKey` hinterlegt ist. */
 export function isCertificateTemplateAvailableForRole(roleKey, materialKey) {
   return getRoleConfig(roleKey).certificateMaterialKeys.includes(materialKey);
+}
+
+/**
+ * Materialschlüssel des Standard-Starter-Sets dieser Rolle (siehe
+ * `ROLE_CONFIG`-Doku, `starterSetMaterialKeys`). Leeres Array = kein
+ * Starter-Set für diese Rolle definiert.
+ * @param {string} roleKey
+ * @returns {string[]}
+ */
+export function getStarterSetMaterialKeys(roleKey) {
+  return getRoleConfig(roleKey).starterSetMaterialKeys;
+}
+
+/**
+ * Ob diese Rolle ein Standard-Starter-Set hat — steuert, ob der
+ * "Standard-Starter-Set auswählen"-Button im Generator für die aktuell
+ * gewählte Rolle aktiv/sichtbar ist.
+ * @param {string} roleKey
+ * @returns {boolean}
+ */
+export function hasStarterSet(roleKey) {
+  return getStarterSetMaterialKeys(roleKey).length > 0;
 }

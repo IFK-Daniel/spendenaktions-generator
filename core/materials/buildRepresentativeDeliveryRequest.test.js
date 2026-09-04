@@ -502,3 +502,59 @@ test("companion überschreibt Manifest-Personendaten nur mit nicht-leeren Werten
   assert.match(request.recipient.text, /Hallo Max,/);
   assert.match(request.recipient.text, /IFK-ID lautet: IFK7QX\./);
 });
+
+// ---------------------------------------------------------------------------
+// Starter-Set / Du-Sie-Hinweis — buildRepresentativeDeliveryRequest berechnet
+// includeFlyerSieHint aus den tatsächlich erzeugten Ansprache-Varianten.
+// ---------------------------------------------------------------------------
+
+test("flyerSalutationVariants: ['du'] (Standard-Starter-Set) → Mailtext enthält den Sie-Hinweis", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+    flyerSalutationVariants: ["du"],
+  });
+
+  assert.match(request.recipient.text, /grundsätzlich per Du sind/);
+});
+
+test("flyerSalutationVariants: ['du','sie'] (Sie bewusst zusätzlich erzeugt) → kein Sie-Hinweis (irreführend, da schon dabei)", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+    flyerSalutationVariants: ["du", "sie"],
+  });
+
+  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+});
+
+test("kein flyerSalutationVariants (kein Flyer im Versand, z. B. nur Urkunde) → kein Sie-Hinweis", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+});
+
+test("flyerSalutationVariants: ['sie'] (nur Sie separat nacherzeugt, kein Du dabei) → kein Sie-Hinweis (Hinweis wäre inhaltlich falsch)", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+    flyerSalutationVariants: ["sie"],
+  });
+
+  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+});

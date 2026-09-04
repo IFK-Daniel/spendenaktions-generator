@@ -1,8 +1,12 @@
 # Analyse: Versandanhänge Repräsentanten-Materialpaket
 
-Vier Runden. **Abschnitt 14 enthält den aktuell gültigen Endstand**
-(kritischer Rückbau des Font-Subsettings nach einem Production-Bug —
-Dokumentintegrität vor Dateigröße). Abschnitte 1–13 sind die Historie
+Fünf Runden. **Abschnitt 15 enthält den aktuell gültigen Endstand**
+(Standard-Starter-Set: Du/Sie ist keine automatische Doppelerzeugung
+mehr, Standard ist nur Du — bringt das Paket von 152,9% auf 94,7% des
+Limits, rein durch Architektur, ohne jede Kompression). Abschnitt 14
+dokumentiert den kritischen Rückbau des Font-Subsettings nach einem
+Production-Bug (Dokumentintegrität vor Dateigröße). Abschnitte 1–13
+sind die Historie
 (Runde 1+2: Materialgrößen; Runde 3: Transport-Umstellung) und zeigen
 u. a., warum Font-Subsetting ursprünglich eingeführt wurde — beide
 Zwischenstände sind durch Runde 4 überholt, soweit sie das
@@ -795,3 +799,95 @@ und visuell geprüft (siehe 14.5) — Name, Telefon, E-Mail, Region
 jeweils vollständig, keine fehlenden Zeichen, keine einzelnen
 Glyphen, keine falschen Abstände. Anleitung (statisch) vollständig
 lesbar, Fließtexte und Überschriften intakt.
+
+---
+
+## 15. Standard-Starter-Set (neues Feature) — reale Messung
+
+Neues Feature: "Standard-Starter-Set auswählen"-Button (nur für
+Repräsentant/Repräsentantin) belegt die bestehende Materialauswahl mit
+Flyer Druckerei (Du), Flyer Home (Du), PayPal-QR schwarz, GiroCode
+schwarz und Repräsentantenurkunde vor — reine Komfort-Vorauswahl, keine
+neue Erzeugungs-Pipeline. Wichtigster Nebeneffekt für die Mailgröße:
+**Du/Sie ist jetzt keine automatische Doppelerzeugung mehr** — Standard
+ist ausschließlich die Du-Version; die Sie-Version entsteht nur bei
+bewusster Zusatzauswahl ("Du + Sie" oder "Nur Sie", z. B. nachträglich
+für einen bereits ausgestatteten Repräsentanten).
+
+### 15.1 Reale Messung (`scripts/measure-starter-set.mjs`)
+
+Exakt derselbe Rendering-Code wie produktiv, `salutationVariants: ["du"]`
+(genau das, was `applyStarterSet()` in `src/intern/generator.js` setzt).
+
+| Datei | Rohgröße (Byte) | Anteil |
+|---|---:|---:|
+| Flyer Druckerei – Du | 1.296.223 | 30,8 % |
+| Flyer Home – Du | 1.293.758 | 30,7 % |
+| Repräsentantenurkunde | 973.303 | 23,1 % |
+| PayPal-QR schwarz | 3.400 | 0,1 % |
+| GiroCode schwarz | 2.020 | 0,0 % |
+| Anleitung (statisch) | 645.844 | 15,3 % |
+| **Summe Einzeldateien** | **4.214.548 (4,02 MB)** | 100 % |
+| ZIP-Datei | 4.215.544 | — |
+| **Multipart-Payload (tatsächlich versendet)** | **4.215.987 Byte (4,02 MB)** | — |
+
+Sie-Dateien im Paket: **0** (verifiziert, siehe auch Testfall F).
+
+### 15.2 Sicherheitsmarge (Vorgabe Abschnitt 12)
+
+```
+Multipart-Payload   = 4.215.987 Byte
+MAX_REQUEST_BYTES   = 4.450.000 Byte
+Anteil am Limit     = 94,7 %
+Reserve             = 5,3 %
+Ziel (>=10% Reserve) = NICHT erreicht
+```
+
+**Ergebnis: Das Standard-Starter-Set passt unter das absolute
+Vercel-Limit (94,7 %), erreicht aber NICHT die geforderten mindestens
+10 % Reserve (nur 5,3 %).** Wie in Abschnitt 12 der Vorgabe verlangt:
+**keine erneute PDF-Kompression** — die verbleibende Lücke wird nur
+dokumentiert, keine PDF-Qualität wurde angetastet.
+
+Einordnung: Der Wegfall der beiden Sie-Flyer bringt das Paket von
+152,9 % (Runde 4, mit automatischer Du+Sie-Erzeugung) auf 94,7 % — ein
+großer, realer Fortschritt (−58,2 Prozentpunkte) rein durch die
+Architekturänderung, ganz ohne jede Bild-/Font-Kompression. Die
+verbleibende Lücke zu den gewünschten 10 % Reserve ist mit ca. 234 KB
+(Ziel-Payload bei 10 % Reserve: 4.005.000 Byte, IST: 4.215.987 Byte)
+deutlich kleiner als zuvor und käme allein durch Option C aus
+Abschnitt 8 (bereits umgesetzt — die Rohgröße selbst müsste um
+weitere ca. 176 KB sinken, um mit Multipart-Overhead sicher unter das
+Ziel zu kommen) oder eine bewusste künftige Entscheidung in Reichweite.
+
+### 15.3 Qualitätsprüfung
+
+Realer Testlauf mit `Daniel Feigenbutz`, Region `Düsseldorf`, Telefon
+`015233795099`, E-Mail `d.feigenbutz@its-for-kids.de`: Flyer Druckerei
+Du visuell geprüft (`artifacts/pdf-regression/starter-set-flyer-druckerei-du.pdf`/`.png`)
+— Name, Region, Telefon, E-Mail vollständig und korrekt, Foto sauber
+im Kreis-Crop, QR-Codes scharf. Keine Änderung an Font-Einbettung,
+PDF-Qualität, QR-Codes, Fotoqualität, Urkunden-Hintergründen oder
+Druckerei-Rendering (Vorgabe Abschnitt 19) — ausschließlich die
+Du/Sie-Auswahlarchitektur wurde geändert.
+
+**Hinweis zur Messmethode**: Beim ersten Lauf des Mess-Skripts trat ein
+`SOI not found in JPEG`-Fehler auf — Ursache war NICHT die
+Produktivlogik, sondern eine Eigenart von Node.js' `readFileSync`
+(Buffer-Pooling: der zurückgegebene `Buffer` kann eine View mit
+`byteOffset > 0` auf ein größeres, gemeinsames `ArrayBuffer` sein;
+pdf-lib's `embedJpg` liest `imageData.buffer` ohne diesen Offset zu
+berücksichtigen). Im echten Browser-Pfad (`fetch().arrayBuffer()`)
+tritt das nicht auf, da dort `byteOffset` immer 0 ist — reine
+Testskript-Eigenart, im Mess-Skript durch eine explizite Kopie
+(`new Uint8Array(readFileSync(...))`) behoben, KEINE Änderung an
+`core/pdf/renderFlyer.js` oder anderem Produktivcode.
+
+### 15.4 Multipart-Payload (Details)
+
+| | Bytes |
+|---|---:|
+| Rohgröße gesamt | 4.214.548 |
+| ZIP-Datei | 4.215.544 |
+| Multipart-Payload | 4.215.987 |
+| Overhead (ZIP → Multipart) | 443 Byte (Boundary + Metadata-JSON) |

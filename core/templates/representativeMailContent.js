@@ -27,7 +27,7 @@ export function buildRepresentativeMailSubject() {
   return REPRESENTATIVE_MAIL_SUBJECT;
 }
 
-function buildBodyParagraphs({ firstName, gender, ifkId, role }) {
+function buildBodyParagraphs({ firstName, gender, ifkId, role, includeFlyerSieHint }) {
   const roleLabel = mailRoleLabel(role, gender);
   // Die IFK-ID gehört zur Person, nicht zum gewählten Empfänger. Ist im
   // Formular eine ID hinterlegt, MUSS exakt dieser Wert erscheinen; fehlt
@@ -39,6 +39,16 @@ function buildBodyParagraphs({ firstName, gender, ifkId, role }) {
     `Hallo ${firstName},`,
     `anbei erhältst du deine personalisierten Materialien für deinen Einsatz als ${roleLabel} von It's for Kids.`,
     "Das ZIP-Archiv enthält alle aktuell verfügbaren Materialien, die speziell für dich erstellt wurden.",
+    // Nur relevant, wenn tatsächlich ein Flyer OHNE Sie-Variante
+    // versendet wurde (Standardfall seit dem Standard-Starter-Set,
+    // siehe `core/materials/roleConfig.js`, `DEFAULT_FLYER_SALUTATION_VARIANTS`)
+    // — der Aufrufer (`buildRepresentativeDeliveryRequest.js`) berechnet
+    // dieses Flag aus den tatsächlich erzeugten Ansprache-Varianten,
+    // damit dieser Hinweis nie fälschlich erscheint, wenn ohnehin schon
+    // beide Varianten verschickt wurden oder gar kein Flyer dabei ist.
+    includeFlyerSieHint
+      ? "Da wir bei It's for Kids grundsätzlich per Du sind, erhältst du deinen Flyer standardmäßig in der Du-Version. Wenn du zusätzlich eine Variante mit der Anrede „Sie“ benötigst, erstellen wir sie dir gerne separat."
+      : null,
     trimmedIfkId
       ? `Deine persönliche IFK-ID lautet: ${trimmedIfkId}. Die IFK-ID dient ausschließlich der internen eindeutigen Zuordnung. Deshalb ist sie beispielsweise auch im Verwendungszweck des GiroCodes für die Banking-App enthalten.`
       : null,
@@ -62,11 +72,14 @@ function buildBodyParagraphs({ firstName, gender, ifkId, role }) {
  * @param {string} params.ifkId
  * @param {string} [params.role] Technischer Rollen-Schlüssel
  *   (`manifest.person.role`). Ohne Angabe: `representative`.
+ * @param {boolean} [params.includeFlyerSieHint] Ob der kurze Hinweis
+ *   zur optional zusätzlich erhältlichen Sie-Version erscheinen soll —
+ *   `true`, wenn ein Flyer OHNE Sie-Variante versendet wurde.
  * @returns {string}
  */
-export function buildRepresentativeMailText({ firstName, gender, ifkId, role }) {
+export function buildRepresentativeMailText({ firstName, gender, ifkId, role, includeFlyerSieHint }) {
   return [
-    ...buildBodyParagraphs({ firstName, gender, ifkId, role }),
+    ...buildBodyParagraphs({ firstName, gender, ifkId, role, includeFlyerSieHint }),
     "Herzliche Grüße",
     "Dein Team von It's for Kids",
   ].join("\n\n");
@@ -86,12 +99,13 @@ export function buildRepresentativeMailText({ firstName, gender, ifkId, role }) 
  * @param {string} [params.role] Technischer Rollen-Schlüssel
  *   (`manifest.person.role`). Ohne Angabe: `representative`.
  * @param {string} params.logoUrl
+ * @param {boolean} [params.includeFlyerSieHint] Siehe `buildRepresentativeMailText`.
  * @returns {string}
  */
-export function buildRepresentativeMailHtml({ firstName, gender, ifkId, role, logoUrl }) {
+export function buildRepresentativeMailHtml({ firstName, gender, ifkId, role, logoUrl, includeFlyerSieHint }) {
   const bodyHtml = buildIfkHtmlEmail({
     logoUrl,
-    paragraphs: buildBodyParagraphs({ firstName, gender, ifkId, role }),
+    paragraphs: buildBodyParagraphs({ firstName, gender, ifkId, role, includeFlyerSieHint }),
   });
   const signatureHtml = buildIfkSignatureHtml({ logoUrl });
 

@@ -785,6 +785,49 @@ textarea.field-complete {
   color: var(--text-muted);
 }
 
+.material-item--sub {
+  grid-column: 1 / -1;
+  background: var(--field-bg);
+  font-size: 13px;
+  cursor: default;
+  flex-wrap: wrap;
+}
+
+.salutation-variant-label {
+  color: var(--text-muted);
+}
+
+.salutation-variant-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+}
+
+.starter-set-btn {
+  display: block;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #ffffff;
+  background: var(--ifk-green);
+  border: 1px solid var(--ifk-green);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.starter-set-btn:hover {
+  background: var(--ifk-green-dark);
+  border-color: var(--ifk-green-dark);
+}
+
+.starter-set-hint {
+  margin: 6px 0 0;
+}
+
 .delivery-section {
   margin-top: 32px;
   padding-top: 24px;

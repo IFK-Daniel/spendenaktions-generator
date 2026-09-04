@@ -16,7 +16,7 @@ import { generateFlyerMaterial } from "../../core/materials/generateFlyerMateria
 import { generateFlyerHomeSheet } from "../../core/materials/generateFlyerHomeSheet.js";
 import { buildFlyerVariantEntries } from "../../core/materials/buildFlyerVariantEntries.js";
 import { resolveRepresentativeFlyerFrontTemplate } from "../../core/materials/resolveRepresentativeFlyerFrontTemplate.js";
-import { generateCompanionMaterialGuide } from "../../core/materials/generateCompanionMaterialGuide.js";
+import { loadStaticCompanionMaterialGuide } from "../../core/materials/staticCompanionMaterialGuide.js";
 import { loadFontFileBrowser } from "../../core/pdf/loadFontFileBrowser.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
 import {
@@ -2018,11 +2018,14 @@ export function initGenerator() {
 
       // Begleit-Anleitung: genau einmal, sobald mindestens ein Material
       // tatsächlich erzeugt wurde — unabhängig von Materialart/-anzahl
-      // (Vorgabe Abschnitt 17). Kein personenbezogener Inhalt, daher
-      // ohne `person`/`manifest`-Bezug erzeugt.
+      // (Vorgabe Abschnitt 17). Vollständig statisch (kein Name, keine
+      // IFK-ID, keine Kontaktdaten) — wird deshalb nicht mehr pro
+      // Person zur Laufzeit gerendert, sondern als einmal geprüftes,
+      // statisches PDF-Asset geladen (siehe
+      // `core/materials/staticCompanionMaterialGuide.js`).
       lastGuideFile =
         files.length > 0
-          ? await generateCompanionMaterialGuide({ deps: { loadFontBytes: loadFontFileBrowser } })
+          ? await loadStaticCompanionMaterialGuide({ deps: { loadStaticBytes: loadFontFileBrowser } })
           : null;
 
       renderResults(manifest.person, files, lastGuideFile);

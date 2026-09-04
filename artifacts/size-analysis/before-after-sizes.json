@@ -1,5 +1,5 @@
 {
-  "note": "Dritte Optimierungsrunde (Transport-Umstellung auf multipart/form-data, siehe 'multipartMigration' unten). Ersetzt die vorherige Fassung dieser Datei vollständig. Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket. Das Testfoto ist eine an das real vom Nutzer beobachtete Paketgröße (~2MB je Flyer vor Optimierung) kalibrierte, aber weiterhin synthetische Rekonstruktion eines Smartphone-Fotos — kein echtes Nutzerfoto war verfügbar. Die ERSTE Berichtsfassung verwendete ein bewusst extremeres Worst-Case-Testfoto (34,9MB Payload) zur Ursachenermittlung, das NICHT der realen Paketgröße entsprach; das wurde in Runde 2 korrigiert.",
+  "note": "VIERTE Runde (siehe 'criticalRegressionAndFix' unten) ist der aktuell gültige Endstand: embedFont({subset:true}) verursachte einen schweren Text-Korruptions-Bug (Namen/Telefonnummern/E-Mails teilweise auf einzelne Buchstaben reduziert) und wurde vollständig zurückgenommen -- die Größenwerte aus Runde 1/2/3 unten (soweit sie Font-Subsetting einschließen) sind dadurch überholt, bleiben aber als Historie erhalten. Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket. Das Testfoto ist eine an das real vom Nutzer beobachtete Paketgröße (~2MB je Flyer vor Optimierung) kalibrierte, aber weiterhin synthetische Rekonstruktion eines Smartphone-Fotos — kein echtes Nutzerfoto war verfügbar. Die ERSTE Berichtsfassung verwendete ein bewusst extremeres Worst-Case-Testfoto (34,9MB Payload) zur Ursachenermittlung, das NICHT der realen Paketgröße entsprach; das wurde in Runde 2 korrigiert.",
   "maxRequestBytes": 4450000,
   "targetReservePercent": 10,
   "targetPayloadBytes": 4005000,
@@ -151,6 +151,58 @@
     "resultReservePercent": 25.7,
     "targetReservePercent": 10,
     "targetMet": true,
-    "finalDecision": "A: Das vollständige Paket passt mit 25.7% Reserve in einen einzelnen Vercel-Request -- deutlich über den geforderten mindestens 10%. Keine Aufteilung auf mehrere Mails, keine weitere Qualitätsreduktion."
+    "finalDecision": "A: Das vollständige Paket passt mit 25.7% Reserve in einen einzelnen Vercel-Request -- deutlich über den geforderten mindestens 10%. Keine Aufteilung auf mehrere Mails, keine weitere Qualitätsreduktion.",
+    "supersededByRound4": true
+  },
+  "criticalRegressionAndFix": {
+    "bugDescription": "embedFont(bytes, { subset: true }) (pdf-lib/fontkit) wies Glyph-IDs inkonsistent zu, sobald derselbe Font sowohl fuer reine Breitenmessung (font.widthOfTextAtSize(), aufgerufen beim iterativen Auto-Shrink in fitText.js/placeMultiLineText.js) als auch fuer das tatsaechliche Zeichnen (page.drawText()) verwendet wurde. Betraf Flyer, Urkunden (gemeinsame embedFonts()-Funktion in core/pdf/renderFlyer.js) und die Anleitung (generateCompanionMaterialGuide.js). Beispiel: 'Daniel Feigenbutz' wurde im Namensbalken der Urkunde nur als 'b' dargestellt; Telefonnummern/E-Mail-Adressen im Flyer wurden in einzelne Buchstaben zerlegt.",
+    "insidiousDetail": "Die ToUnicode-CMap (fuer Text-Extraktion/Kopieren/Suche) blieb korrekt -- sowohl pdfjs-dist als auch PyMuPDF.get_text() meldeten weiterhin den vollstaendigen, korrekten Text, obwohl die sichtbaren Glyphen zerstoert waren. Reine Text-Extraktionstests haetten den Bug NICHT gefunden -- nur echtes Pixel-Rendering deckt ihn auf.",
+    "introducedInCommit": "5e8e3b2 (fix: optimize companion material delivery and print guidance)",
+    "fixedInCommit": "fix: restore pdf text integrity",
+    "filesFixed": ["core/pdf/renderFlyer.js", "core/materials/generateCompanionMaterialGuide.js"],
+    "verification": "Gezielter Rueckbau-Test: mit testweise wieder aktiviertem { subset: true } zeigten die neuen visuellen Regressionstests (core/pdf/pdfVisualRegression.test.js) meanDiff=1.99/maxDiff=241 (Schwellen 1.0/40) -- Bug zuverlaessig reproduziert und durch den Fix behoben (meanDiff=0.0/maxDiff=0).",
+    "staticGuideIntroduced": {
+      "reason": "Anleitung ist vollstaendig personendatenfrei und fuer jeden Wegbegleiter identisch -- kein Grund fuer Laufzeit-Rendering (und damit Font-Risiko) pro Person.",
+      "staticAssetPath": "assets/material-guide/Hinweise_zur_Verwendung_der_Materialien.pdf",
+      "loaderModule": "core/materials/staticCompanionMaterialGuide.js",
+      "regenerationScript": "scripts/regenerate-static-material-guide.mjs"
+    },
+    "newVisualRegressionInfra": {
+      "pythonScript": "scripts/pdf-visual-diff.py (PyMuPDF-Rendering + Pixel-Diff gegen golden image)",
+      "nodeWrapper": "core/pdf/pdfVisualDiff.js",
+      "tests": "core/pdf/pdfVisualRegression.test.js (3 Tests: Flyer, Urkunde, Anleitung)",
+      "goldenImages": "artifacts/pdf-regression/golden/",
+      "textExtractionTestsKept": "core/pdf/extractPdfText.js + Tests in renderFlyer.test.js bleiben (fangen andere Fehlerklassen ab), sind aber NACHWEISLICH NICHT ausreichend gegen den Glyphen-Rendering-Bug"
+    },
+    "sizeImpactOfRevert": {
+      "totalRawBytesBefore": 3304002,
+      "totalRawBytesAfter": 6804358,
+      "increasePercent": 105.9,
+      "note": "Groesse liegt wieder in etwa auf dem Niveau von vor Runde 1 (Font-Subsetting) -- alle anderen, unabhaengigen Optimierungen (Foto 1200px/JPEG88, Urkunden-Hintergrund-Palette, multipart-Transport) bleiben aktiv und wirksam."
+    }
+  },
+  "round4Final": {
+    "description": "Aktuell gueltiger Endstand nach Rueckbau des Font-Subsettings + statischer Anleitung. Foto/Urkunden-Hintergrund/multipart-Transport unveraendert seit Runde 2/3.",
+    "photoBytes": 22504,
+    "photoFormat": "image/jpeg (900x1200px)",
+    "files": {
+      "Flyer_Druckerei_Du.pdf": 1296225,
+      "Flyer_Druckerei_Sie.pdf": 1296133,
+      "Flyer_Home_Du.pdf": 1293760,
+      "Flyer_Home_Sie.pdf": 1293673,
+      "Urkunde_Repraesentant.pdf": 973303,
+      "PayPal_QR_schwarz.png": 3400,
+      "GiroCode_schwarz.png": 2020,
+      "Hinweise_zur_Verwendung_der_Materialien.pdf": 645844
+    },
+    "totalRawBytes": 6804358,
+    "zipBytes": 6805366,
+    "multipartPayloadBytes": 6805795,
+    "maxRequestBytes": 4450000,
+    "percentOfLimit": 152.9,
+    "fitsUnderLimit": false,
+    "overageBytes": 2355795,
+    "overageMB": 2.25,
+    "decision": "Kein weiterer Kompressionsversuch in dieser Runde (Vorgabe: Maillimit ist sekundaer, Dokumentintegritaet zwingend). Nur dokumentiert: korrekte Payload = 6.49 MB, Limit = 4.45 MB, Differenz = 2.36 MB. Weitere Versandarchitektur ist eine offene, gemeinsame Entscheidung (siehe Abschnitt 8 in attachment-size-analysis.md)."
   }
 }

@@ -118,18 +118,23 @@ export async function renderFlyer({ templateConfig, textValues = {}, imageAssets
 async function embedFonts(pdfDoc, fontAssets) {
   const embedded = {};
   for (const [fontKey, fontAsset] of Object.entries(fontAssets)) {
-    // `subset: true` ist für Datei-Fonts (fontkit) essenziell: pdf-lib
-    // bettet ohne diese Option das komplette Font-File ein statt nur
-    // der tatsächlich benutzten Glyphen — bei einer Unicode-Schrift wie
-    // NotoSans (mehrere hundert KB) macht das jedes einzelne PDF, das
-    // ein Textfeld mit dieser Schrift enthält, um denselben Betrag
-    // größer. Für Standard-Fonts (14 PDF-Basisschriften, kein
-    // eingebettetes Font-File) ist die Option wirkungslos, aber
-    // ungefährlich.
+    // WICHTIG — `subset: true` bewusst NICHT verwenden: Diese Option
+    // wurde kurzzeitig eingesetzt, um die Dateigröße zu reduzieren
+    // (komplettes Font-File vs. nur benutzte Glyphen), hat aber einen
+    // schweren Production-Bug verursacht — pdf-lib/fontkit weist beim
+    // Subsetting Glyph-IDs inkonsistent zu, sobald derselbe Font sowohl
+    // für reine Breitenmessung (`font.widthOfTextAtSize()`, aufgerufen
+    // z. B. beim iterativen Auto-Shrink in `fitText.js`/
+    // `placeMultiLineText.js`) ALS AUCH für das tatsächliche Zeichnen
+    // (`page.drawText()`) verwendet wird: Ergebnis waren zerstörte
+    // Texte (z. B. "Daniel Feigenbutz" -> nur "b", Telefonnummern/
+    // E-Mail-Adressen zerstückelt, siehe
+    // `artifacts/pdf-regression/` und Commit
+    // "fix: restore pdf text integrity"). Dokumentintegrität hat
+    // Vorrang vor Dateigröße — nicht ohne sehr sorgfältige Verifikation
+    // wieder aktivieren.
     embedded[fontKey] =
-      fontAsset.type === "file"
-        ? await pdfDoc.embedFont(fontAsset.bytes, { subset: true })
-        : await pdfDoc.embedFont(fontAsset.name);
+      fontAsset.type === "file" ? await pdfDoc.embedFont(fontAsset.bytes) : await pdfDoc.embedFont(fontAsset.name);
   }
   return embedded;
 }

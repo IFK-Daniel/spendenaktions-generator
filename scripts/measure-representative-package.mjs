@@ -6,7 +6,7 @@ import { renderFlyer } from "../core/pdf/renderFlyer.js";
 import { loadTemplateAssets } from "../core/pdf/loadTemplateAssets.js";
 import { generateFlyerHomeSheet } from "../core/materials/generateFlyerHomeSheet.js";
 import { resolveRepresentativeFlyerFrontTemplate } from "../core/materials/resolveRepresentativeFlyerFrontTemplate.js";
-import { generateCompanionMaterialGuide } from "../core/materials/generateCompanionMaterialGuide.js";
+import { loadStaticCompanionMaterialGuide } from "../core/materials/staticCompanionMaterialGuide.js";
 import { loadFontFile } from "../core/pdf/loadFontFile.js";
 import { createZip } from "../core/zip/createZip.js";
 
@@ -105,7 +105,7 @@ files.push({ filename: "Urkunde_Repraesentant.pdf", content: Buffer.from(cert.by
 files.push({ filename: "PayPal_QR_schwarz.png", content: Buffer.from(paypalQr) });
 files.push({ filename: "GiroCode_schwarz.png", content: Buffer.from(qrGiro) });
 
-const guide = await generateCompanionMaterialGuide({ deps: { loadFontBytes: loadFontFile } });
+const guide = await loadStaticCompanionMaterialGuide({ deps: { loadStaticBytes: loadFontFile } });
 files.push({ filename: guide.filename, content: Buffer.from(await guide.content.arrayBuffer()) });
 
 // --- Größen ---

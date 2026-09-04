@@ -10,6 +10,7 @@ import { flyerFemalePrintFrontTemplate } from "../../templates/flyer-female-prin
 import { flyerFemaleHomeFrontTemplate } from "../../templates/flyer-female-home-front/template.config.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
+import { extractPdfText } from "./extractPdfText.js";
 
 const nodeDeps = { loadTemplateAssets };
 
@@ -283,8 +284,15 @@ test("Urkunde: optimierte Hintergrundgrafik bleibt deutlich unter 1MB, Seitengr�
   });
   // Regressionsschutz gegen versehentliches Zurücksetzen der
   // Paletten-Optimierung (`scripts/optimize-template-backgrounds.py`):
-  // vor der Optimierung lag die Urkunde bei ca. 1,32MB.
-  assert.ok(bytes.length < 900_000, `Urkunde ist ${bytes.length} Byte groß, erwartet < 900000 (Optimierung wirkt weiterhin)`);
+  // vor der Optimierung lag die Urkunde bei ca. 1,32MB. Schwelle bewusst
+  // NICHT so eng wie kurzzeitig (< 900 KB), weil das zusätzliche
+  // Font-Subsetting (`embedFont(..., { subset: true })`), das damals
+  // zu dieser kleineren Zahl beitrug, wegen eines schweren
+  // Text-Korruptions-Bugs wieder entfernt wurde (siehe
+  // `core/pdf/renderFlyer.js`, `embedFonts()`, und
+  // `artifacts/pdf-regression/`) — Dokumentintegrität hat Vorrang vor
+  // Dateigröße.
+  assert.ok(bytes.length < 1_100_000, `Urkunde ist ${bytes.length} Byte groß, erwartet < 1100000 (Hintergrund-Optimierung wirkt weiterhin)`);
 
   const doc = await PDFDocument.load(bytes);
   const page = doc.getPage(0);
@@ -294,6 +302,91 @@ test("Urkunde: optimierte Hintergrundgrafik bleibt deutlich unter 1MB, Seitengr�
   // Bildkodierung des Hintergrunds ändert, keine Geometrie.
   assert.ok(Math.abs(width - mmToPt(297.127083)) < 1, `Breite ${width}pt weicht von der Template-Trimgröße ab`);
   assert.ok(Math.abs(height - mmToPt(419.893732)) < 1, `Höhe ${height}pt weicht von der Template-Trimgröße ab`);
+});
+
+// ---------------------------------------------------------------------------
+// Text-INTEGRITÄT (nicht nur "PDF lädt ohne Exception") — Regressionsschutz
+// gegen den `embedFont(..., { subset: true })`-Bug: Name/Telefon/E-Mail
+// wurden dabei auf einzelne Buchstaben reduziert (z. B. "Daniel Feigenbutz"
+// -> "b"), obwohl alle bisherigen Tests (Seitengröße, keine Warnings,
+// Dateigröße) weiterhin grün blieben. Diese Tests extrahieren den
+// TATSÄCHLICHEN Text via `pdfjs-dist` (siehe `extractPdfText.js`) und
+// prüfen, dass der dynamische Inhalt vollständig und unverstümmelt im
+// PDF steht.
+// ---------------------------------------------------------------------------
+
+test("Text-Integrität (Flyer): Name, Region, Telefon und E-Mail erscheinen vollständig im PDF-Text (kein Glyphen-/Subsetting-Bug)", async () => {
+  const textValues = {
+    name: "Daniel Feigenbutz",
+    region: "Düsseldorf",
+    regionInParagraph: "Düsseldorf",
+    phone: "015233795099",
+    email: "d.feigenbutz@its-for-kids.de",
+  };
+  const { bytes } = await renderFlyer({
+    templateConfig: flyerPrintFrontTemplate,
+    textValues,
+    imageAssets: tinyImageAssets(),
+    deps: nodeDeps,
+  });
+
+  const [pageText] = await extractPdfText(bytes);
+  assert.match(pageText, /Daniel Feigenbutz/, "Name muss vollständig erscheinen, nicht nur ein einzelnes Zeichen");
+  assert.match(pageText, /Düsseldorf/, "Region muss vollständig erscheinen");
+  assert.match(pageText, /015233795099/, "Telefonnummer muss vollständig und zusammenhängend erscheinen");
+  assert.match(pageText, /d\.feigenbutz@its-for-kids\.de/, "E-Mail-Adresse muss vollständig erscheinen");
+});
+
+test("Text-Integrität (Flyer): funktioniert auch mit Umlauten/Sonderzeichen im Namen (kritischer Fall für Font-Subsetting)", async () => {
+  const textValues = {
+    name: "Maximilian Bartholomäus-Schweighofer",
+    region: "München",
+    regionInParagraph: "München",
+    phone: "089 12345678",
+    email: "m.bartholomaeus-schweighofer@example.com",
+  };
+  const { bytes } = await renderFlyer({
+    templateConfig: flyerPrintFrontTemplate,
+    textValues,
+    imageAssets: tinyImageAssets(),
+    deps: nodeDeps,
+  });
+
+  const [pageText] = await extractPdfText(bytes);
+  assert.match(pageText, /Maximilian Bartholomäus-Schweighofer/);
+});
+
+test("Text-Integrität (Urkunde): langer Name mit Umlauten und Bindestrich erscheint vollständig im Namensbalken", async () => {
+  const { bytes } = await renderFlyer({
+    templateConfig: certificateRepresentativeMaleTemplate,
+    textValues: { name: "Maximilian Bartholomäus-Schweighofer" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+
+  const [pageText] = await extractPdfText(bytes);
+  assert.match(
+    pageText,
+    /Maximilian Bartholomäus-Schweighofer/,
+    "Name muss vollständig im Namensbalken erscheinen, kein einzelnes Glyphen-Fragment (z. B. nur 'b')"
+  );
+});
+
+test("Text-Integrität (Urkunde): kurzer Name erscheint vollständig (kein Fragment)", async () => {
+  const { bytes } = await renderFlyer({
+    templateConfig: certificateRepresentativeMaleTemplate,
+    textValues: { name: "Daniel Feigenbutz" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+
+  const [pageText] = await extractPdfText(bytes);
+  assert.match(pageText, /Daniel Feigenbutz/);
+  // Regressionsschutz gegen genau den beobachteten Bug: der Name-Text
+  // im extrahierten PDF-Text darf nicht auf ein einzelnes Zeichen
+  // reduziert sein.
+  const nameMatch = pageText.match(/\bDaniel\b[^\n]*\bFeigenbutz\b/);
+  assert.ok(nameMatch, "vollständiger Name nicht im extrahierten Text gefunden");
 });
 
 test("Flyer weiblich (Druckerei): korrekte Seitengröße (kein Beschnitt im Master, siehe Template-Kommentar), keine Warnungen", async () => {

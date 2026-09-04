@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@tesseract.js-data/deu": "^1.0.0",
+    "pdfjs-dist": "^6.3.289",
     "tesseract.js-core": "^7.0.0",
     "vite": "^5.4.0"
   }

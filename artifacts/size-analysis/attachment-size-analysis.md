@@ -1,14 +1,17 @@
 # Analyse: Versandanhänge Repräsentanten-Materialpaket
 
-Drei Optimierungsrunden (Abschnitte 1–12: Runde 1+2, Materialgrößen;
-Abschnitt 13: Runde 3, Transport-Umstellung — **hier steht das
-aktuell gültige Endergebnis**, Abschnitt 12 ist der Zwischenstand VOR
-der Transport-Umstellung). Diese Fassung trennt außerdem sauber
+Vier Runden. **Abschnitt 14 enthält den aktuell gültigen Endstand**
+(kritischer Rückbau des Font-Subsettings nach einem Production-Bug —
+Dokumentintegrität vor Dateigröße). Abschnitte 1–13 sind die Historie
+(Runde 1+2: Materialgrößen; Runde 3: Transport-Umstellung) und zeigen
+u. a., warum Font-Subsetting ursprünglich eingeführt wurde — beide
+Zwischenstände sind durch Runde 4 überholt, soweit sie das
+Font-Subsetting betreffen. Diese Fassung trennt außerdem sauber
 zwischen einem künstlichen Worst-Case-Test (frühere Berichtsfassung)
 und einer am realen Nutzerfoto kalibrierten Rekonstruktion (ab Runde 2).
 Rohdaten: [`before-after-sizes.json`](./before-after-sizes.json),
 Einzellauf der letzten Messung:
-[`package-round3-multipart.json`](./package-round3-multipart.json).
+[`package-round4-final.json`](./package-round4-final.json).
 
 ## 0. Einordnung der Messmethode (wichtig)
 
@@ -568,3 +571,227 @@ Fotoauflösung (1200px), JPEG-Qualität (88 %), Urkunden-Optimierung und
 alle übrigen Materialien sind identisch zu Runde 2. Der Empfänger
 erhält weiterhin genau eine Mail mit dem vollständigen ZIP-Archiv;
 keine Aufteilung auf mehrere Mails wurde vorgenommen.
+
+---
+
+## 14. Vierte Runde: Kritischer Rückbau — Dokumentintegrität wiederhergestellt
+
+**BLOCKIERENDER Production-Bug**, vom Nutzer real getestet gefunden:
+Flyer, Urkunden und die Anleitung enthielten teilweise zerstörten
+Text (z. B. "Daniel Feigenbutz" nur als "b", Telefonnummern/
+E-Mail-Adressen in einzelne Buchstaben zerlegt).
+
+### 14.1 Root Cause — exakt bestimmt und verifiziert
+
+**Ursache**: `pdfDoc.embedFont(bytes, { subset: true })` (pdf-lib mit
+`@pdf-lib/fontkit`), eingeführt in Commit `5e8e3b2` in
+`core/pdf/renderFlyer.js` (Flyer + Urkunden, über die gemeinsame
+`embedFonts()`-Funktion) und in `core/materials/generateCompanionMaterialGuide.js`
+(Anleitung) — exakt die von drei betroffenen Dokumenttypen genannte
+gemeinsame Font-Einbettungslogik.
+
+**Mechanismus** (durch gezielten Rückbau-Test verifiziert, siehe unten):
+pdf-lib/fontkit weisen beim Font-Subsetting Glyph-IDs zu, sobald ein
+Zeichen erstmals "gesehen" wird — sowohl durch reine Breitenmessung
+(`font.widthOfTextAtSize()`, aufgerufen z. B. beim iterativen
+Auto-Shrink in `core/pdf/fitText.js`/`placeMultiLineText.js`, das für
+JEDES Textfeld mehrfach probeweise verschiedene Schriftgrößen
+durchrechnet) als auch durch tatsächliches Zeichnen (`page.drawText()`).
+Bei mehreren Textfeldern, die denselben eingebetteten Font-Objekt
+teilen (z. B. Name, Region, Telefon, E-Mail auf demselben Flyer),
+gerät diese Zuordnung durcheinander — das Ergebnis-PDF verweist beim
+Zeichnen auf falsche/fehlende Glyph-IDs im subsetteten Font-Programm.
+
+**Perfides Detail**: Die im PDF eingebettete ToUnicode-CMap (die für
+Text-Extraktion/Kopieren/Suche zuständig ist) blieb dabei KORREKT —
+sowohl `pdfjs-dist` als auch `PyMuPDF.get_text()` meldeten weiterhin
+den vollständig korrekten Namen, obwohl auf der Seite sichtbar nur
+"b" stand. Reine Text-Extraktionstests hätten diesen Bug NICHT
+gefunden (siehe Abschnitt 14.4).
+
+**Verifikation**: `core/pdf/renderFlyer.js` mit aktivem
+`{ subset: true }` neu gerendert und gegen ein bekanntermaßen
+korrektes Referenzbild verglichen (`scripts/pdf-visual-diff.py`) —
+Ergebnis: `meanDiff=1.99`, `maxDiff=241` (Schwellen: `<1.0`/`<40`),
+sichtbar dieselbe Zerstörung wie vom Nutzer gemeldet. Nach Rückbau:
+`meanDiff=0.0`, `maxDiff=0`.
+
+### 14.2 Fix
+
+- `core/pdf/renderFlyer.js`, `embedFonts()`: `{ subset: true }`
+  entfernt — betrifft Flyer UND Urkunden (gemeinsame Funktion).
+- `core/materials/generateCompanionMaterialGuide.js`: `{ subset: true }`
+  ebenfalls entfernt (bleibt als Render-Quelle für künftige
+  Neuerzeugungen erhalten, siehe 14.3).
+- Beide mit ausführlichem Code-Kommentar versehen, der den Bug und die
+  Verifikation dokumentiert — verhindert versehentliches erneutes
+  Aktivieren ohne sehr sorgfältige Prüfung.
+
+### 14.3 Anleitung jetzt statisch (Vorgabe Abschnitt 5)
+
+Die Anleitung ist vollständig personendatenfrei und für jeden
+Wegbegleiter identisch — sie muss nicht mehr bei jeder
+Materialerzeugung neu gerendert werden:
+
+- `assets/material-guide/Hinweise_zur_Verwendung_der_Materialien.pdf`
+  — einmal geprüftes, statisches PDF-Asset (645.844 Byte).
+- `core/materials/staticCompanionMaterialGuide.js` — neuer Loader,
+  liefert dieselbe Datenstruktur wie der bisherige dynamische
+  Renderer (`generateCompanionMaterialGuide.js`), lädt aber nur noch
+  Bytes von der statischen Datei (Node: `fs`, Browser: `fetch`,
+  dieselben bestehenden Loader wie für Schriftdateien).
+- `src/intern/generator.js` verwendet jetzt `loadStaticCompanionMaterialGuide`
+  statt `generateCompanionMaterialGuide`.
+- `generateCompanionMaterialGuide.js` bleibt vollständig erhalten als
+  Render-QUELLE für künftige inhaltliche Änderungen —
+  `scripts/regenerate-static-material-guide.mjs` regeneriert das
+  statische Asset daraus (mit Hinweis, das Ergebnis vor dem Commit
+  visuell zu prüfen).
+
+Vorteile (wie in der Vorgabe genannt): kein erneutes Rendering pro
+Person, kein Font-Risiko zur Laufzeit für dieses Dokument, immer
+identischer geprüfter Inhalt, einfach austauschbar, kleine/
+vorhersehbare Größe. Die aktuelle statische Anleitung enthält bereits
+alle zuletzt besprochenen Punkte (160g/m² Home, 170g/m² Druckerei,
+"kurze Kante"/"schmale Seite", automatische Größenanpassung erlaubt,
+GiroCode-Ablauf) — unverändert seit Runde 2.
+
+### 14.4 Visuelle Regressionstests (Vorgabe Abschnitt 10)
+
+**Wichtige Erkenntnis während der Umsetzung**: Ein naheliegender
+Ansatz — Text aus dem PDF extrahieren und auf den erwarteten Inhalt
+prüfen (`pdfjs-dist`) — wurde zunächst umgesetzt
+(`core/pdf/extractPdfText.js`, mehrere Tests in `renderFlyer.test.js`)
+und schlug bei einem gezielten Rückbau-Test (Font-Subsetting testweise
+wieder aktiviert) **nicht** an: die ToUnicode-CMap blieb korrekt, nur
+die sichtbaren Glyphen waren zerstört (siehe 14.1). Diese Tests bleiben
+im Repository (sie fangen andere Fehlerklassen ab — falsche
+Feldzuordnung, fehlende Werte, `undefined`-Leaks), sind aber
+NACHWEISLICH NICHT ausreichend gegen diese spezifische Fehlerklasse.
+
+**Tatsächlich wirksame Lösung**: echtes Pixel-Rendering + Bildvergleich
+gegen eine eingecheckte Referenz ("golden image"):
+
+- `scripts/pdf-visual-diff.py` — rendert eine PDF-Seite über PyMuPDF
+  (mupdf, dieselbe Rendering-Engine wie in einem echten PDF-Viewer,
+  nicht nur Text-/CMap-Extraktion) zu einem Pixelbild und vergleicht
+  es gegen ein Referenzbild (`--create` zum einmaligen Anlegen).
+- `core/pdf/pdfVisualDiff.js` — Node-Wrapper, ruft das Python-Skript
+  auf; `isVisualDiffAvailable()` erlaubt Tests, sich selbst zu
+  überspringen, wenn `python3`/PyMuPDF/Pillow/numpy fehlen (kein
+  npm-Paket — Umgebungen ohne Python werden dadurch nicht spurious
+  rot).
+- `core/pdf/pdfVisualRegression.test.js` — drei Tests (Flyer mit
+  vollständigem dynamischem Textsatz, Urkunde mit langem Namen inkl.
+  Umlaut/Bindestrich, statische Anleitung), jeweils gegen ein
+  eingechecktes Referenzbild unter `artifacts/pdf-regression/golden/`.
+
+**Verifiziert, dass diese Tests den Bug tatsächlich fangen**: mit
+testweise wieder aktiviertem `{ subset: true }` schlugen die Flyer-
+und Urkunde-Tests zuverlässig fehl (`meanDiff`/`maxDiff` weit über den
+Schwellen); mit dem Fix bestehen alle drei mit `meanDiff=0`.
+
+### 14.5 Testartefakte (Vorgabe Abschnitt 11)
+
+Unter `artifacts/pdf-regression/`:
+- `representative-flyer-daniel.pdf` / `.png` (Testdaten: Daniel
+  Feigenbutz, Düsseldorf, 015233795099, d.feigenbutz@its-for-kids.de)
+- `representative-certificate-daniel.pdf` / `.png` (Testname:
+  Maximilian Bartholomäus-Schweighofer — bewusst lang, mit Umlaut und
+  Bindestrich)
+- `material-guide.pdf` / `material-guide-page-1.png`
+- `golden/` — die eingecheckten Referenzbilder für die visuellen
+  Regressionstests oben
+
+Alle drei PNGs wurden vor dem Commit visuell geöffnet und geprüft
+(vollständiger Name, vollständige Telefonnummer, vollständige
+E-Mail-Adresse, vollständige Region, keine fehlenden Zeichen, keine
+einzelnen Glyphen, keine falschen Abstände — siehe eingebettete
+Bildschirmausgaben in dieser Konversation).
+
+### 14.6 Größenoptimierungen: getrennt bewertet, beibehalten
+
+- **Foto (1200px/JPEG 88%)**: unabhängig vom Font-Bug — im Flyer
+  sauber, Kreis-Crop korrekt, keine sichtbaren JPEG-Artefakte (siehe
+  golden-Referenzbild oben). **Beibehalten.**
+- **Urkunden-Hintergrundoptimierung** (256-Farben-Palette): statisches
+  Artwork bleibt visuell identisch (Pixel-Diff-Verifikation aus Runde
+  2, mean 0,0135/max 9 — beides innerhalb der neuen, strengeren
+  visuellen Regressionsschwelle für den Namensbalken bestätigt); nur
+  der dynamische Name war durch das Font-Subsetting betroffen, nicht
+  durch die Hintergrundoptimierung. **Beibehalten.**
+- **multipart/form-data-Transport**: fachlich unabhängig vom
+  PDF-Rendering-Bug, spart weiterhin ca. 25% Transport-Overhead ohne
+  Qualitätsverlust. **Beibehalten, nicht zurückgebaut.**
+
+### 14.7 Dateigrößen nach dem Fix — neu gemessen
+
+Gleiches realistisches Paket wie in den Vorrunden (Flyer Druckerei
+Du+Sie, Flyer Home Du+Sie, Urkunde, PayPal-QR, GiroCode, jetzt
+statische Anleitung):
+
+| Datei | Rohgröße (Byte) | Anteil |
+|---|---:|---:|
+| Flyer_Druckerei_Du.pdf | 1.296.225 | 19,0 % |
+| Flyer_Druckerei_Sie.pdf | 1.296.133 | 19,0 % |
+| Flyer_Home_Du.pdf | 1.293.760 | 19,0 % |
+| Flyer_Home_Sie.pdf | 1.293.673 | 19,0 % |
+| Urkunde_Repraesentant.pdf | 973.303 | 14,3 % |
+| PayPal_QR_schwarz.png | 3.400 | 0,0 % |
+| GiroCode_schwarz.png | 2.020 | 0,0 % |
+| Hinweise_zur_Verwendung_der_Materialien.pdf (statisch) | 645.844 | 9,5 % |
+| **Summe Einzeldateien** | **6.804.358 (6,49 MB)** | 100 % |
+| ZIP-Datei | 6.805.366 | — |
+| **Multipart-Payload (tatsächlich versendet)** | **6.805.795 Byte (6,49 MB)** | — |
+
+### 14.8 Maillimit — jetzt sekundär, nur dokumentiert (Vorgabe Abschnitt 13)
+
+```
+Korrekte Payload = 6,49 MB (6.805.795 Byte)
+Limit            = 4,45 MB (4.450.000 Byte, konservative Vercel-Schätzung)
+Differenz        = 2,36 MB (2.355.795 Byte) — Payload liegt bei 152,9% des Limits
+```
+
+**Kein weiterer Kompressionsversuch in dieser Runde.** Die Differenz
+ist ausschließlich eine Folge des korrekten (nicht mehr subsetteten)
+Font-Embeddings — dieselbe Größenordnung wie vor der (fehlerhaften)
+Font-Subsetting-Optimierung in Runde 1. Alle anderen, davon
+unabhängigen Optimierungen (Foto, Urkunden-Hintergrund, Transport)
+bleiben aktiv.
+
+Die Entscheidung über die weitere Versandarchitektur (z. B. sicheres
+Font-Subsetting mit anderer Bibliothek/Strategie, mehrere Mails,
+Download-Link, serverseitige Rekonstruktion) ist eine bewusste,
+gemeinsame Entscheidung — siehe Abschnitt 8 dieses Berichts für die
+bereits dokumentierten Optionen.
+
+### 14.9 Tests
+
+Neu:
+- `core/pdf/extractPdfText.js` + Text-Integritätstests in
+  `renderFlyer.test.js` (4 Tests) — nützlich, aber NICHT ausreichend
+  gegen den konkreten Bug (siehe 14.4).
+- `core/pdf/pdfVisualDiff.js`, `scripts/pdf-visual-diff.py` — echte
+  Pixel-Vergleichs-Infrastruktur.
+- `core/pdf/pdfVisualRegression.test.js` (3 Tests) — die tatsächlich
+  wirksamen Regressionstests, verifiziert gegen den echten Bug.
+- `core/materials/staticCompanionMaterialGuide.test.js` (5 Tests).
+- `renderFlyer.test.js`: Urkunden-Größenschwelle auf realistische
+  1,1 MB angehoben (Kommentar erklärt, warum sie nicht mehr bei
+  900 KB liegt).
+- `core/mail/representativeMailPayloadSize.test.js`: von hartem
+  Pass/Fail gegen das 90%-Ziel auf Diagnose + großzügige
+  Sanity-Grenze umgestellt (Begründung im Testkommentar) — verhindert,
+  dass ein Test erneut Druck erzeugt, Dokumente kaputt zu komprimieren.
+
+**646 Tests gesamt, alle grün.** `npm run build` erfolgreich.
+
+### 14.10 Production-Abnahme
+
+Vollständige Pipeline mit echten Testdaten (Daniel Feigenbutz,
+Düsseldorf, 015233795099, d.feigenbutz@its-for-kids.de bzw.
+Maximilian Bartholomäus-Schweighofer für die Urkunde) neu gerendert
+und visuell geprüft (siehe 14.5) — Name, Telefon, E-Mail, Region
+jeweils vollständig, keine fehlenden Zeichen, keine einzelnen
+Glyphen, keine falschen Abstände. Anleitung (statisch) vollständig
+lesbar, Fließtexte und Überschriften intakt.

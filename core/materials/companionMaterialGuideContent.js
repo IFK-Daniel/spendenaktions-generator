@@ -30,6 +30,7 @@ export const COMPANION_MATERIAL_GUIDE_SECTIONS = Object.freeze([
       "Diese Datei ist für die professionelle Produktion Deines Flyers gedacht. Sie enthält die für den Druck erforderliche Beschnittzugabe.",
       "Du kannst die PDF beispielsweise bei Flyeralarm oder einer Druckerei Deiner Wahl hochladen. Bitte die Datei nicht selbst beschneiden oder skalieren.",
       "Wenn das Bestellportal nach dem Endformat fragt: DIN A5, 148 × 210 mm. Die Datei selbst besitzt aufgrund der Beschnittzugabe 150 × 212 mm.",
+      "Für einen wertigen Flyer empfehlen wir ein Papier mit etwa 170 g/m². Wenn Du eine nachhaltigere Variante bevorzugst, eignet sich beispielsweise Recyclingpapier mit dieser Grammatur; alternativ ist Bilderdruck matt eine klassische Wahl.",
     ]),
   }),
   Object.freeze({
@@ -37,9 +38,10 @@ export const COMPANION_MATERIAL_GUIDE_SECTIONS = Object.freeze([
     heading: "Flyer Home",
     paragraphs: Object.freeze([
       "Diese Datei ist für den Ausdruck auf einem normalen DIN-A4-Drucker vorbereitet. Sie enthält zwei identische DIN-A5-Flyer nebeneinander.",
-      "Drucke die PDF auf DIN A4, im Querformat, in tatsächlicher Größe / 100 % – nicht „An Seite anpassen“.",
-      "Duplex-Einstellung: „An der kurzen Kante wenden“.",
+      "Drucke die PDF auf DIN A4, im Querformat, doppelseitig. Wenn Dein Drucker nicht randlos drucken kann, kannst Du die automatische Größenanpassung des Druckers verwenden. Dadurch wird der Flyer geringfügig kleiner, bleibt aber vollständig sichtbar.",
+      "Duplex-Einstellung: „An der kurzen Kante wenden“. Je nach Drucker oder Betriebssystem kann diese Einstellung auch anders heißen, zum Beispiel „schmale Seite“.",
       "Danach das Blatt an den Schnittmarkierungen mittig teilen. So erhältst Du zwei zweiseitige DIN-A5-Flyer.",
+      "Für den Ausdruck zu Hause empfehlen wir Papier mit etwa 160 g/m². Bitte prüfe vorher, welche Papierstärke Dein Drucker unterstützt.",
     ]),
   }),
   Object.freeze({

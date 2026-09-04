@@ -74,8 +74,12 @@ export async function generateCompanionMaterialGuide({ deps = {} } = {}) {
 
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
-  const bold = await pdfDoc.embedFont(boldBytes);
-  const regular = await pdfDoc.embedFont(regularBytes);
+  // `subset: true` bettet nur die tatsächlich benutzten Glyphen ein statt
+  // des kompletten NotoSans-Font-Files (siehe gleiche Korrektur in
+  // `core/pdf/renderFlyer.js`) — ohne diese Option war die Anleitung
+  // allein durch zwei komplett eingebettete Schriftschnitte über 600 KB groß.
+  const bold = await pdfDoc.embedFont(boldBytes, { subset: true });
+  const regular = await pdfDoc.embedFont(regularBytes, { subset: true });
 
   const layout = new GuideLayout(pdfDoc, { bold, regular });
   layout.drawTitleBanner(COMPANION_MATERIAL_GUIDE_TITLE);

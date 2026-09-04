@@ -1,0 +1,67 @@
+{
+  "note": "Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket: Flyer Druckerei Du+Sie, Flyer Home Du+Sie, Repräsentantenurkunde, PayPal-QR schwarz, GiroCode schwarz, Begleit-Anleitung. Das Testfoto ist eine synthetische, aber realistische Rekonstruktion eines Smartphone-Fotos (3024x4032px, JPEG-Quelle ~350KB) — kein echtes Nutzerfoto war für diese Messung verfügbar.",
+  "maxRequestBytes": 4450000,
+  "maxRequestBytesSource": "core/mail/sendRepresentativeMaterials.js MAX_REQUEST_BYTES — per Live-Test gegen Production ermittelte, konservative Grenze unterhalb von Vercels ~4,5MB Serverless-Function-Body-Limit (Node-Runtime, plattformseitig fix, nicht konfigurierbar).",
+  "scenarios": {
+    "before_beide_bugs": {
+      "description": "Ausgangszustand: Foto wird unskaliert als verlustfreies PNG eingebettet (core/photo/normalizePhotoToPng.js) UND Textschriften (NotoSans) werden ohne Subsetting komplett eingebettet (core/pdf/renderFlyer.js, core/materials/generateCompanionMaterialGuide.js).",
+      "photoBytes": 3023036,
+      "photoFormat": "image/png (unskaliert, 3024x4032px)",
+      "files": {
+        "Flyer_Druckerei_Du.pdf": 5978555,
+        "Flyer_Druckerei_Sie.pdf": 5978467,
+        "Flyer_Home_Du.pdf": 5976098,
+        "Flyer_Home_Sie.pdf": 5976005,
+        "Urkunde_Repraesentant.pdf": 1643990,
+        "PayPal_QR_schwarz.png": 3400,
+        "GiroCode_schwarz.png": 2020,
+        "Hinweise_zur_Verwendung_der_Materialien.pdf": 645844
+      },
+      "totalRawBytes": 26204379,
+      "zipBytes": 26205387,
+      "recipientRequestPayloadBytes": 34940671,
+      "percentOfLimit": 785,
+      "fitsUnderLimit": false
+    },
+    "after_photo_und_font_fix": {
+      "description": "Nach Fix: Foto wird auf max. 1600px Kante herunterskaliert und als JPEG (Qualität 0.88) eingebettet; Textschriften werden mit pdf-lib { subset: true } eingebettet (nur tatsächlich benutzte Glyphen). Zertifikats-Hintergrundgrafik (statisches Template-Asset) unverändert.",
+      "photoBytes": 51847,
+      "photoFormat": "image/jpeg (auf 1200x1600px herunterskaliert)",
+      "files": {
+        "Flyer_Druckerei_Du.pdf": 689453,
+        "Flyer_Druckerei_Sie.pdf": 689360,
+        "Flyer_Home_Du.pdf": 686972,
+        "Flyer_Home_Sie.pdf": 686885,
+        "Urkunde_Repraesentant.pdf": 1319568,
+        "PayPal_QR_schwarz.png": 3400,
+        "GiroCode_schwarz.png": 2020,
+        "Hinweise_zur_Verwendung_der_Materialien.pdf": 12723
+      },
+      "totalRawBytes": 4090381,
+      "zipBytes": 4091389,
+      "recipientRequestPayloadBytes": 5455343,
+      "percentOfLimit": 123,
+      "fitsUnderLimit": false
+    }
+  },
+  "reductionSummary": {
+    "totalRawBytesReductionPercent": 84.4,
+    "zipBytesReductionPercent": 84.4,
+    "recipientRequestPayloadReductionPercent": 84.4,
+    "guideFileReductionPercent": 98.0,
+    "flyerFileReductionPercent_excludingPhoto": 49.7,
+    "certificateFileReductionPercent": 19.7
+  },
+  "zipVsSumOfFiles": {
+    "note": "PDFs/PNGs sind bereits komprimiert (FlateDecode, DCTDecode) — ein ZIP bringt praktisch keine zusätzliche Kompression.",
+    "before": { "sumOfFilesBytes": 26204379, "zipBytes": 26205387, "zipIsSmallerByPercent": -0.004 },
+    "after": { "sumOfFilesBytes": 4090381, "zipBytes": 4091389, "zipIsSmallerByPercent": -0.025 }
+  },
+  "remainingGapAfterFix": {
+    "recipientRequestPayloadBytes": 5455343,
+    "maxRequestBytes": 4450000,
+    "overLimitByBytes": 1005343,
+    "overLimitByPercent": 23,
+    "dominantRemainingContributor": "Urkunde_Repraesentant.pdf (1319568 Byte, 32% des Pakets) — enthält eine unkomprimiert eingebettete 3508x4961px-Hintergrundgrafik (1,29 MB PNG); verlustfreie Farbpaletten-Optimierung wurde geprüft (theoretisch -52%, siehe Bericht), aber in dieser Session nicht produktiv umgesetzt (Werkzeug-Risiko beim direkten Patchen der Bild-Stream in der statischen Template-PDF)."
+  }
+}

@@ -53,3 +53,29 @@ test("GiroCode-Abschnitt nennt die im Home-Sheet ermittelte Duplex-Einstellung",
   const joined = flyerHome.paragraphs.join(" ");
   assert.match(joined, /kurzen Kante wenden/);
 });
+
+test("Home-Anleitung nennt zusätzlich eine alltagssprachliche Bezeichnung (z. B. 'schmale Seite') für die Duplex-Einstellung", () => {
+  const flyerHome = COMPANION_MATERIAL_GUIDE_SECTIONS.find((s) => s.key === "flyerHome");
+  const joined = flyerHome.paragraphs.join(" ");
+  assert.match(joined, /schmale Seite/);
+});
+
+test("Home-Anleitung erlaubt die automatische Größenanpassung des Druckers, statt 100 % vorzuschreiben", () => {
+  const flyerHome = COMPANION_MATERIAL_GUIDE_SECTIONS.find((s) => s.key === "flyerHome");
+  const joined = flyerHome.paragraphs.join(" ");
+  assert.match(joined, /automatische Größenanpassung/);
+  assert.equal(/100\s?%/.test(joined), false, "Anleitung darf keine pauschale 100-%-Pflicht mehr nennen");
+  assert.equal(/tatsächliche(r)? Größe/.test(joined), false, "Anleitung darf 'tatsächliche Größe' nicht mehr fordern");
+});
+
+test("Home-Anleitung empfiehlt ca. 160 g/m² Papier für den Ausdruck zu Hause", () => {
+  const flyerHome = COMPANION_MATERIAL_GUIDE_SECTIONS.find((s) => s.key === "flyerHome");
+  const joined = flyerHome.paragraphs.join(" ");
+  assert.match(joined, /160\s?g\/m²/);
+});
+
+test("Druckerei-Anleitung empfiehlt ca. 170 g/m² Papier", () => {
+  const flyerPrint = COMPANION_MATERIAL_GUIDE_SECTIONS.find((s) => s.key === "flyerPrint");
+  const joined = flyerPrint.paragraphs.join(" ");
+  assert.match(joined, /170\s?g\/m²/);
+});

@@ -118,7 +118,18 @@ export async function renderFlyer({ templateConfig, textValues = {}, imageAssets
 async function embedFonts(pdfDoc, fontAssets) {
   const embedded = {};
   for (const [fontKey, fontAsset] of Object.entries(fontAssets)) {
-    embedded[fontKey] = await pdfDoc.embedFont(fontAsset.type === "file" ? fontAsset.bytes : fontAsset.name);
+    // `subset: true` ist für Datei-Fonts (fontkit) essenziell: pdf-lib
+    // bettet ohne diese Option das komplette Font-File ein statt nur
+    // der tatsächlich benutzten Glyphen — bei einer Unicode-Schrift wie
+    // NotoSans (mehrere hundert KB) macht das jedes einzelne PDF, das
+    // ein Textfeld mit dieser Schrift enthält, um denselben Betrag
+    // größer. Für Standard-Fonts (14 PDF-Basisschriften, kein
+    // eingebettetes Font-File) ist die Option wirkungslos, aber
+    // ungefährlich.
+    embedded[fontKey] =
+      fontAsset.type === "file"
+        ? await pdfDoc.embedFont(fontAsset.bytes, { subset: true })
+        : await pdfDoc.embedFont(fontAsset.name);
   }
   return embedded;
 }

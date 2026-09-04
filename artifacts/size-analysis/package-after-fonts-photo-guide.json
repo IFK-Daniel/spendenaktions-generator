@@ -1,0 +1,45 @@
+{
+  "label": "after-fonts-photo-guide",
+  "photoPath": "artifacts/size-analysis/photo-new-downscaled.jpg",
+  "photoBytes": 51847,
+  "photoMimeType": "image/jpeg",
+  "files": [
+    {
+      "filename": "Flyer_Druckerei_Du.pdf",
+      "size": 689453
+    },
+    {
+      "filename": "Flyer_Druckerei_Sie.pdf",
+      "size": 689360
+    },
+    {
+      "filename": "Flyer_Home_Du.pdf",
+      "size": 686972
+    },
+    {
+      "filename": "Flyer_Home_Sie.pdf",
+      "size": 686885
+    },
+    {
+      "filename": "Urkunde_Repraesentant.pdf",
+      "size": 1319568
+    },
+    {
+      "filename": "PayPal_QR_schwarz.png",
+      "size": 3400
+    },
+    {
+      "filename": "GiroCode_schwarz.png",
+      "size": 2020
+    },
+    {
+      "filename": "Hinweise_zur_Verwendung_der_Materialien.pdf",
+      "size": 12723
+    }
+  ],
+  "totalRaw": 4090381,
+  "zipSize": 4091389,
+  "recipientPayloadBytes": 5455343,
+  "maxRequestBytes": 4450000,
+  "fitsUnderLimit": false
+}

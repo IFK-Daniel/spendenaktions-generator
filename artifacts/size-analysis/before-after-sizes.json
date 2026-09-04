@@ -1,67 +1,116 @@
 {
-  "note": "Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket: Flyer Druckerei Du+Sie, Flyer Home Du+Sie, Repräsentantenurkunde, PayPal-QR schwarz, GiroCode schwarz, Begleit-Anleitung. Das Testfoto ist eine synthetische, aber realistische Rekonstruktion eines Smartphone-Fotos (3024x4032px, JPEG-Quelle ~350KB) — kein echtes Nutzerfoto war für diese Messung verfügbar.",
+  "note": "Zweite Optimierungsrunde. Ersetzt die erste Fassung dieser Datei vollständig. Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket. Das Testfoto ist eine an das real vom Nutzer beobachtete Paketgröße (~2MB je Flyer vor Optimierung) kalibrierte, aber weiterhin synthetische Rekonstruktion eines Smartphone-Fotos — kein echtes Nutzerfoto war verfügbar. Die ERSTE Berichtsfassung verwendete ein bewusst extremeres Worst-Case-Testfoto (34,9MB Payload) zur Ursachenermittlung, das NICHT der realen Paketgröße entsprach; diese Fassung korrigiert das.",
   "maxRequestBytes": 4450000,
-  "maxRequestBytesSource": "core/mail/sendRepresentativeMaterials.js MAX_REQUEST_BYTES — per Live-Test gegen Production ermittelte, konservative Grenze unterhalb von Vercels ~4,5MB Serverless-Function-Body-Limit (Node-Runtime, plattformseitig fix, nicht konfigurierbar).",
+  "targetReservePercent": 10,
+  "targetPayloadBytes": 4005000,
+  "targetRawZipBytes": 3003634,
+  "jsonStructureOverheadBytes": 155,
   "scenarios": {
-    "before_beide_bugs": {
-      "description": "Ausgangszustand: Foto wird unskaliert als verlustfreies PNG eingebettet (core/photo/normalizePhotoToPng.js) UND Textschriften (NotoSans) werden ohne Subsetting komplett eingebettet (core/pdf/renderFlyer.js, core/materials/generateCompanionMaterialGuide.js).",
-      "photoBytes": 3023036,
+    "vorher_original_code_kalibriertes_foto": {
+      "description": "Originalcode (vor jeder Optimierung), Testfoto kalibriert auf die vom Nutzer real beobachtete Paketgröße (~2MB je Flyer).",
+      "photoBytes": 602646,
       "photoFormat": "image/png (unskaliert, 3024x4032px)",
       "files": {
-        "Flyer_Druckerei_Du.pdf": 5978555,
-        "Flyer_Druckerei_Sie.pdf": 5978467,
-        "Flyer_Home_Du.pdf": 5976098,
-        "Flyer_Home_Sie.pdf": 5976005,
+        "Flyer_Druckerei_Du.pdf": 2169431,
+        "Flyer_Druckerei_Sie.pdf": 2169343,
+        "Flyer_Home_Du.pdf": 2166973,
+        "Flyer_Home_Sie.pdf": 2166885,
         "Urkunde_Repraesentant.pdf": 1643990,
         "PayPal_QR_schwarz.png": 3400,
         "GiroCode_schwarz.png": 2020,
         "Hinweise_zur_Verwendung_der_Materialien.pdf": 645844
       },
-      "totalRawBytes": 26204379,
-      "zipBytes": 26205387,
-      "recipientRequestPayloadBytes": 34940671,
-      "percentOfLimit": 785,
+      "totalRawBytes": 10967886,
+      "zipBytes": 10968894,
+      "recipientRequestPayloadBytes": 14625347,
+      "percentOfLimit": 329,
       "fitsUnderLimit": false
     },
-    "after_photo_und_font_fix": {
-      "description": "Nach Fix: Foto wird auf max. 1600px Kante herunterskaliert und als JPEG (Qualität 0.88) eingebettet; Textschriften werden mit pdf-lib { subset: true } eingebettet (nur tatsächlich benutzte Glyphen). Zertifikats-Hintergrundgrafik (statisches Template-Asset) unverändert.",
-      "photoBytes": 51847,
-      "photoFormat": "image/jpeg (auf 1200x1600px herunterskaliert)",
+    "nach_runde_1_foto_und_font_fix": {
+      "description": "Nach Runde 1: Foto auf 1600px/JPEG q0.88 normalisiert, pdf-lib embedFont({subset:true}) für Flyer und Anleitung. Urkunden-Hintergrund noch unverändert.",
+      "photoBytes": 38437,
+      "photoFormat": "image/jpeg (1200x1600px)",
       "files": {
-        "Flyer_Druckerei_Du.pdf": 689453,
-        "Flyer_Druckerei_Sie.pdf": 689360,
-        "Flyer_Home_Du.pdf": 686972,
-        "Flyer_Home_Sie.pdf": 686885,
+        "Flyer_Druckerei_Du.pdf": 676037,
+        "Flyer_Druckerei_Sie.pdf": 675946,
+        "Flyer_Home_Du.pdf": 673554,
+        "Flyer_Home_Sie.pdf": 673462,
         "Urkunde_Repraesentant.pdf": 1319568,
         "PayPal_QR_schwarz.png": 3400,
         "GiroCode_schwarz.png": 2020,
-        "Hinweise_zur_Verwendung_der_Materialien.pdf": 12723
+        "Hinweise_zur_Verwendung_der_Materialien.pdf": 13419
       },
-      "totalRawBytes": 4090381,
-      "zipBytes": 4091389,
-      "recipientRequestPayloadBytes": 5455343,
-      "percentOfLimit": 123,
+      "totalRawBytes": 4037411,
+      "zipBytes": 4038419,
+      "recipientRequestPayloadBytes": 5384715,
+      "percentOfLimit": 121,
       "fitsUnderLimit": false
+    },
+    "nach_runde_2_zertifikat_und_fotoaufloesung": {
+      "description": "Nach Runde 2: Urkunden-Hintergrund (alle 8 Rollen) verlustarm auf 256-Farben-Palette optimiert (-50.7%); Foto-Zielauflösung von 1600px auf 1200px reduziert (exakt hergeleitet aus 300dpi x 3fach-Zoom-Bedarf = 1130px + Reserve), JPEG-Qualität unverändert 0.88.",
+      "photoBytes": 22504,
+      "photoFormat": "image/jpeg (900x1200px)",
+      "files": {
+        "Flyer_Druckerei_Du.pdf": 660108,
+        "Flyer_Druckerei_Sie.pdf": 660012,
+        "Flyer_Home_Du.pdf": 657619,
+        "Flyer_Home_Sie.pdf": 657531,
+        "Urkunde_Repraesentant.pdf": 648885,
+        "PayPal_QR_schwarz.png": 3400,
+        "GiroCode_schwarz.png": 2020,
+        "Hinweise_zur_Verwendung_der_Materialien.pdf": 13419
+      },
+      "totalRawBytes": 3302994,
+      "zipBytes": 3304002,
+      "recipientRequestPayloadBytes": 4405491,
+      "percentOfLimit": 99,
+      "fitsUnderLimit": true,
+      "reservePercent": 1.0
     }
   },
-  "reductionSummary": {
-    "totalRawBytesReductionPercent": 84.4,
-    "zipBytesReductionPercent": 84.4,
-    "recipientRequestPayloadReductionPercent": 84.4,
-    "guideFileReductionPercent": 98.0,
-    "flyerFileReductionPercent_excludingPhoto": 49.7,
-    "certificateFileReductionPercent": 19.7
+  "certificateBackgroundOptimization": {
+    "method": "pikepdf: Truecolor-RGB-PNG (eingebettetes Image-XObject) -> Indexed-Colorspace-PNG mit 256 Farben, verifiziert per Pixel-Diff (2x-Rendering, PyMuPDF) gegen Schwellenwerte mean<0.5 und max<20 (Skala 0-255)",
+    "affectedTemplates": [
+      "certificate-representative-male", "certificate-representative-female",
+      "certificate-ambassador-male", "certificate-ambassador-female",
+      "certificate-advisory-board", "certificate-curatorium",
+      "certificate-expert-council", "certificate-economic-council"
+    ],
+    "representativeBefore": 1328372,
+    "representativeAfter": 654846,
+    "representativeReductionPercent": 50.7,
+    "verificationMeanDiff": 0.0135,
+    "verificationMaxDiff": 9
   },
-  "zipVsSumOfFiles": {
-    "note": "PDFs/PNGs sind bereits komprimiert (FlateDecode, DCTDecode) — ein ZIP bringt praktisch keine zusätzliche Kompression.",
-    "before": { "sumOfFilesBytes": 26204379, "zipBytes": 26205387, "zipIsSmallerByPercent": -0.004 },
-    "after": { "sumOfFilesBytes": 4090381, "zipBytes": 4091389, "zipIsSmallerByPercent": -0.025 }
+  "photoResolutionDerivation": {
+    "circleDiameterMm": 31.9,
+    "printDpi": 300,
+    "maxZoomFactor": 3,
+    "minRequiredPx": 1130,
+    "oldMaxDimensionPx": 1600,
+    "newMaxDimensionPx": 1200,
+    "marginOverMinimumPercent": 6.2
   },
-  "remainingGapAfterFix": {
-    "recipientRequestPayloadBytes": 5455343,
-    "maxRequestBytes": 4450000,
-    "overLimitByBytes": 1005343,
-    "overLimitByPercent": 23,
-    "dominantRemainingContributor": "Urkunde_Repraesentant.pdf (1319568 Byte, 32% des Pakets) — enthält eine unkomprimiert eingebettete 3508x4961px-Hintergrundgrafik (1,29 MB PNG); verlustfreie Farbpaletten-Optimierung wurde geprüft (theoretisch -52%, siehe Bericht), aber in dieser Session nicht produktiv umgesetzt (Werkzeug-Risiko beim direkten Patchen der Bild-Stream in der statischen Template-PDF)."
+  "jpegQualityMatrix": {
+    "resolutionPx": 1200,
+    "90": 24548,
+    "88_current": 22504,
+    "85": 20594,
+    "80": 19463,
+    "75": 18775,
+    "decision": "unverändert bei 88 — keine belastbare visuelle Verifikation niedrigerer Werte möglich (synthetisches Testfoto ohne Kanten/Details), und Einsparpotenzial (~15KB über 4 Flyer bei Stufe 75) zu gering relativ zur verbleibenden Lücke von ~300KB"
+  },
+  "remainingGapAfterRound2": {
+    "currentRawZipBytes": 3304002,
+    "targetRawZipBytes": 3003634,
+    "overageBytes": 299360,
+    "overagePercent": 9.97,
+    "currentPayloadBytes": 4405491,
+    "targetPayloadBytes": 4005000,
+    "payloadOverageBytes": 400491,
+    "payloadOveragePercent": 10.0,
+    "fitsAbsoluteLimit": true,
+    "fitsWithRequestedReserve": false,
+    "recommendedNextStep": "multipart/form-data statt Base64+JSON (Abschnitt 8, Option C in attachment-size-analysis.md) -- reduziert Transport-Overhead um ~33% ohne Qualitäts- oder Mailanzahl-Änderung; nicht umgesetzt in dieser Runde (Vorgabe: nichts Großes umbauen ohne Freigabe)"
   }
 }

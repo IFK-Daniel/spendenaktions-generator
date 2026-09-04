@@ -274,6 +274,28 @@ test("Urkunde: weibliche Vorlage rendert ohne Fehler und ohne Warnings", async (
   assert.deepEqual(warnings, []);
 });
 
+test("Urkunde: optimierte Hintergrundgrafik bleibt deutlich unter 1MB, Seitengröße bleibt A4 (Mailgrößen-Optimierung, siehe attachment-size-analysis.md)", async () => {
+  const { bytes } = await renderFlyer({
+    templateConfig: certificateRepresentativeMaleTemplate,
+    textValues: { name: "Daniel Feigenbutz" },
+    imageAssets: {},
+    deps: nodeDeps,
+  });
+  // Regressionsschutz gegen versehentliches Zurücksetzen der
+  // Paletten-Optimierung (`scripts/optimize-template-backgrounds.py`):
+  // vor der Optimierung lag die Urkunde bei ca. 1,32MB.
+  assert.ok(bytes.length < 900_000, `Urkunde ist ${bytes.length} Byte groß, erwartet < 900000 (Optimierung wirkt weiterhin)`);
+
+  const doc = await PDFDocument.load(bytes);
+  const page = doc.getPage(0);
+  const { width, height } = page.getSize();
+  // Seitengröße aus der Template-Config (297.127083 x 419.893732mm) —
+  // unverändert gegenüber der Größenoptimierung, die ausschließlich die
+  // Bildkodierung des Hintergrunds ändert, keine Geometrie.
+  assert.ok(Math.abs(width - mmToPt(297.127083)) < 1, `Breite ${width}pt weicht von der Template-Trimgröße ab`);
+  assert.ok(Math.abs(height - mmToPt(419.893732)) < 1, `Höhe ${height}pt weicht von der Template-Trimgröße ab`);
+});
+
 test("Flyer weiblich (Druckerei): korrekte Seitengröße (kein Beschnitt im Master, siehe Template-Kommentar), keine Warnungen", async () => {
   const { bytes, warnings } = await renderFlyer({
     templateConfig: flyerFemalePrintFrontTemplate,

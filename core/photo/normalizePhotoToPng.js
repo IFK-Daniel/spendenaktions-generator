@@ -2,17 +2,21 @@ import { loadImage as defaultLoadImage } from "../branding/loadImage.js";
 
 // Zielfläche des Fotos im Flyer ist ein Kreis von ca. 32mm Durchmesser
 // (siehe `templates/_shared/representativeFlyerFrontBase.js`: 31.195mm;
-// `templates/flyer-print-front/template.config.js`: 31.9mm) — bei
-// 300dpi Druckauflösung entspricht das rund 378px. Der Fotoausschnitt-
-// Editor erlaubt zusätzlich manuelles Hineinzoomen bis Faktor 3
-// (`core/pdf/photoCrop.js`, `PHOTO_CROP_MAX_ZOOM`); bei maximalem Zoom
-// werden pro Zielpixel entsprechend mehr Quellpixel benötigt, deshalb
-// bezieht sich die Zielauflösung auf den ungünstigsten Fall
-// (378px × 3 ≈ 1134px) statt auf die unskalierte Zielgröße. 1600px
-// liegt komfortabel darüber und deckt zusätzlich beide Ausgabeformate
-// (Druckerei UND Home nutzen dasselbe Foto-Asset) ohne sichtbaren
-// Qualitätsverlust ab.
-const MAX_PHOTO_DIMENSION_PX = 1600;
+// `templates/flyer-print-front/template.config.js`: 31.9mm). Bei
+// professioneller Druckauflösung von 300dpi (Branchenstandard für
+// Offset-/Digitaldruck, siehe Vorgabe "sinnvolle Druckauflösung")
+// entspricht das rund 377px. Der Fotoausschnitt-Editor erlaubt
+// zusätzlich manuelles Hineinzoomen bis Faktor 3
+// (`core/pdf/photoCrop.js`, `PHOTO_CROP_MAX_ZOOM`) — beim Zoomen wird
+// pro Zielpixel ein kleinerer Bildausschnitt auf dieselbe Fläche
+// vergrößert, es werden also MEHR Quellpixel pro Zielfläche benötigt,
+// nicht weniger. Der ungünstigste Fall (maximaler Zoom) braucht daher
+// 377px × 3 ≈ 1130px Quellauflösung. 1200px liegt knapp darüber (siehe
+// `artifacts/size-analysis/attachment-size-analysis.md`, Abschnitt zur
+// Fotoauflösung, für die genaue Herleitung inkl. 450dpi-Vergleich) —
+// bewusst nicht pauschal stark reduziert, sondern exakt an den
+// tatsächlichen Bedarf inklusive Zoom-Spielraum angepasst.
+const MAX_PHOTO_DIMENSION_PX = 1200;
 const PHOTO_JPEG_QUALITY = 0.88;
 
 /**

@@ -32,6 +32,15 @@ export const ROLE_KEYS = Object.freeze({
 export const SHARED_FLYER_BACK_KEY = "SHARED_FLYER_BACK";
 
 /**
+ * Ansprache-Varianten, die für den Repräsentanten-Flyer automatisch
+ * BEIDE erzeugt werden (siehe `flyerSalutationVariants` unten) — der
+ * Anwender wählt keine Ansprache aus, der Generator iteriert über diese
+ * Liste. Als benannte Konstante gehalten, damit sie nicht doppelt als
+ * String-Literal in `roleConfig.js` und `generator.js` gepflegt wird.
+ */
+export const REPRESENTATIVE_FLYER_SALUTATION_VARIANTS = Object.freeze(["du", "sie"]);
+
+/**
  * Rollenbezeichnung für Gremien mit bewusst EINER neutralen Form für
  * alle Geschlechter ("Mitglied des …") statt einer erfundenen
  * männlichen/weiblichen Form (siehe Vorgabe: "keine sprachlich
@@ -83,6 +92,16 @@ function neutralRoleLabel(label) {
  *   künftige Wegbegleiter-Flyer (rollenabhängige Vorderseite + dieselbe
  *   gemeinsame Rückseite) ohne Architekturänderung darauf verweisen
  *   können. Siehe `getFlyerBackTemplateKey`.
+ * - `flyerSalutationVariants` — Ansprache-Varianten, die für DIESE
+ *   Rolle beim Flyer automatisch ALLE erzeugt werden (kein
+ *   Anwender-Auswahlfeld, siehe `src/intern/generator.js`,
+ *   `getFlyerSalutationVariants`). `["du", "sie"]` beim Repräsentanten
+ *   (zwei Vorderseiten-Vorlagen je Geschlecht); leer bei jeder Rolle
+ *   ohne eigene Ansprache-Varianten. Eine künftige Rolle mit eigenen
+ *   Du-/Sie-Vorlagen (z. B. Botschafter) muss hier nur diese Liste
+ *   sowie ihre Vorderseiten-Vorlagen ergänzen — dieselbe
+ *   Iterations-Mechanik in `generator.js` wird automatisch wiederverwendet,
+ *   ohne dort verteilte Rollen-Sonderfälle.
  * - `additionalMaterialKeys` — Platzhalter für künftige, rollenspezifische
  *   Zusatzmaterialien (aktuell für alle Rollen leer — es werden bewusst
  *   keine noch nicht existierenden Materialien erfunden).
@@ -98,6 +117,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]),
     flyerMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: REPRESENTATIVE_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.AMBASSADOR]: Object.freeze({
@@ -110,6 +130,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR]),
     flyerMaterialKeys: Object.freeze([]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ECONOMIC_COUNCIL]: Object.freeze({
@@ -122,6 +143,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL]),
     flyerMaterialKeys: Object.freeze([]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.EXPERT_COUNCIL]: Object.freeze({
@@ -134,6 +156,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL]),
     flyerMaterialKeys: Object.freeze([]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.CURATOR]: Object.freeze({
@@ -151,6 +174,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM]),
     flyerMaterialKeys: Object.freeze([]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
   }),
   [ROLE_KEYS.ADVISORY_BOARD]: Object.freeze({
@@ -163,6 +187,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD]),
     flyerMaterialKeys: Object.freeze([]),
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
+    flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
   }),
 });
@@ -243,6 +268,19 @@ export function isFlyerTemplateAvailableForRole(roleKey, materialKey) {
  */
 export function getFlyerBackTemplateKey(roleKey) {
   return getRoleConfig(roleKey).flyerBackTemplateKey;
+}
+
+/**
+ * Ansprache-Varianten, die für den Flyer dieser Rolle automatisch ALLE
+ * erzeugt werden sollen (z. B. `["du", "sie"]` beim Repräsentanten) —
+ * kein Anwender-Auswahlfeld, siehe Modul-Doku oben. Leeres Array =
+ * diese Rolle hat keine Ansprache-Varianten (aktuell jede Rolle außer
+ * Repräsentant, da sie ohnehin noch keine Flyer-Vorlage hat).
+ * @param {string} roleKey
+ * @returns {string[]}
+ */
+export function getFlyerSalutationVariants(roleKey) {
+  return getRoleConfig(roleKey).flyerSalutationVariants;
 }
 
 /** Ob für diese Rolle bereits eine Urkunden-Vorlage für `materialKey` hinterlegt ist. */

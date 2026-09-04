@@ -263,6 +263,30 @@ test("humbee erhält die Einzeldateien und keine ZIP-Datei", async () => {
   assert.ok(!("zipFilename" in request.humbee));
 });
 
+test("Repräsentanten-Flyer erzeugt automatisch beide Ansprachevarianten — humbee erhält BEIDE Dateien vollständig, keine geht verloren", async () => {
+  // Simuliert das Ergebnis von `buildFlyerVariantEntries` +
+  // `generateFlyerMaterial` in `src/intern/generator.js`: zwei Flyer-
+  // Dateien mit demselben Materialschlüssel/derselben Kategorie, aber
+  // unterschiedlichem, ansprachespezifischem Dateinamen/Label.
+  const flyerFiles = [
+    { key: "FLYER_HOME", label: "Flyer Home – Du", filename: "IFK_Max_Mustermann_Flyer_Home_Du.pdf", content: new Blob(["du"]) },
+    { key: "FLYER_HOME", label: "Flyer Home – Sie", filename: "IFK_Max_Mustermann_Flyer_Home_Sie.pdf", content: new Blob(["sie"]) },
+  ];
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    zip: fakeZip(),
+    files: flyerFiles,
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.humbee.attachments.length, 2);
+  assert.deepEqual(
+    request.humbee.attachments.map((att) => att.filename),
+    ["IFK_Max_Mustermann_Flyer_Home_Du.pdf", "IFK_Max_Mustermann_Flyer_Home_Sie.pdf"]
+  );
+});
+
 test("humbee-Empfänger und -Betreff werden aus dem Manifest gebildet", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),

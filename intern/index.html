@@ -142,23 +142,6 @@
               </label>
             </div>
           </fieldset>
-          <!-- Nur sichtbar, wenn ein ausgewähltes Material eine
-               Anredevariante braucht (aktuell der Repräsentanten-Flyer,
-               siehe generator.js `updateSalutationVisibility`). Urkunde
-               und QR-Codes benötigen keine Ansprache. -->
-          <fieldset class="person-field salutation-fieldset" id="salutation-field" hidden>
-            <legend class="field-label">Ansprache</legend>
-            <div class="gender-options">
-              <label class="gender-option" data-salutation-option="du">
-                <input type="radio" name="salutation" value="du" />
-                Du
-              </label>
-              <label class="gender-option" data-salutation-option="sie">
-                <input type="radio" name="salutation" value="sie" />
-                Sie
-              </label>
-            </div>
-          </fieldset>
           <div class="person-field ifk-id-field">
             <div class="field-label-row">
               <label class="field-label" for="ifk-id-input">IFK-ID</label>
@@ -291,7 +274,7 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
               Flyer – Druckerei
-              <span class="material-item-hint" data-default-hint>Foto &amp; Ansprache nötig</span>
+              <span class="material-item-hint" data-default-hint>Foto nötig, Du/Sie automatisch</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >
@@ -299,7 +282,7 @@
             <label class="material-item">
               <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
               Flyer – Home
-              <span class="material-item-hint" data-default-hint>Foto &amp; Ansprache nötig</span>
+              <span class="material-item-hint" data-default-hint>Foto nötig, Du/Sie automatisch</span>
               <span class="material-item-hint" data-role-unavailable-hint hidden
                 >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
               >

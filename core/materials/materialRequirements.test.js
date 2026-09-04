@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   FIELD_KEYS,
+  FIELD_ORDER,
   getRequiredFieldsForMaterial,
   getRequiredFieldsForMaterials,
   getMissingFields,
@@ -151,54 +152,12 @@ test("Flyer benötigt weiterhin die gemeinsamen Grunddaten inklusive IFK-ID und 
   }
 });
 
-test("Ansprache (Du/Sie) ist Pflicht für beide Flyer-Varianten", () => {
+test("Ansprache ist KEIN Formular-Pflichtfeld mehr — FIELD_KEYS kennt 'salutation' nicht (Repräsentanten-Flyer erzeugt beide Varianten automatisch)", () => {
+  assert.equal("SALUTATION" in FIELD_KEYS, false);
+  assert.equal(FIELD_ORDER.includes("salutation"), false);
   for (const flyerKey of [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]) {
-    for (const roleKey of ["representative", "ambassador"]) {
-      assert.equal(
-        getRequiredFieldsForMaterial(flyerKey, roleKey).includes(FIELD_KEYS.SALUTATION),
-        true,
-        `${flyerKey} / ${roleKey} sollte Ansprache verlangen`
-      );
-    }
+    assert.equal(getRequiredFieldsForMaterial(flyerKey, "representative").includes("salutation"), false);
   }
-});
-
-test("Ansprache wird von KEINER Urkunde und KEINEM QR-Code verlangt", () => {
-  for (const key of [
-    MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
-    MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR,
-    MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD,
-    MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM,
-    MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL,
-    MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL,
-    MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK,
-    MATERIAL_TYPE_KEYS.QR_GIRO_BLACK,
-  ]) {
-    for (const roleKey of ROLE_KEY_LIST) {
-      assert.equal(
-        getRequiredFieldsForMaterial(key, roleKey).includes(FIELD_KEYS.SALUTATION),
-        false,
-        `${key} / ${roleKey} darf keine Ansprache verlangen`
-      );
-    }
-  }
-});
-
-test("Vereinigungsmenge Flyer + Urkunde: Ansprache stammt nur vom Flyer, blockiert die Urkunde aber nicht separat", () => {
-  const flyerFields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, "representative");
-  const certFields = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE, "representative");
-  assert.equal(flyerFields.includes(FIELD_KEYS.SALUTATION), true);
-  assert.equal(certFields.includes(FIELD_KEYS.SALUTATION), false);
-
-  // Datensatz ohne Ansprache: Urkunde ist "bereit", Flyer nicht.
-  const values = { firstName: "Max", lastName: "Mustermann", gender: "male" };
-  assert.deepEqual(getMissingFields(certFields, values), []);
-  assert.ok(getMissingFields(flyerFields, values).includes(FIELD_KEYS.SALUTATION));
-});
-
-test("Ansprache erscheint in FIELD_ORDER direkt nach Geschlecht", () => {
-  const flyer = getRequiredFieldsForMaterial(MATERIAL_TYPE_KEYS.FLYER_HOME, "representative");
-  assert.equal(flyer.indexOf(FIELD_KEYS.SALUTATION), flyer.indexOf(FIELD_KEYS.GENDER) + 1);
 });
 
 test("unbekannter Materialtyp wirft einen Fehler", () => {

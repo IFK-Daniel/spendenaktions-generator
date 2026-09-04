@@ -19,7 +19,6 @@ export const FIELD_KEYS = Object.freeze({
   FIRST_NAME: "firstName",
   LAST_NAME: "lastName",
   GENDER: "gender",
-  SALUTATION: "salutation",
   IFK_ID: "ifkId",
   EMAIL: "email",
   PHONE: "phone",
@@ -38,7 +37,6 @@ export const FIELD_ORDER = Object.freeze([
   FIELD_KEYS.FIRST_NAME,
   FIELD_KEYS.LAST_NAME,
   FIELD_KEYS.GENDER,
-  FIELD_KEYS.SALUTATION,
   FIELD_KEYS.IFK_ID,
   FIELD_KEYS.EMAIL,
   FIELD_KEYS.PHONE,
@@ -53,7 +51,6 @@ export const FIELD_LABELS = Object.freeze({
   [FIELD_KEYS.FIRST_NAME]: "Vorname",
   [FIELD_KEYS.LAST_NAME]: "Nachname",
   [FIELD_KEYS.GENDER]: "Geschlecht",
-  [FIELD_KEYS.SALUTATION]: "Ansprache",
   [FIELD_KEYS.IFK_ID]: "IFK-ID",
   [FIELD_KEYS.EMAIL]: "E-Mail-Adresse",
   [FIELD_KEYS.PHONE]: "Telefonnummer",
@@ -79,18 +76,17 @@ export const FIELD_LABELS = Object.freeze({
  *   hinterlegt und daher kein Formularfeld.
  * - Flyer: benötigt vollständige Daten (siehe Vorgabe) — beide
  *   schwarzen QR-Codes werden für den Flyer eingebettet, daher auch
- *   IFK-ID und PayPal-Link. Zusätzlich `salutation` (Du/Sie): der
- *   Repräsentanten-Flyer hat je Ansprache eine eigene Vorderseite
- *   (siehe `resolveRepresentativeFlyerFrontTemplate.js`). Bewusst NUR
- *   bei den Flyern — Urkunde und QR-Codes brauchen keine Ansprache und
- *   dürfen dadurch nicht blockiert werden.
+ *   IFK-ID und PayPal-Link. KEINE Ansprache (Du/Sie): der
+ *   Repräsentanten-Flyer erzeugt automatisch BEIDE Ansprachevarianten
+ *   (siehe `core/materials/roleConfig.js`, `flyerSalutationVariants`,
+ *   sowie `src/intern/generator.js`) — das ist keine Nutzerauswahl und
+ *   daher kein Formular-Pflichtfeld.
  */
 const BASE_MATERIAL_REQUIREMENTS = Object.freeze({
   [MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI]: Object.freeze([
     FIELD_KEYS.FIRST_NAME,
     FIELD_KEYS.LAST_NAME,
     FIELD_KEYS.GENDER,
-    FIELD_KEYS.SALUTATION,
     FIELD_KEYS.EMAIL,
     FIELD_KEYS.PHONE,
     FIELD_KEYS.IFK_ID,
@@ -101,7 +97,6 @@ const BASE_MATERIAL_REQUIREMENTS = Object.freeze({
     FIELD_KEYS.FIRST_NAME,
     FIELD_KEYS.LAST_NAME,
     FIELD_KEYS.GENDER,
-    FIELD_KEYS.SALUTATION,
     FIELD_KEYS.EMAIL,
     FIELD_KEYS.PHONE,
     FIELD_KEYS.IFK_ID,

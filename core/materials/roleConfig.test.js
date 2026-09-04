@@ -12,7 +12,9 @@ import {
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
   getFlyerBackTemplateKey,
+  getFlyerSalutationVariants,
   SHARED_FLYER_BACK_KEY,
+  REPRESENTATIVE_FLYER_SALUTATION_VARIANTS,
 } from "./roleConfig.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { sharedFlyerBackTemplate, SHARED_FLYER_BACK_KEY as TEMPLATE_BACK_KEY } from "../../templates/flyer-shared-back/template.config.js";
@@ -146,4 +148,20 @@ test("die gemeinsame Rückseite ist statisch: keine dynamischen Felder, keine Co
   assert.equal(sharedFlyerBackTemplate.page.trimWidthMm, 148);
   assert.equal(sharedFlyerBackTemplate.page.trimHeightMm, 210);
   assert.equal(sharedFlyerBackTemplate.page.outputBleedMm, 0);
+});
+
+test("Repräsentant hat genau die Ansprache-Varianten Du/Sie hinterlegt — automatische Erzeugung, keine Nutzerauswahl", () => {
+  assert.deepEqual(getFlyerSalutationVariants(ROLE_KEYS.REPRESENTATIVE), ["du", "sie"]);
+  assert.deepEqual(getFlyerSalutationVariants(ROLE_KEYS.REPRESENTATIVE), REPRESENTATIVE_FLYER_SALUTATION_VARIANTS);
+});
+
+test("jede andere Rolle hat (noch) keine Ansprache-Varianten hinterlegt (keine Flyer-Vorlage vorhanden)", () => {
+  for (const roleKey of ROLE_KEY_LIST) {
+    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
+    assert.deepEqual(
+      getFlyerSalutationVariants(roleKey),
+      [],
+      `${roleKey} sollte keine Ansprache-Varianten hinterlegt haben`
+    );
+  }
 });

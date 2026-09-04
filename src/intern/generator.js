@@ -13,6 +13,7 @@ import {
 } from "../../core/materials/buildRepresentativeDeliveryRequest.js";
 import { generateQrMaterials } from "../../core/materials/generateQrMaterials.js";
 import { generateFlyerMaterial } from "../../core/materials/generateFlyerMaterial.js";
+import { buildFlyerVariantEntries } from "../../core/materials/buildFlyerVariantEntries.js";
 import { generateCertificateMaterial } from "../../core/materials/generateCertificateMaterial.js";
 import {
   MATERIAL_TYPE_KEYS,
@@ -40,7 +41,6 @@ import { flyerRepresentativeFemaleSieFrontTemplate } from "../../templates/flyer
 import { flyerRepresentativeMaleDuFrontTemplate } from "../../templates/flyer-representative-male-du-front/template.config.js";
 import { flyerRepresentativeMaleSieFrontTemplate } from "../../templates/flyer-representative-male-sie-front/template.config.js";
 import { sharedFlyerBackTemplate } from "../../templates/flyer-shared-back/template.config.js";
-import { resolveRepresentativeFlyerFrontTemplate } from "../../core/materials/resolveRepresentativeFlyerFrontTemplate.js";
 import { certificateRepresentativeMaleTemplate } from "../../templates/certificate-representative-male/template.config.js";
 import { certificateRepresentativeFemaleTemplate } from "../../templates/certificate-representative-female/template.config.js";
 import { certificateAmbassadorMaleTemplate } from "../../templates/certificate-ambassador-male/template.config.js";
@@ -95,10 +95,15 @@ const CERTIFICATE_KEYS = new Set(CERTIFICATE_MATERIAL_KEYS);
 // Koordinatensatz, siehe `templates/_shared/representativeFlyerFrontBase.js`).
 // Druckerei und Home teilen sich dieselbe Vorderseite — der Master hat
 // keinen Anschnitt, der Unterschied bleibt technisch (`page.outputBleedMm`,
-// generische Trim-/Bleed-Logik in `core/pdf/renderFlyer.js`). Die
-// Auflösung selbst (inkl. klarer Fehler bei fehlendem/ungültigem
-// Geschlecht oder fehlender Ansprache, kein stiller Fallback) liegt in
-// `core/materials/resolveRepresentativeFlyerFrontTemplate.js`.
+// generische Trim-/Bleed-Logik in `core/pdf/renderFlyer.js`).
+//
+// Ansprache (Du/Sie) ist KEINE Nutzerauswahl — für jedes gewählte
+// Flyer-Material werden automatisch beide Varianten erzeugt (siehe
+// `core/materials/buildFlyerVariantEntries.js`, das diese Tabelle
+// zusammen mit `core/materials/roleConfig.js`,
+// `flyerSalutationVariants`, verwendet; Auflösung inkl. klarer Fehler
+// bei fehlendem/ungültigem Geschlecht liegt in
+// `core/materials/resolveRepresentativeFlyerFrontTemplate.js`).
 const REPRESENTATIVE_FLYER_FRONT_TEMPLATES = Object.freeze({
   female: Object.freeze({
     du: flyerRepresentativeFemaleDuFrontTemplate,
@@ -109,10 +114,6 @@ const REPRESENTATIVE_FLYER_FRONT_TEMPLATES = Object.freeze({
     sie: flyerRepresentativeMaleSieFrontTemplate,
   }),
 });
-
-function resolveFlyerFrontTemplate({ gender, salutation }) {
-  return resolveRepresentativeFlyerFrontTemplate(REPRESENTATIVE_FLYER_FRONT_TEMPLATES, gender, salutation);
-}
 
 // Flyer-RÜCKSEITE: EINE gemeinsame, rollen-, geschlechts- und
 // ansprache-unabhängige Vorlage (`templates/flyer-shared-back/`),
@@ -264,7 +265,6 @@ export function initGenerator() {
   const federalStateInput = document.getElementById("federal-state-input");
   const regionField = document.getElementById("region-field");
   const regionInput = document.getElementById("region-input");
-  const salutationField = document.getElementById("salutation-field");
   const paypalInput = document.getElementById("paypal-input");
   const generateBtn = document.getElementById("generate-btn");
   const errorMessage = document.getElementById("error-message");
@@ -356,7 +356,6 @@ export function initGenerator() {
     [FIELD_KEYS.FIRST_NAME]: document.querySelector('label[for="first-name-input"]'),
     [FIELD_KEYS.LAST_NAME]: document.querySelector('label[for="last-name-input"]'),
     [FIELD_KEYS.GENDER]: document.querySelector(".gender-fieldset legend"),
-    [FIELD_KEYS.SALUTATION]: document.querySelector(".salutation-fieldset legend"),
     [FIELD_KEYS.IFK_ID]: document.querySelector('label[for="ifk-id-input"]'),
     [FIELD_KEYS.EMAIL]: document.querySelector('label[for="intern-email-input"]'),
     [FIELD_KEYS.PHONE]: document.querySelector('label[for="phone-input"]'),
@@ -374,20 +373,6 @@ export function initGenerator() {
     for (const [fieldKey, labelEl] of Object.entries(requiredFieldLabelElements)) {
       labelEl?.classList.toggle("field-label--required", requiredFields.has(fieldKey));
     }
-    updateSalutationVisibility(requiredFields);
-  }
-
-  // Die Ansprache-Auswahl (Du/Sie) ist nur sichtbar, wenn mindestens ein
-  // aktuell ausgewähltes Material sie benötigt (aktuell ausschließlich
-  // der Repräsentanten-Flyer, siehe `materialRequirements.js`). Andere
-  // Materialien (Urkunde, QR) werden dadurch nicht blockiert — sie
-  // führen `salutation` gar nicht als Pflichtfeld (Vorgabe Abschnitt 2).
-  function updateSalutationVisibility(requiredFields) {
-    if (!salutationField) return;
-    const fields =
-      requiredFields ||
-      new Set(getRequiredFieldsForMaterials(selectedMaterialKeys(), selectedRoleKey()));
-    salutationField.hidden = !fields.has(FIELD_KEYS.SALUTATION);
   }
 
   function updateMaterialAvailabilityForRole(roleKey) {
@@ -1631,7 +1616,6 @@ export function initGenerator() {
     const firstName = firstNameInput.value.trim();
     const lastName = lastNameInput.value.trim();
     const genderInput = document.querySelector('input[name="gender"]:checked');
-    const salutationInput = document.querySelector('input[name="salutation"]:checked');
     const ifkIdRaw = ifkIdInput.value.trim();
     const email = emailInput.value.trim();
     const phone = phoneInput.value.trim();
@@ -1650,7 +1634,6 @@ export function initGenerator() {
       firstName,
       lastName,
       gender: genderInput ? genderInput.value : "",
-      salutation: salutationInput ? salutationInput.value : "",
       ifkId: ifkIdRaw,
       email,
       phone,
@@ -1847,11 +1830,6 @@ export function initGenerator() {
       ifkId,
       role,
       gender: genderInput ? genderInput.value : undefined,
-      // Ansprache (Du/Sie) ist ausschließlich für die Flyer-Vorderseite
-      // relevant — nur bei einem tatsächlich bereiten Flyer ans Manifest
-      // übergeben, damit sie keine andere Materialauswahl blockiert
-      // (Urkunde/QR brauchen keine Ansprache, Vorgabe Abschnitt 13).
-      salutation: requestedFlyer && flyerDataReady && salutationInput ? salutationInput.value : undefined,
       // E-Mail/Telefon/Foto/Bundesland/Region sind ausschließlich für
       // den Flyer relevant (Vorgabe Abschnitt 6) — bei jeder anderen
       // Materialauswahl bewusst NICHT ans Manifest übergeben, damit ein
@@ -1919,21 +1897,27 @@ export function initGenerator() {
           mimeType: "image/png",
         };
 
-        // Vorderseite je Geschlecht × Ansprache, Rückseite immer die eine
-        // gemeinsame — für beide Flyer-Materialschlüssel (Druckerei/Home)
-        // dieselbe Vorder-/Rückseite; der Unterschied ist rein technisch
-        // (`page.outputBleedMm`). Beides ist durch die materialabhängige
-        // Pflichtfeldprüfung oben bereits abgesichert (Geschlecht +
-        // Ansprache sind für den Flyer Pflicht) — der Resolver wirft
-        // trotzdem klar, falls eines fehlt (kein stiller Fallback).
-        const flyerFront = resolveFlyerFrontTemplate({
+        // Ansprache (Du/Sie) ist KEINE Nutzerauswahl: für jede gewählte
+        // Flyer-Materialart werden automatisch ALLE für diese Rolle
+        // konfigurierten Ansprache-Varianten erzeugt (aktuell ["du","sie"]
+        // beim Repräsentanten). Die gesamte Aufschlüsselung (welche
+        // Varianten, Dateiname/Label je Variante, passende Vorderseite)
+        // steckt in `buildFlyerVariantEntries` (DOM-frei, unabhängig
+        // testbar) — hier nur noch Rendern + Sammeln. Rückseite ist
+        // immer die eine gemeinsame; Druckerei und Home teilen sich
+        // dieselbe Vorderseite je Variante (Unterschied bleibt rein
+        // technisch über `page.outputBleedMm`).
+        const flyerVariantJobs = buildFlyerVariantEntries({
+          entries: flyerEntries,
+          roleKey: role,
           gender: manifest.person.gender,
-          salutation: manifest.person.salutation,
+          frontTemplatesByGenderAndSalutation: REPRESENTATIVE_FLYER_FRONT_TEMPLATES,
         });
-        for (const entry of flyerEntries) {
+
+        for (const job of flyerVariantJobs) {
           const flyerFile = await generateFlyerMaterial({
-            entry,
-            templateConfig: flyerFront,
+            entry: job.entry,
+            templateConfig: job.templateConfig,
             backTemplateConfig: resolveFlyerBackTemplate(),
             person: manifest.person,
             photoAsset,

@@ -26,15 +26,19 @@ function fakeManifest(overrides = {}) {
   };
 }
 
-function fakeZip() {
-  return { filename: "IFK_Materialien_IFK7QX_Max_Mustermann.zip", blob: new Blob(["zip-inhalt"]) };
-}
-
 function fakeFiles() {
   return [
-    { filename: "IFK_Max_Mustermann_PayPal_QR_gruen.png", content: new Blob(["grün"]) },
-    { filename: "IFK_Max_Mustermann_GiroCode_schwarz.png", content: new Blob(["schwarz"]) },
+    { key: "PAYPAL_QR", label: "PayPal QR", category: "qr", filename: "IFK_Max_Mustermann_PayPal_QR_gruen.png", content: new Blob(["grün"]) },
+    { key: "GIROCODE", label: "GiroCode", category: "qr", filename: "IFK_Max_Mustermann_GiroCode_schwarz.png", content: new Blob(["schwarz"]) },
   ];
+}
+
+function fakeCertificateFile() {
+  return { key: "CERTIFICATE", label: "Urkunde", category: "certificate", filename: "IFK_Max_Mustermann_Urkunde.pdf", content: new Blob(["urkunde"]) };
+}
+
+function findByKind(parts, kind) {
+  return parts.find((part) => part.kind === kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,57 +129,54 @@ test("resolveRepresentativeRecipient (deprecated) delegiert an person.email", ()
 });
 
 // ---------------------------------------------------------------------------
-// buildRepresentativeDeliveryRequest — bezieht die Adresse aus companionEmail
+// buildRepresentativeDeliveryRequest — Materialien-Teil (kind: "materials")
 // ---------------------------------------------------------------------------
 
 test("buildRepresentativeDeliveryRequest: Standardempfänger stammt aus companionEmail", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "max@example.com");
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.equal(materials.to, "max@example.com");
 });
 
 test("E: nachträglich geänderter Formularwert gewinnt (kein Snapshot)", async () => {
   // Manifest wurde mit alt@example.de erzeugt, Formular steht jetzt auf neu@example.de.
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest({ email: "alt@example.de" }),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "neu@example.de",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "neu@example.de");
+  assert.equal(findByKind(request.recipientMailParts, "materials").to, "neu@example.de");
 });
 
 test("F: screenshot-importierte Adresse im Formular wird verwendet", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "ocr.import@its-for-kids.de",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "ocr.import@its-for-kids.de");
+  assert.equal(findByKind(request.recipientMailParts, "materials").to, "ocr.import@its-for-kids.de");
 });
 
 test("G: abweichende Adresse überschreibt den Wegbegleiter-Wert", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     alternativeEmail: "mitarbeiter@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "mitarbeiter@example.com");
+  assert.equal(findByKind(request.recipientMailParts, "materials").to, "mitarbeiter@example.com");
 });
 
 test("H: ungültige abweichende Adresse wirft mit code ALTERNATIVE_EMAIL_INVALID", async () => {
@@ -183,7 +184,6 @@ test("H: ungültige abweichende Adresse wirft mit code ALTERNATIVE_EMAIL_INVALID
     () =>
       buildRepresentativeDeliveryRequest({
         manifest: fakeManifest(),
-        zip: fakeZip(),
         files: fakeFiles(),
         companionEmail: "max@example.com",
         alternativeEmail: "keine-email",
@@ -198,7 +198,6 @@ test("I: leere Wegbegleiter-Adresse wirft mit code COMPANION_EMAIL_INVALID", asy
     () =>
       buildRepresentativeDeliveryRequest({
         manifest: fakeManifest(),
-        zip: fakeZip(),
         files: fakeFiles(),
         companionEmail: "   ",
         logoUrl: "https://example.com/logo.png",
@@ -210,106 +209,116 @@ test("I: leere Wegbegleiter-Adresse wirft mit code COMPANION_EMAIL_INVALID", asy
 test("buildRepresentativeDeliveryRequest: fällt ohne companionEmail auf manifest.person.email zurück", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest({ email: "fallback@example.com" }),
-    zip: fakeZip(),
     files: fakeFiles(),
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "fallback@example.com");
+  assert.equal(findByKind(request.recipientMailParts, "materials").to, "fallback@example.com");
 });
 
-test("Repräsentant erhält genau das ZIP-Archiv als rohen Blob (kein Base64), keine Einzeldateien", async () => {
+test("Empfänger erhält genau das ZIP-Archiv als rohen Blob (kein Base64), keine Einzeldateien", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.zipFilename, "IFK_Materialien_IFK7QX_Max_Mustermann.zip");
-  assert.ok(request.recipient.zipBlob instanceof Blob);
-  assert.ok(request.recipient.zipBlob.size > 0);
-  assert.deepEqual(Object.keys(request.recipient).sort(), [
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.match(materials.attachmentFilename, /^IFK_Materialien_.*\.zip$/);
+  assert.ok(materials.attachmentBlob instanceof Blob);
+  assert.ok(materials.attachmentBlob.size > 0);
+  assert.deepEqual(Object.keys(materials).sort(), [
+    "attachmentBlob",
+    "attachmentFilename",
     "html",
+    "kind",
     "subject",
     "text",
     "to",
-    "zipBlob",
-    "zipFilename",
   ]);
 });
 
-test("humbee erhält die Einzeldateien als rohe Blobs (kein Base64) und keine ZIP-Datei", async () => {
+test("humbee (Materialien) erhält die Einzeldateien als rohe Blobs (kein Base64) und keine ZIP-Datei, keine Anleitung", async () => {
   const files = fakeFiles();
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files,
+    guideFile: { filename: "Hinweise_zur_Verwendung.pdf", content: new Blob(["anleitung"]) },
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.humbee.attachments.length, files.length);
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.equal(humbeeMaterials.attachments.length, files.length);
   assert.deepEqual(
-    request.humbee.attachments.map((att) => att.filename),
+    humbeeMaterials.attachments.map((att) => att.filename),
     files.map((file) => file.filename)
   );
-  for (const attachment of request.humbee.attachments) {
+  for (const attachment of humbeeMaterials.attachments) {
     assert.ok(attachment.content instanceof Blob);
     assert.ok(attachment.content.size > 0);
   }
-  assert.ok(!("zipBlob" in request.humbee));
-  assert.ok(!("zipFilename" in request.humbee));
+  assert.ok(!humbeeMaterials.attachments.some((att) => att.filename.includes("Hinweise")));
 });
 
-test("Repräsentanten-Flyer erzeugt automatisch beide Ansprachevarianten — humbee erhält BEIDE Dateien vollständig, keine geht verloren", async () => {
-  // Simuliert das Ergebnis von `buildFlyerVariantEntries` +
-  // `generateFlyerMaterial` in `src/intern/generator.js`: zwei Flyer-
-  // Dateien mit demselben Materialschlüssel/derselben Kategorie, aber
-  // unterschiedlichem, ansprachespezifischem Dateinamen/Label.
+test("Anleitung landet nur im ZIP der Empfänger-Mail, nicht bei humbee", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: fakeFiles(),
+    guideFile: { filename: "Hinweise_zur_Verwendung.pdf", content: new Blob(["anleitung"]) },
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  const materials = findByKind(request.recipientMailParts, "materials");
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.ok(materials.attachmentBlob.size > 0);
+  assert.equal(humbeeMaterials.attachments.length, fakeFiles().length);
+});
+
+test("Repräsentanten-Flyer mit beiden Ansprachevarianten — humbee erhält BEIDE Dateien vollständig, keine geht verloren", async () => {
   const flyerFiles = [
-    { key: "FLYER_HOME", label: "Flyer Home – Du", filename: "IFK_Max_Mustermann_Flyer_Home_Du.pdf", content: new Blob(["du"]) },
-    { key: "FLYER_HOME", label: "Flyer Home – Sie", filename: "IFK_Max_Mustermann_Flyer_Home_Sie.pdf", content: new Blob(["sie"]) },
+    { key: "FLYER_HOME", label: "Flyer Home – Du", category: "flyer", filename: "IFK_Max_Mustermann_Flyer_Home_Du.pdf", content: new Blob(["du"]) },
+    { key: "FLYER_HOME", label: "Flyer Home – Sie", category: "flyer", filename: "IFK_Max_Mustermann_Flyer_Home_Sie.pdf", content: new Blob(["sie"]) },
   ];
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: flyerFiles,
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.humbee.attachments.length, 2);
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.equal(humbeeMaterials.attachments.length, 2);
   assert.deepEqual(
-    request.humbee.attachments.map((att) => att.filename),
+    humbeeMaterials.attachments.map((att) => att.filename),
     ["IFK_Max_Mustermann_Flyer_Home_Du.pdf", "IFK_Max_Mustermann_Flyer_Home_Sie.pdf"]
   );
 });
 
-test("humbee-Empfänger und -Betreff werden aus dem Manifest gebildet", async () => {
+test("humbee-Empfänger und -Betreff (Materialien) werden aus dem Manifest gebildet, mit Materialversand-Kennzeichnung", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.humbee.to, "office@its-for-kids.de");
-  assert.equal(request.humbee.subject, "Repräsentant Bayern / Regensburg Land / Mustermann, Max");
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.equal(humbeeMaterials.to, "office@its-for-kids.de");
+  assert.equal(humbeeMaterials.subject, "Repräsentant Bayern / Regensburg Land / Mustermann, Max – Materialversand");
 });
 
 test("gender 'female' erzeugt 'Repräsentantin' im Mailtext an den Wegbegleiter", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest({ gender: "female", firstName: "Anna" }),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "anna@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.match(request.recipient.text, /Repräsentantin/);
+  assert.match(findByKind(request.recipientMailParts, "materials").text, /Repräsentantin/);
 });
 
 test("B: Botschafter — direkter Versand löst die Formularadresse auf", async () => {
@@ -323,14 +332,14 @@ test("B: Botschafter — direkter Versand löst die Formularadresse auf", async 
         gender: "female",
       },
     },
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "anna.botschafter@its-for-kids.de",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "anna.botschafter@its-for-kids.de");
-  assert.match(request.recipient.text, /Botschafterin/);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.equal(materials.to, "anna.botschafter@its-for-kids.de");
+  assert.match(materials.text, /Botschafterin/);
 });
 
 test("C: Kurator — direkter Versand löst die Formularadresse auf, ohne Region", async () => {
@@ -344,16 +353,16 @@ test("C: Kurator — direkter Versand löst die Formularadresse auf, ohne Region
         gender: "male",
       },
     },
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "kurator@its-for-kids.de",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "kurator@its-for-kids.de");
-  assert.match(request.recipient.text, /Einsatz als Kurator von It's for Kids/);
-  assert.doesNotMatch(request.recipient.text, /Repräsentant/);
-  assert.equal(request.humbee.subject, "Kurator / Feigenbutz, Daniel");
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.equal(materials.to, "kurator@its-for-kids.de");
+  assert.match(materials.text, /Einsatz als Kurator von It's for Kids/);
+  assert.doesNotMatch(materials.text, /Repräsentant/);
+  assert.equal(findByKind(request.humbeeMailParts, "materials").subject, "Kurator / Feigenbutz, Daniel – Materialversand");
 });
 
 test("D: Beirat/Fachrat/Wirtschaftsrat — rollenunabhängige Empfängerauflösung", async () => {
@@ -362,12 +371,11 @@ test("D: Beirat/Fachrat/Wirtschaftsrat — rollenunabhängige Empfängerauflösu
       manifest: {
         person: { firstName: "Kim", lastName: "Muster", ifkId: "IFK7QX", role },
       },
-      zip: fakeZip(),
       files: fakeFiles(),
       companionEmail: `${role}@its-for-kids.de`,
       logoUrl: "https://example.com/logo.png",
     });
-    assert.equal(request.recipient.to, `${role}@its-for-kids.de`);
+    assert.equal(findByKind(request.recipientMailParts, "materials").to, `${role}@its-for-kids.de`);
   }
 });
 
@@ -384,80 +392,75 @@ function companionManifest() {
 test("IFK-A: direkter Versand — Mail enthält exakt die companion-IFK-ID", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: companionManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { firstName: "Nadine", lastName: "Mehwitz", role: "representative", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "n.mehwitz@its-for-kids.de");
-  assert.match(request.recipient.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
-  assert.match(request.recipient.html, /IFK7QX/);
-  assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.equal(materials.to, "n.mehwitz@its-for-kids.de");
+  assert.match(materials.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
+  assert.match(materials.html, /IFK7QX/);
+  assert.match(humbeeMaterials.text, /IFK-ID: IFK7QX/);
 });
 
 test("IFK-B: alternative Adresse — Empfänger wechselt, IFK-ID bleibt die des Wegbegleiters", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: companionManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { firstName: "Nadine", lastName: "Mehwitz", role: "representative", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
     alternativeEmail: "mitarbeiterin@its-for-kids.de",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.equal(request.recipient.to, "mitarbeiterin@its-for-kids.de");
-  assert.match(request.recipient.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
-  assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
-  assert.doesNotMatch(request.recipient.text, /undefined/);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.equal(materials.to, "mitarbeiterin@its-for-kids.de");
+  assert.match(materials.text, /Deine persönliche IFK-ID lautet: IFK7QX\./);
+  assert.match(findByKind(request.humbeeMailParts, "materials").text, /IFK-ID: IFK7QX/);
+  assert.doesNotMatch(materials.text, /undefined/);
 });
 
 test("IFK-C: companion-IFK-ID gewinnt gegen einen abweichenden Manifest-Snapshot", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: { person: { firstName: "Max", lastName: "Muster", role: "representative", ifkId: "IFKOLD" } },
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { ifkId: "IFKNEW", email: "max@example.com" },
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.match(request.recipient.text, /IFK-ID lautet: IFKNEW\./);
-  assert.doesNotMatch(request.recipient.text, /IFKOLD/);
-  assert.match(request.humbee.text, /IFK-ID: IFKNEW/);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.match(materials.text, /IFK-ID lautet: IFKNEW\./);
+  assert.doesNotMatch(materials.text, /IFKOLD/);
+  assert.match(findByKind(request.humbeeMailParts, "materials").text, /IFK-ID: IFKNEW/);
 });
 
 test("IFK-D: neu generierte IFK-ID im companion wird verwendet", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: companionManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { ifkId: "IFK9ZZ", email: "n.mehwitz@its-for-kids.de" },
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.match(request.recipient.text, /IFK-ID lautet: IFK9ZZ\./);
+  assert.match(findByKind(request.recipientMailParts, "materials").text, /IFK-ID lautet: IFK9ZZ\./);
 });
 
 test("IFK-E: ohne jede IFK-ID erscheint kein 'undefined'/'null' und kein IFK-ID-Satz", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: companionManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { email: "n.mehwitz@its-for-kids.de" },
     logoUrl: "https://example.com/logo.png",
   });
 
-  for (const value of [
-    request.recipient.subject,
-    request.recipient.text,
-    request.recipient.html,
-    request.humbee.subject,
-    request.humbee.text,
-  ]) {
+  const materials = findByKind(request.recipientMailParts, "materials");
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  for (const value of [materials.subject, materials.text, materials.html, humbeeMaterials.subject, humbeeMaterials.text]) {
     assert.doesNotMatch(value, /\b(undefined|null|NaN)\b/);
   }
-  assert.doesNotMatch(request.recipient.text, /persönliche IFK-ID lautet/);
-  assert.doesNotMatch(request.humbee.text, /IFK-ID:/);
+  assert.doesNotMatch(materials.text, /persönliche IFK-ID lautet/);
+  assert.doesNotMatch(humbeeMaterials.text, /IFK-ID:/);
 });
 
 test("IFK-E2: Fail-safe — ein Platzhalterwert in einem Mailfeld bricht den Versand ab", async () => {
@@ -465,7 +468,6 @@ test("IFK-E2: Fail-safe — ein Platzhalterwert in einem Mailfeld bricht den Ver
     () =>
       buildRepresentativeDeliveryRequest({
         manifest: companionManifest(),
-        zip: fakeZip(),
         files: fakeFiles(),
         // erzwingt "Hallo undefined," im Text
         companion: { firstName: "undefined", ifkId: "IFK7QX", email: "n.mehwitz@its-for-kids.de" },
@@ -479,28 +481,27 @@ for (const role of ["representative", "ambassador", "curator"]) {
   test(`IFK-F: IFK-ID-Logik rollenunabhängig (${role})`, async () => {
     const request = await buildRepresentativeDeliveryRequest({
       manifest: { person: { firstName: "Kim", lastName: "Muster", role } },
-      zip: fakeZip(),
       files: fakeFiles(),
       companion: { ifkId: "IFK7QX", email: `${role}@its-for-kids.de` },
       logoUrl: "https://example.com/logo.png",
     });
-    assert.match(request.recipient.text, /IFK-ID lautet: IFK7QX\./);
-    assert.match(request.humbee.text, /IFK-ID: IFK7QX/);
+    assert.match(findByKind(request.recipientMailParts, "materials").text, /IFK-ID lautet: IFK7QX\./);
+    assert.match(findByKind(request.humbeeMailParts, "materials").text, /IFK-ID: IFK7QX/);
   });
 }
 
 test("companion überschreibt Manifest-Personendaten nur mit nicht-leeren Werten", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: { person: { firstName: "Max", lastName: "Muster", role: "representative", ifkId: "IFK7QX" } },
-    zip: fakeZip(),
     files: fakeFiles(),
     companion: { firstName: "  ", ifkId: "", email: "max@example.com" },
     logoUrl: "https://example.com/logo.png",
   });
 
   // leerer companion.firstName/ifkId lässt die Manifest-Werte unangetastet
-  assert.match(request.recipient.text, /Hallo Max,/);
-  assert.match(request.recipient.text, /IFK-ID lautet: IFK7QX\./);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  assert.match(materials.text, /Hallo Max,/);
+  assert.match(materials.text, /IFK-ID lautet: IFK7QX\./);
 });
 
 // ---------------------------------------------------------------------------
@@ -511,50 +512,180 @@ test("companion überschreibt Manifest-Personendaten nur mit nicht-leeren Werten
 test("flyerSalutationVariants: ['du'] (Standard-Starter-Set) → Mailtext enthält den Sie-Hinweis", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
     flyerSalutationVariants: ["du"],
   });
 
-  assert.match(request.recipient.text, /grundsätzlich per Du sind/);
+  assert.match(findByKind(request.recipientMailParts, "materials").text, /grundsätzlich duzen/);
 });
 
 test("flyerSalutationVariants: ['du','sie'] (Sie bewusst zusätzlich erzeugt) → kein Sie-Hinweis (irreführend, da schon dabei)", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
     flyerSalutationVariants: ["du", "sie"],
   });
 
-  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+  assert.doesNotMatch(findByKind(request.recipientMailParts, "materials").text, /grundsätzlich duzen/);
 });
 
 test("kein flyerSalutationVariants (kein Flyer im Versand, z. B. nur Urkunde) → kein Sie-Hinweis", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
   });
 
-  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+  assert.doesNotMatch(findByKind(request.recipientMailParts, "materials").text, /grundsätzlich duzen/);
 });
 
 test("flyerSalutationVariants: ['sie'] (nur Sie separat nacherzeugt, kein Du dabei) → kein Sie-Hinweis (Hinweis wäre inhaltlich falsch)", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
-    zip: fakeZip(),
     files: fakeFiles(),
     companionEmail: "max@example.com",
     logoUrl: "https://example.com/logo.png",
     flyerSalutationVariants: ["sie"],
   });
 
-  assert.doesNotMatch(request.recipient.text, /grundsätzlich per Du sind/);
+  assert.doesNotMatch(findByKind(request.recipientMailParts, "materials").text, /grundsätzlich duzen/);
+});
+
+// ---------------------------------------------------------------------------
+// Trennung Materialien/Urkunde (siehe roleConfig.js, CERTIFICATE_DELIVERY_MODES)
+// ---------------------------------------------------------------------------
+
+test("nur Materialien ausgewählt → genau 1 Empfänger-Mail (materials), keine Urkunden-Mail, blockedCertificate null", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: fakeFiles(),
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipientMailParts.length, 1);
+  assert.equal(request.recipientMailParts[0].kind, "materials");
+  assert.equal(request.humbeeMailParts.length, 1);
+  assert.equal(request.blockedCertificate, null);
+});
+
+test("nur Urkunde ausgewählt (Repräsentant) → genau 1 Empfänger-Mail (certificate), keine Materialien-Mail", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: [fakeCertificateFile()],
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipientMailParts.length, 1);
+  assert.equal(request.recipientMailParts[0].kind, "certificate");
+  assert.equal(request.humbeeMailParts.length, 1);
+  assert.equal(request.humbeeMailParts[0].kind, "certificate");
+  assert.equal(request.blockedCertificate, null);
+});
+
+test("Repräsentant: Materialien + Urkunde → automatisch 2 Empfänger-Mails und 2 humbee-Mails, beide an denselben Empfänger", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: [...fakeFiles(), fakeCertificateFile()],
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipientMailParts.length, 2);
+  assert.equal(request.humbeeMailParts.length, 2);
+  const materials = findByKind(request.recipientMailParts, "materials");
+  const certificate = findByKind(request.recipientMailParts, "certificate");
+  assert.ok(materials);
+  assert.ok(certificate);
+  assert.equal(materials.to, certificate.to);
+});
+
+test("Urkunden-Mail enthält NUR die Urkunde, keine Flyer/QR-Codes; Materialien-Mail enthält NIE die Urkunde", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: [...fakeFiles(), fakeCertificateFile()],
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  const certificate = findByKind(request.recipientMailParts, "certificate");
+  assert.equal(certificate.attachmentFilename, "IFK_Max_Mustermann_Urkunde.pdf");
+
+  const humbeeCertificate = findByKind(request.humbeeMailParts, "certificate");
+  assert.equal(humbeeCertificate.attachments.length, 1);
+  assert.equal(humbeeCertificate.attachments[0].filename, "IFK_Max_Mustermann_Urkunde.pdf");
+
+  const humbeeMaterials = findByKind(request.humbeeMailParts, "materials");
+  assert.ok(!humbeeMaterials.attachments.some((att) => att.filename.includes("Urkunde")));
+});
+
+test("Urkunden-Mail: Betreff gendered, Text ohne IFK-ID/technische Details", async () => {
+  const male = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest({ gender: "male" }),
+    files: [fakeCertificateFile()],
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+  assert.equal(findByKind(male.recipientMailParts, "certificate").subject, "Deine Urkunde als Repräsentant von It's for Kids");
+
+  const female = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest({ gender: "female", firstName: "Anna" }),
+    files: [fakeCertificateFile()],
+    companionEmail: "anna@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+  const certificateFemale = findByKind(female.recipientMailParts, "certificate");
+  assert.equal(certificateFemale.subject, "Deine Urkunde als Repräsentantin von It's for Kids");
+  assert.doesNotMatch(certificateFemale.text, /IFK-ID/);
+});
+
+test("humbee: Materialien- und Urkunden-Dokumentation sind getrennte Mails mit erkennbarem Betreff-Zusatz", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: fakeManifest(),
+    files: [...fakeFiles(), fakeCertificateFile()],
+    companionEmail: "max@example.com",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.match(findByKind(request.humbeeMailParts, "materials").subject, /Materialversand$/);
+  assert.match(findByKind(request.humbeeMailParts, "certificate").subject, /Urkundenversand$/);
+});
+
+test("nicht-repräsentative Rolle (blocked): Urkunde wird NICHT versendet — auch nicht bei manipuliertem Aufruf", async () => {
+  for (const role of ["ambassador", "curator", "advisory_board", "expert_council", "economic_council"]) {
+    const request = await buildRepresentativeDeliveryRequest({
+      manifest: { person: { firstName: "Kim", lastName: "Muster", ifkId: "IFK7QX", role, gender: "male" } },
+      files: [...fakeFiles(), fakeCertificateFile()],
+      companionEmail: `${role}@its-for-kids.de`,
+      logoUrl: "https://example.com/logo.png",
+    });
+
+    // Kern-Verteidigung: selbst wenn die Urkunde in `files` steckt (z. B.
+    // durch einen manipulierten Aufruf), entsteht dafür NIE ein Mail-Teil.
+    assert.equal(request.recipientMailParts.length, 1);
+    assert.equal(request.recipientMailParts[0].kind, "materials");
+    assert.equal(request.humbeeMailParts.length, 1);
+    assert.equal(request.humbeeMailParts[0].kind, "materials");
+    assert.ok(request.blockedCertificate);
+    assert.equal(request.blockedCertificate.key, "CERTIFICATE");
+  }
+});
+
+test("nicht-repräsentative Rolle: nur Urkunde ausgewählt (kein Material) → keine Mail-Teile, blockedCertificate gesetzt", async () => {
+  const request = await buildRepresentativeDeliveryRequest({
+    manifest: { person: { firstName: "Kim", lastName: "Muster", ifkId: "IFK7QX", role: "ambassador", gender: "male" } },
+    files: [fakeCertificateFile()],
+    companionEmail: "ambassador@its-for-kids.de",
+    logoUrl: "https://example.com/logo.png",
+  });
+
+  assert.equal(request.recipientMailParts.length, 0);
+  assert.equal(request.humbeeMailParts.length, 0);
+  assert.ok(request.blockedCertificate);
 });

@@ -18,6 +18,8 @@ import {
   DEFAULT_FLYER_SALUTATION_VARIANTS,
   getStarterSetMaterialKeys,
   hasStarterSet,
+  getCertificateDeliveryMode,
+  CERTIFICATE_DELIVERY_MODES,
 } from "./roleConfig.js";
 import { MATERIAL_TYPE_KEYS } from "./materialTypes.js";
 import { sharedFlyerBackTemplate, SHARED_FLYER_BACK_KEY as TEMPLATE_BACK_KEY } from "../../templates/flyer-shared-back/template.config.js";
@@ -190,4 +192,30 @@ test("jede andere Rolle hat (noch) keine Ansprache-Varianten hinterlegt (keine F
       `${roleKey} sollte keine Ansprache-Varianten hinterlegt haben`
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// certificateDeliveryMode — steuert, ob die Urkunde einer Rolle automatisiert
+// versendet werden darf (siehe buildRepresentativeDeliveryRequest.js). Die
+// Urkunden-GENERIERUNG bleibt für alle Rollen unverändert möglich — nur der
+// automatisierte Versand ist rollenabhängig gesperrt.
+// ---------------------------------------------------------------------------
+
+test("Repräsentant: certificateDeliveryMode ist SEPARATE_EMAIL (eigene Urkunden-Mail, getrennt von den Materialien)", () => {
+  assert.equal(getCertificateDeliveryMode(ROLE_KEYS.REPRESENTATIVE), CERTIFICATE_DELIVERY_MODES.SEPARATE_EMAIL);
+});
+
+test("Botschafter, Kurator, Beirat, Fachrat, Wirtschaftsrat: certificateDeliveryMode ist BLOCKED (vorläufige fachliche Sperre, siehe roleConfig.js)", () => {
+  for (const roleKey of ROLE_KEY_LIST) {
+    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
+    assert.equal(
+      getCertificateDeliveryMode(roleKey),
+      CERTIFICATE_DELIVERY_MODES.BLOCKED,
+      `${roleKey} sollte certificateDeliveryMode BLOCKED haben`
+    );
+  }
+});
+
+test("CERTIFICATE_DELIVERY_MODES enthält genau die drei dokumentierten Werte", () => {
+  assert.deepEqual(Object.values(CERTIFICATE_DELIVERY_MODES).sort(), ["blocked", "separate_email", "with_materials"]);
 });

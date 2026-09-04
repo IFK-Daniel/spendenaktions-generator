@@ -5,7 +5,6 @@ import { isIfkIdComplete } from "../../core/id/isIfkIdComplete.js";
 import { isValidEmail } from "../../core/mail/validateEmail.js";
 import { sendRepresentativeMaterials } from "../../core/mail/sendRepresentativeMaterials.js";
 import { buildMaterialManifest } from "../../core/materials/buildMaterialManifest.js";
-import { buildMaterialZip } from "../../core/materials/buildMaterialZip.js";
 import {
   buildRepresentativeDeliveryRequest,
   resolveCompanionRecipient,
@@ -72,15 +71,18 @@ import { firstUncertainCharacterIndex } from "../../core/screenshot/firstUncerta
 import { isFieldAutoRecognized } from "../../core/screenshot/isFieldAutoRecognized.js";
 import {
   ROLE_KEY_LIST,
+  ROLE_KEYS,
+  isValidRoleKey,
   getRoleConfig,
   roleRequiresRegion,
   getCertificateMaterialKey,
   certificateRequiresGender,
   isFlyerTemplateAvailableForRole,
   isCertificateTemplateAvailableForRole,
-  getFlyerSalutationVariants,
   getStarterSetMaterialKeys,
   hasStarterSet,
+  getCertificateDeliveryMode,
+  CERTIFICATE_DELIVERY_MODES,
 } from "../../core/materials/roleConfig.js";
 
 const PAYPAL_KEYS = new Set([MATERIAL_TYPE_KEYS.QR_PAYPAL_BLACK]);
@@ -320,9 +322,6 @@ export function initGenerator() {
   // Rolle möglich, Vorgabe Abschnitt 9); die Urkunden-Checkbox ebenfalls
   // nicht — jede Rolle hat eine Urkundenvorlage, sie wird stattdessen
   // rollenabhängig UMKONFIGURIERT (`applyRoleToCertificateCheckbox`).
-  const roleGatedMaterialCheckboxes = materialCheckboxes.filter((checkbox) =>
-    checkbox.hasAttribute("data-material-flyer")
-  );
   // Die eine Urkunden-Checkbox — ihr `data-material-key`, ihr sichtbarer
   // Titel und der "Geschlecht nötig"-Hinweis richten sich nach dem
   // gewählten Wegbegleiter-Typ (siehe `applyRoleToCertificateCheckbox`).
@@ -341,16 +340,14 @@ export function initGenerator() {
   // `hasStarterSet`/`applyRoleToForm`).
   const starterSetBtn = document.getElementById("starter-set-btn");
   const starterSetHint = document.getElementById("starter-set-hint");
-  // Ansprache-Variante(n): ZWEI Checkboxen steuern beide Flyer-
-  // Materialien gemeinsam (Druckerei + Home teilen sich dieselben
-  // Ansprache-Varianten, siehe `roleConfig.js`) — drei sich
-  // gegenseitig ausschließende Radio-Optionen ("du"/"du_sie"/"sie")
-  // statt zweier unabhängiger Checkboxen: vermeidet Reihenfolge-
-  // Abhängigkeiten beim Erreichen von "nur Sie" (Vorgabe Abschnitt 14).
-  // Standard ist "du" (Du-Stiftung). Nur sichtbar, wenn die aktuell
-  // gewählte Rolle überhaupt eine Sie-Variante hat.
-  const flyerSieOption = document.getElementById("flyer-sie-option");
-  const flyerSalutationRadios = Array.from(document.querySelectorAll('input[name="flyer-salutation-mode"]'));
+  // VIER unabhängige Flyer-Checkboxen (Druckerei/Home × Du/Sie) statt der
+  // früheren dreiwertigen Ansprache-Radiogruppe (siehe Vorgabe: Du- und
+  // Sie-Versionen dürfen aus fachlichen Gründen — Dateigröße beim
+  // Versand — NIE gemeinsam versendet werden). Die Sperre wird technisch
+  // beim Auswählen durchgesetzt (`applyFlyerSalutationExclusion`), nicht
+  // erst als Fehler beim Versand.
+  const flyerCheckboxes = materialCheckboxes.filter((checkbox) => checkbox.hasAttribute("data-material-flyer"));
+  const flyerSalutationExclusionHint = document.getElementById("flyer-salutation-exclusion-hint");
 
   // Aktuell ausgewählter Wegbegleiter-Typ — Default `representative`
   // entspricht dem bisherigen alleinigen Verhalten der Seite (Dropdown
@@ -374,7 +371,6 @@ export function initGenerator() {
     updateMaterialAvailabilityForRole(roleKey);
     applyRoleToCertificateCheckbox(roleKey);
     applyRoleToStarterSetButton(roleKey);
-    applyRoleToFlyerSalutationOption(roleKey);
     // Screenshot-Import-Hinweis auf den gewählten Wegbegleiter-Typ
     // münzen ("Screenshot des humbee-Botschaftervorgangs hochladen").
     if (screenshotProcessNounEl) {
@@ -382,6 +378,7 @@ export function initGenerator() {
         SCREENSHOT_PROCESS_NOUN_BY_ROLE[roleKey] || SCREENSHOT_PROCESS_NOUN_FALLBACK;
     }
     updateRequiredFieldIndicators();
+    updateCertificateBlockedNotice();
   }
 
   // Standard-Starter-Set-Button nur für Rollen mit definiertem
@@ -398,59 +395,30 @@ export function initGenerator() {
     if (starterSetHint) starterSetHint.hidden = !available;
   }
 
-  // Die Du/Sie-Auswahl ist nur sinnvoll, wenn die aktuelle Rolle
-  // überhaupt mehr als eine Ansprache-Variante hat (aktuell nur
-  // Repräsentant). Beim Ausblenden wird bewusst auf den Standardfall
-  // (nur Du) zurückgesetzt, damit ein vorheriger Rollenwechsel keine
-  // "unsichtbar aktivierte Sie-Variante" hinterlässt.
-  function applyRoleToFlyerSalutationOption(roleKey) {
-    if (!flyerSieOption) return;
-    const available = getFlyerSalutationVariants(roleKey).length > 1;
-    flyerSieOption.hidden = !available;
-    if (!available) {
-      setFlyerSalutationMode("du");
-    }
-  }
-
-  function setFlyerSalutationMode(mode) {
-    for (const radio of flyerSalutationRadios) {
-      radio.checked = radio.value === mode;
-    }
-  }
-
-  // Ansprache-Varianten, die beim nächsten Erzeugungsdurchlauf für
-  // Flyer-Materialien angefordert werden — aus dem angehakten Radio
-  // (nur relevant/sichtbar, wenn die Rolle mehrere Varianten hat, siehe
-  // `applyRoleToFlyerSalutationOption`). Ohne sichtbare Auswahl-
-  // möglichkeit (Rolle mit nur einer Variante) oder ohne jede Auswahl
-  // (sollte durch das `checked`-Standardattribut im HTML nicht
-  // vorkommen) liefert diese Funktion `["du"]`, den Standardfall.
-  function selectedFlyerSalutationVariants() {
-    if (!flyerSieOption || flyerSieOption.hidden) return ["du"];
-    const checked = flyerSalutationRadios.find((radio) => radio.checked);
-    if (checked?.value === "du_sie") return ["du", "sie"];
-    if (checked?.value === "sie") return ["sie"];
-    return ["du"];
-  }
-
   // Setzt die Materialauswahl exakt auf das Standard-Starter-Set der
   // aktuellen Rolle (reine Komfort-Vorbelegung bestehender Checkboxen,
   // keine eigene Erzeugungs-Pipeline, siehe Vorgabe Abschnitt 2): die
-  // Starter-Set-Materialien werden angehakt, alle anderen abgewählt,
-  // und die Ansprache wird auf "nur Du" zurückgesetzt (Vorgabe
-  // Abschnitt 1/3 — Sie bleibt technisch verfügbar, aber nicht Teil
-  // des Starter-Sets).
+  // Starter-Set-Materialien werden angehakt, alle anderen abgewählt. Für
+  // die Flyer-Checkboxen wird ausschließlich die Du-Version aktiviert
+  // (Vorgabe Abschnitt 4 — Sie bleibt technisch verfügbar, aber nicht
+  // Teil des Starter-Sets), niemals eine rollenweit gesperrte Checkbox.
   function applyStarterSet() {
     const roleKey = selectedRoleKey();
     const starterSetKeys = new Set(getStarterSetMaterialKeys(roleKey));
     if (starterSetKeys.size === 0) return;
 
     for (const checkbox of materialCheckboxes) {
-      if (checkbox.disabled) continue;
-      checkbox.checked = starterSetKeys.has(checkbox.dataset.materialKey);
+      if (checkbox.hasAttribute("data-material-flyer")) {
+        const roleAvailable = checkbox.dataset.roleAvailable !== "false";
+        checkbox.checked =
+          roleAvailable && starterSetKeys.has(checkbox.dataset.materialKey) && checkbox.dataset.flyerSalutation === "du";
+      } else if (!checkbox.disabled) {
+        checkbox.checked = starterSetKeys.has(checkbox.dataset.materialKey);
+      }
     }
-    setFlyerSalutationMode("du");
+    applyFlyerSalutationExclusion();
     updateRequiredFieldIndicators();
+    updateCertificateBlockedNotice();
   }
 
   // Richtet die eine Urkunden-Checkbox auf den gewählten Wegbegleiter-
@@ -500,7 +468,7 @@ export function initGenerator() {
   }
 
   function updateMaterialAvailabilityForRole(roleKey) {
-    for (const checkbox of roleGatedMaterialCheckboxes) {
+    for (const checkbox of flyerCheckboxes) {
       const materialKey = checkbox.dataset.materialKey;
       // Global gesperrt (siehe `FLYERS_TEMPORARILY_DISABLED`) ODER für
       // diese Rolle keine Flyer-Vorlage hinterlegt.
@@ -511,7 +479,10 @@ export function initGenerator() {
       const defaultHint = item?.querySelector("[data-default-hint]");
       const unavailableHint = item?.querySelector("[data-role-unavailable-hint]");
 
-      checkbox.disabled = !available;
+      // Rollenverfügbarkeit getrennt vom Disabled-Zustand gemerkt — der
+      // tatsächliche `disabled`-Zustand kombiniert dies zusätzlich mit der
+      // Du/Sie-Sperre (siehe `applyFlyerSalutationExclusion`).
+      checkbox.dataset.roleAvailable = available ? "true" : "false";
       if (!available) checkbox.checked = false;
       item?.classList.toggle("material-item-disabled", !available);
       if (defaultHint) defaultHint.hidden = !available;
@@ -525,6 +496,49 @@ export function initGenerator() {
           : "Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.";
       }
     }
+    applyFlyerSalutationExclusion();
+  }
+
+  // Setzt für jede der vier Flyer-Checkboxen den tatsächlichen
+  // `disabled`-Zustand: gesperrt, wenn die Rolle keine Vorlage hat
+  // (`roleAvailable`) ODER wenn bereits eine Checkbox der jeweils
+  // ANDEREN Ansprache angehakt ist (technische Durchsetzung von Vorgabe
+  // Abschnitt 5 — Du und Sie dürfen NIE gleichzeitig ausgewählt sein,
+  // da ein gemeinsamer Versand das Vercel-Payload-Limit sprengt). Eine
+  // bereits angehakte Checkbox bleibt dabei bewusst klickbar (zum
+  // Abwählen), auch wenn ihre Ansprache gerade "die andere" ist — sie
+  // kann diesen Zustand ja nur erreicht haben, indem sie zuerst und
+  // damit alleine angehakt wurde. Der Hinweistext erscheint nur, wenn
+  // dadurch tatsächlich mindestens eine Checkbox gesperrt ist (Vorgabe:
+  // "Hinweis nur, wenn relevant").
+  function applyFlyerSalutationExclusion() {
+    const checkedSalutations = new Set(
+      flyerCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.flyerSalutation)
+    );
+    const activeSalutation = checkedSalutations.size === 1 ? [...checkedSalutations][0] : null;
+
+    let anyLocked = false;
+    for (const checkbox of flyerCheckboxes) {
+      const roleAvailable = checkbox.dataset.roleAvailable !== "false";
+      const lockedBySalutation =
+        activeSalutation !== null && checkbox.dataset.flyerSalutation !== activeSalutation && !checkbox.checked;
+      checkbox.disabled = !roleAvailable || lockedBySalutation;
+      if (lockedBySalutation && roleAvailable) anyLocked = true;
+    }
+    if (flyerSalutationExclusionHint) flyerSalutationExclusionHint.hidden = !anyLocked;
+  }
+
+  // Ansprache-Varianten, die beim nächsten Erzeugungsdurchlauf für
+  // Flyer-Materialien angefordert werden — aus den tatsächlich
+  // angehakten Flyer-Checkboxen. Dank `applyFlyerSalutationExclusion`
+  // enthält die zurückgegebene Liste nie mehr als einen Wert (Du und
+  // Sie sind nie gleichzeitig auswählbar); ohne jede Flyer-Auswahl ist
+  // sie leer.
+  function selectedFlyerSalutationVariants() {
+    const checked = new Set(
+      flyerCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.flyerSalutation)
+    );
+    return [...checked];
   }
 
   const screenshotDropzone = document.getElementById("screenshot-dropzone");
@@ -580,6 +594,10 @@ export function initGenerator() {
   const deliveryErrorMessage = document.getElementById("delivery-error-message");
   const deliveryStatus = document.getElementById("delivery-status");
   const deliverySendBtn = document.getElementById("delivery-send-btn");
+  // Fachliche Klartext-Meldung, wenn die Urkunde der aktuell erzeugten
+  // Person zwar generiert/heruntergeladen, aber (noch) nicht
+  // automatisiert versendet werden darf (siehe `updateCertificateBlockedNotice`).
+  const certificateBlockedNotice = document.getElementById("certificate-blocked-notice");
 
   let lastManifest = null;
   let lastFiles = null;
@@ -836,10 +854,48 @@ export function initGenerator() {
       radio.checked = radio.value === "representative";
     }
     deliverySendBtn.disabled = false;
+    updateCertificateBlockedNotice();
   }
 
   function selectedMaterialKeys() {
-    return materialCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.materialKey);
+    // Zwei der vier Flyer-Checkboxen können denselben `data-material-key`
+    // tragen (Druckerei-Du/Druckerei-Sie bzw. Home-Du/Home-Sie) — dedupe,
+    // damit ein Materialschlüssel nie doppelt im Manifest landet.
+    return [...new Set(materialCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.dataset.materialKey))];
+  }
+
+  // Bestimmt den Urkunden-Versandmodus für die zuletzt erzeugte Person
+  // (siehe `getCertificateDeliveryMode` in roleConfig.js) — `null` ohne
+  // vorherigen Erzeugungsdurchlauf.
+  function currentGenerationCertificateDeliveryMode() {
+    const roleValue = lastManifest?.person?.role;
+    if (!roleValue) return null;
+    return getCertificateDeliveryMode(isValidRoleKey(roleValue) ? roleValue : ROLE_KEYS.REPRESENTATIVE);
+  }
+
+  // Vorgabe Abschnitt 16-19: die Urkunden-GENERIERUNG bleibt für jede
+  // Rolle uneingeschränkt möglich — nur der automatisierte Versand ist
+  // für bestimmte Rollen (noch) gesperrt (`CERTIFICATE_DELIVERY_MODES.BLOCKED`).
+  // Diese rein clientseitige Prüfung ist ein UX-Vorgriff auf die
+  // eigentliche, verbindliche Kern-Verteidigung in
+  // `buildRepresentativeDeliveryRequest.js` (die Urkunde landet dort nie
+  // in einem Mail-Teil für eine gesperrte Rolle, unabhängig von dieser
+  // Funktion hier).
+  function certificateDeliveryBlockedForCurrentGeneration() {
+    if (!lastFiles || !lastFiles.some((file) => file.category === "certificate")) return false;
+    return currentGenerationCertificateDeliveryMode() === CERTIFICATE_DELIVERY_MODES.BLOCKED;
+  }
+
+  // Blendet die fachliche Klartext-Meldung (Vorgabe Abschnitt 18) ein,
+  // wenn die zuletzt erzeugte Urkunde nicht automatisiert versendet
+  // werden darf, und deaktiviert den Versand-Button zusätzlich ganz,
+  // wenn NUR eine solche Urkunde erzeugt wurde (kein sendbares Material
+  // vorhanden) — andere Materialien derselben Person bleiben normal
+  // sendbar.
+  function updateCertificateBlockedNotice() {
+    const blocked = certificateDeliveryBlockedForCurrentGeneration();
+    if (certificateBlockedNotice) certificateBlockedNotice.hidden = !blocked;
+    deliverySendBtn.disabled = blocked && Array.isArray(lastFiles) && lastFiles.every((file) => file.category === "certificate");
   }
 
   function renderResults(person, files, guideFile) {
@@ -973,6 +1029,19 @@ export function initGenerator() {
       return;
     }
 
+    // Defense-in-depth auf UI-Ebene (Vorgabe Abschnitt 18/19): die
+    // eigentliche, verbindliche Sperre liegt in
+    // `buildRepresentativeDeliveryRequest.js` (dort entsteht für eine
+    // gesperrte Rolle nie ein Mail-Teil für die Urkunde) — hier wird nur
+    // verhindert, dass der Button überhaupt einen Versandversuch auslöst,
+    // wenn ausschließlich eine nicht sendbare Urkunde erzeugt wurde.
+    if (certificateDeliveryBlockedForCurrentGeneration() && lastFiles.every((file) => file.category === "certificate")) {
+      showDeliveryError(
+        "Die Urkunde für diese Wegbegleiter-Art kann hier erstellt und heruntergeladen, derzeit aber nicht automatisch versendet werden."
+      );
+      return;
+    }
+
     const target = selectedDeliveryTarget();
     // Immer die AKTUELL im Formular sichtbaren Werte verwenden — nie den
     // zum Zeitpunkt der Materialerzeugung gespeicherten Stand
@@ -1019,24 +1088,18 @@ export function initGenerator() {
     showDeliveryStatus("Versand läuft …", "loading");
 
     try {
-      // Die Materialhinweise gehen mit ins ZIP an den Wegbegleiter (siehe
-      // Vorgabe Abschnitt 18) — die humbee-Dokumentationsmail bekommt
-      // weiterhin ausschließlich die tatsächlich individuell erzeugten
-      // Materialien (`lastFiles`, OHNE Anleitung, siehe Abschnitt 19 und
-      // `buildRepresentativeDeliveryRequest`s `files`-Parameter unten).
-      const filesForZip = lastGuideFile ? [...lastFiles, lastGuideFile] : lastFiles;
-
-      const zip = await buildMaterialZip({
-        ifkId: lastManifest.person.ifkId,
-        firstName: lastManifest.person.firstName,
-        lastName: lastManifest.person.lastName,
-        files: filesForZip,
-      });
-
+      // `buildRepresentativeDeliveryRequest` baut das ZIP der Arbeits-/
+      // Marketingmaterialien (inkl. Anleitung) intern selbst und trennt
+      // die Urkunde fachlich davon (siehe dort) — bis zu zwei unabhängige
+      // Empfänger-Mails (`kind: "materials"`/`"certificate"`) und zwei
+      // unabhängige humbee-Dokumentations-Mails entstehen automatisch aus
+      // den tatsächlich erzeugten `lastFiles`. Für eine gesperrte Rolle
+      // (`CERTIFICATE_DELIVERY_MODES.BLOCKED`) entsteht dabei nie ein
+      // Mail-Teil für die Urkunde — unabhängig von der UI-Prüfung oben.
       const request = await buildRepresentativeDeliveryRequest({
         manifest: lastManifest,
-        zip,
         files: lastFiles,
+        guideFile: lastGuideFile,
         companion,
         alternativeEmail,
         logoUrl: `${window.location.origin}/ifk-logo-full.png`,
@@ -1047,24 +1110,19 @@ export function initGenerator() {
 
       if (result.ok) {
         showDeliveryStatus("Versand erfolgreich.", "success");
-      } else if (!result.representative.success && !result.humbee.success) {
-        // Beide Teilversände sind unabhängige Requests (siehe
-        // sendRepresentativeMaterials.js) — bei einem Fehlschlag beider
-        // die jeweils konkrete Fehlermeldung zeigen statt einer
-        // generischen, damit z. B. "Anhänge zu groß" von echten
-        // Maildienst-Fehlern unterscheidbar bleibt.
-        showDeliveryStatus(
-          `${result.representative.error || "Versand an Empfänger fehlgeschlagen."} ${result.humbee.error || "Dokumentation an humbee fehlgeschlagen."}`,
-          "error"
-        );
-      } else if (!result.representative.success) {
-        showDeliveryStatus(
-          result.representative.error || "Versand an Empfänger fehlgeschlagen.",
-          "error"
-        );
       } else {
+        // Jeder Empfänger-/humbee-Teil ist ein unabhängiger Request
+        // (siehe sendRepresentativeMaterials.js) — bei einem Fehlschlag
+        // werden alle betroffenen Teilmeldungen zusammengefasst, damit
+        // z. B. "Anhänge zu groß" von echten Maildienst-Fehlern
+        // unterscheidbar bleibt und erkennbar ist, welcher Teil (Materialien
+        // und/oder Urkunde) betroffen war.
+        const failedMessages = [...result.recipientResults, ...result.humbeeResults]
+          .filter((part) => !part.success)
+          .map((part) => part.error)
+          .filter(Boolean);
         showDeliveryStatus(
-          result.humbee.error || "Dokumentation an humbee fehlgeschlagen. Der Empfänger hat seine Materialien bereits erhalten.",
+          failedMessages.length > 0 ? failedMessages.join(" ") : "Versand fehlgeschlagen. Bitte versuche es später erneut.",
           "error"
         );
       }
@@ -1072,7 +1130,7 @@ export function initGenerator() {
       showDeliveryStatus(err.message || "Versand fehlgeschlagen. Bitte versuche es später erneut.", "error");
     } finally {
       isSending = false;
-      deliverySendBtn.disabled = false;
+      updateCertificateBlockedNotice();
     }
   }
 
@@ -2292,8 +2350,8 @@ export function initGenerator() {
   }
 
   starterSetBtn?.addEventListener("click", applyStarterSet);
-  for (const radio of flyerSalutationRadios) {
-    radio.addEventListener("change", updateRequiredFieldIndicators);
+  for (const checkbox of flyerCheckboxes) {
+    checkbox.addEventListener("change", applyFlyerSalutationExclusion);
   }
 
   roleSelect.addEventListener("change", applyRoleToForm);

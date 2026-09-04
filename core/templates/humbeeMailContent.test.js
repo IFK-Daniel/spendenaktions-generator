@@ -84,3 +84,36 @@ test("IFK-ID wird getrimmt in die Zeile übernommen", () => {
   const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "  IFK7QX  " });
   assert.match(text, /IFK-ID: IFK7QX$/);
 });
+
+test("kind: 'materials' hängt ' – Materialversand' an den Betreff an", () => {
+  const subject = buildHumbeeMailSubject({
+    federalState: "Bayern",
+    region: "Regensburg Land",
+    lastName: "Kopf",
+    firstName: "Andreas",
+    kind: "materials",
+  });
+  assert.equal(subject, "Repräsentant Bayern / Regensburg Land / Kopf, Andreas – Materialversand");
+});
+
+test("kind: 'certificate' hängt ' – Urkundenversand' an den Betreff an", () => {
+  const subject = buildHumbeeMailSubject({
+    federalState: "Bayern",
+    region: "Regensburg Land",
+    lastName: "Kopf",
+    firstName: "Andreas",
+    kind: "certificate",
+  });
+  assert.equal(subject, "Repräsentant Bayern / Regensburg Land / Kopf, Andreas – Urkundenversand");
+});
+
+test("kind: 'certificate' im Text nennt 'die Urkunde' statt 'personalisierte Materialien'", () => {
+  const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "IFK7QX", kind: "certificate" });
+  assert.match(text, /wurde die Urkunde erstellt und versendet/);
+  assert.doesNotMatch(text, /personalisierte Materialien/);
+});
+
+test("kind: 'materials' im Text bleibt beim bisherigen Wortlaut", () => {
+  const text = buildHumbeeMailText({ firstName: "Max", lastName: "Mustermann", ifkId: "IFK7QX", kind: "materials" });
+  assert.match(text, /wurden personalisierte Materialien erstellt und versendet/);
+});

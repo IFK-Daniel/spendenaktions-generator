@@ -160,10 +160,10 @@ test("includeFlyerSieHint: true → kurzer Hinweis zur optional erhältlichen Si
     logoUrl: "https://example.com/logo.png",
     includeFlyerSieHint: true,
   });
-  assert.match(text, /grundsätzlich per Du sind/);
+  assert.match(text, /grundsätzlich duzen/);
   assert.match(text, /Sie/);
-  assert.match(text, /erstellen wir sie dir gerne separat/);
-  assert.match(html, /grundsätzlich per Du sind/);
+  assert.match(text, /erstellen wir sie dir natürlich gerne/);
+  assert.match(html, /grundsätzlich duzen/);
 });
 
 test("includeFlyerSieHint: false oder fehlend → kein Hinweis auf die Sie-Version", () => {
@@ -175,6 +175,6 @@ test("includeFlyerSieHint: false oder fehlend → kein Hinweis auf die Sie-Versi
       role: "representative",
       includeFlyerSieHint: value,
     });
-    assert.doesNotMatch(text, /grundsätzlich per Du sind/);
+    assert.doesNotMatch(text, /grundsätzlich duzen/);
   }
 });

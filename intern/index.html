@@ -283,69 +283,82 @@
             Wählt Flyer Druckerei (Du), Flyer Home (Du), PayPal QR schwarz, GiroCode schwarz und die Urkunde aus.
           </p>
 
-          <div class="material-list">
-            <label class="material-item">
-              <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer />
-              Flyer – Druckerei
-              <span class="material-item-hint" data-default-hint>Foto nötig, standardmäßig Du-Version</span>
-              <span class="material-item-hint" data-role-unavailable-hint hidden
-                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
-              >
-            </label>
-            <label class="material-item">
-              <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer />
-              Flyer – Home
-              <span class="material-item-hint" data-default-hint>Foto nötig, standardmäßig Du-Version</span>
-              <span class="material-item-hint" data-role-unavailable-hint hidden
-                >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
-              >
-            </label>
-            <!-- Steuert für BEIDE Flyer-Materialien gemeinsam, welche
-                 Ansprache-Variante(n) erzeugt werden. Drei eindeutige,
-                 sich gegenseitig ausschließende Optionen (Radio) statt
-                 zwei unabhängiger Checkboxen — vermeidet Reihenfolge-
-                 Abhängigkeiten beim Erreichen von "nur Sie" (z. B.
-                 nachträglich für einen bereits ausgestatteten
-                 Repräsentanten, Vorgabe Abschnitt 14). Wir sind eine
-                 Du-Stiftung — Standardfall ist "Nur Du". Nur sichtbar,
-                 wenn die aktuell gewählte Rolle überhaupt eine
-                 Sie-Variante hat (siehe `getFlyerSalutationVariants` in
-                 generator.js). -->
-            <div class="material-item material-item--sub" id="flyer-sie-option" hidden role="radiogroup" aria-label="Ansprache-Variante für Flyer">
-              <span class="salutation-variant-label">Ansprache:</span>
-              <label class="salutation-variant-choice">
-                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-du" value="du" checked />
-                Nur Du (Standard)
+          <div class="material-subsection">
+            <h4 class="material-subsection-title">Flyer</h4>
+            <!-- Vier eindeutige, unabhängige Checkboxen statt der früheren
+                 Ansprache-Radiogruppe (Vorgabe: Du/Sie sind aus fachlichen
+                 Gründen — Dateigröße beim Versand — NIE gemeinsam
+                 versendbar). Die gegenseitige Sperre erfolgt technisch
+                 beim Auswählen (nicht erst als Fehler beim Versand, siehe
+                 `applyFlyerSalutationExclusion` in generator.js): ist eine
+                 Du-Variante aktiv, werden beide Sie-Checkboxen deaktiviert
+                 (nicht abgewählt) und umgekehrt. Innerhalb derselben
+                 Ansprache dürfen Druckerei und Home frei kombiniert
+                 werden. `data-material-key` bleibt für beide Varianten
+                 gleich (FLYER_DRUCKEREI/FLYER_HOME) — `data-flyer-salutation`
+                 unterscheidet sie. -->
+            <div class="material-list material-list--2col">
+              <label class="material-item">
+                <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer data-flyer-salutation="du" checked />
+                Flyer Druckerei – Du-Version
+                <span class="material-item-hint" data-default-hint>Foto nötig</span>
+                <span class="material-item-hint" data-role-unavailable-hint hidden
+                  >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+                >
               </label>
-              <label class="salutation-variant-choice">
-                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-both" value="du_sie" />
-                Du + Sie
+              <label class="material-item">
+                <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer data-flyer-salutation="du" checked />
+                Flyer Home – Du-Version
+                <span class="material-item-hint" data-default-hint>Foto nötig</span>
+                <span class="material-item-hint" data-role-unavailable-hint hidden
+                  >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+                >
               </label>
-              <label class="salutation-variant-choice">
-                <input type="radio" name="flyer-salutation-mode" id="flyer-salutation-sie" value="sie" />
-                Nur Sie
+              <label class="material-item">
+                <input type="checkbox" data-material-key="FLYER_DRUCKEREI" data-material-flyer data-flyer-salutation="sie" />
+                Flyer Druckerei – Sie-Version
+                <span class="material-item-hint" data-default-hint>Foto nötig</span>
+                <span class="material-item-hint" data-role-unavailable-hint hidden
+                  >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+                >
               </label>
-              <span class="material-item-hint">Wir sind eine Du-Stiftung – Sie nur bei Bedarf.</span>
+              <label class="material-item">
+                <input type="checkbox" data-material-key="FLYER_HOME" data-material-flyer data-flyer-salutation="sie" />
+                Flyer Home – Sie-Version
+                <span class="material-item-hint" data-default-hint>Foto nötig</span>
+                <span class="material-item-hint" data-role-unavailable-hint hidden
+                  >Vorlage für diese Wegbegleiter-Art noch nicht hinterlegt.</span
+                >
+              </label>
             </div>
-            <label class="material-item">
-              <input type="checkbox" data-material-key="QR_PAYPAL_BLACK" checked />
-              PayPal QR schwarz
-            </label>
-            <label class="material-item">
-              <input type="checkbox" data-material-key="QR_GIRO_BLACK" checked />
-              GiroCode schwarz
-            </label>
-            <!-- Genau EINE Urkunden-Checkbox. `data-material-key` und der
-                 sichtbare Titel werden je nach gewähltem Wegbegleiter-Typ
-                 gesetzt (siehe `applyRoleToCertificateCheckbox` in
-                 src/intern/generator.js). Der "Geschlecht nötig"-Hinweis
-                 wird nur für Rollen mit geschlechtsspezifischer Urkunde
-                 (Repräsentant, Botschafter) eingeblendet. -->
-            <label class="material-item">
-              <input type="checkbox" data-material-key="CERTIFICATE_REPRESENTATIVE" data-material-certificate />
-              <span data-certificate-label>Repräsentantenurkunde</span>
-              <span class="material-item-hint" data-default-hint>Geschlecht nötig</span>
-            </label>
+            <p class="material-item-hint" id="flyer-salutation-exclusion-hint" hidden>
+              Du- und Sie-Versionen können aufgrund der Dateigröße nicht gemeinsam versendet werden. Bitte erstelle sie bei Bedarf in zwei getrennten Durchläufen.
+            </p>
+          </div>
+
+          <div class="material-subsection">
+            <h4 class="material-subsection-title">Weitere Materialien</h4>
+            <div class="material-list material-list--2col">
+              <label class="material-item">
+                <input type="checkbox" data-material-key="QR_PAYPAL_BLACK" checked />
+                PayPal QR schwarz
+              </label>
+              <label class="material-item">
+                <input type="checkbox" data-material-key="QR_GIRO_BLACK" checked />
+                GiroCode schwarz
+              </label>
+              <!-- Genau EINE Urkunden-Checkbox. `data-material-key` und der
+                   sichtbare Titel werden je nach gewähltem Wegbegleiter-Typ
+                   gesetzt (siehe `applyRoleToCertificateCheckbox` in
+                   src/intern/generator.js). Der "Geschlecht nötig"-Hinweis
+                   wird nur für Rollen mit geschlechtsspezifischer Urkunde
+                   (Repräsentant, Botschafter) eingeblendet. -->
+              <label class="material-item">
+                <input type="checkbox" data-material-key="CERTIFICATE_REPRESENTATIVE" data-material-certificate />
+                <span data-certificate-label>Repräsentantenurkunde</span>
+                <span class="material-item-hint" data-default-hint>Geschlecht nötig</span>
+              </label>
+            </div>
           </div>
         </fieldset>
 
@@ -388,6 +401,16 @@
               placeholder="z. B. mitarbeiter@its-for-kids.de"
             />
           </div>
+
+          <!-- Fachliche Klartext-Meldung, wenn die Urkunde dieser
+               Wegbegleiter-Art zwar generiert/heruntergeladen, aber
+               NICHT automatisiert versendet werden darf (siehe
+               `getCertificateDeliveryMode` in roleConfig.js —
+               vorläufige Sperre für Botschafter/Kuratorium/Beirat/
+               Fachrat/Wirtschaftsrat). Kein technischer Fehler. -->
+          <p class="material-item-hint" id="certificate-blocked-notice" hidden>
+            Die Urkunde für diese Wegbegleiter-Art kann hier erstellt und heruntergeladen, derzeit aber nicht automatisch versendet werden.
+          </p>
 
           <div class="error-message" id="delivery-error-message" hidden></div>
           <div class="delivery-status" id="delivery-status" hidden></div>

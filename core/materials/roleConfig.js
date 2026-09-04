@@ -55,6 +55,33 @@ export const REPRESENTATIVE_FLYER_SALUTATION_VARIANTS = Object.freeze(["du", "si
 export const DEFAULT_FLYER_SALUTATION_VARIANTS = Object.freeze(["du"]);
 
 /**
+ * Wie die Urkunde dieser Rolle beim automatisierten Materialversand
+ * behandelt wird — zentral hier statt verteilter `if (role === ...)`
+ * in `src/intern/generator.js`/`core/materials/buildRepresentativeDeliveryRequest.js`
+ * (Vorgabe: "Versandstrategie pro Rolle konfigurierbar machen").
+ *
+ * - `SEPARATE_EMAIL`: Die Urkunde ist eine persönliche Auszeichnung,
+ *   kein Marketingmaterial — sie wird beim automatisierten Versand in
+ *   einer EIGENEN, separaten Mail verschickt (nicht zusammen mit
+ *   Flyern/QR-Codes im selben ZIP). Aktuell nur `representative`.
+ * - `BLOCKED`: Automatisierter Versand dieser Urkunde ist eine
+ *   BEWUSSTE, VORLÄUFIGE fachliche Sperre (siehe ausführliche
+ *   Begründung bei `ROLE_CONFIG` unten) — Erzeugung, Vorschau und
+ *   Download bleiben davon komplett unberührt, nur der automatisierte
+ *   Mailversand ist gesperrt. Aktuell alle Rollen außer `representative`.
+ * - `WITH_MATERIALS` (noch nicht verwendet): für eine mögliche künftige
+ *   Rolle, deren Urkunde zusammen mit den übrigen Materialien in EINER
+ *   Mail verschickt werden soll — bewusst als Wert vorbereitet, aber
+ *   aktuell von keiner Rolle genutzt und von keiner Funktion
+ *   ausgewertet (kein totes Verhalten, nur offene Architektur).
+ */
+export const CERTIFICATE_DELIVERY_MODES = Object.freeze({
+  SEPARATE_EMAIL: "separate_email",
+  BLOCKED: "blocked",
+  WITH_MATERIALS: "with_materials",
+});
+
+/**
  * Rollenbezeichnung für Gremien mit bewusst EINER neutralen Form für
  * alle Geschlechter ("Mitglied des …") statt einer erfundenen
  * männlichen/weiblichen Form (siehe Vorgabe: "keine sprachlich
@@ -128,6 +155,22 @@ function neutralRoleLabel(label) {
  *   definiertes Starter-Set (aktuell nur `representative` — Botschafter/
  *   Kuratorium/Beirat/Fachrat/Wirtschaftsrat haben noch kein
  *   vollständig definiertes Materialpaket, siehe `hasStarterSet`).
+ * - `certificateDeliveryMode` — einer von `CERTIFICATE_DELIVERY_MODES`
+ *   (siehe dort). **Wichtig**: Die `BLOCKED`-Einträge unten (alle
+ *   Rollen außer `representative`) sind eine BEWUSSTE, VORLÄUFIGE
+ *   fachliche Entscheidung, KEINE technische Einschränkung — die
+ *   Urkunde dieser Rollen ist weiterhin uneingeschränkt erzeugbar,
+ *   als Vorschau zu öffnen und herunterzuladen (siehe
+ *   `src/intern/generator.js`, Materialerzeugung bleibt unverändert);
+ *   nur der automatisierte Mailversand aus diesem Generator ist
+ *   gesperrt, weil für diese Rollen aktuell eine persönlichere
+ *   Übergabe/Kommunikation vorgesehen bzw. noch zu klären ist. Später
+ *   denkbare, aktuell NICHT implementierte Varianten: persönliche
+ *   Übergabe, physisches Starterpaket, individuelle Mail durch
+ *   Vorstand/Stiftungsdirektion, automatisierter Versand aus einer
+ *   anderen Absenderadresse — diese Konstante ist bewusst so gebaut,
+ *   dass eine spätere Entscheidung nur hier (einen Wert je Rolle)
+ *   geändert werden muss, ohne Code an anderer Stelle anzufassen.
  */
 export const ROLE_CONFIG = Object.freeze({
   [ROLE_KEYS.REPRESENTATIVE]: Object.freeze({
@@ -156,6 +199,7 @@ export const ROLE_CONFIG = Object.freeze({
       MATERIAL_TYPE_KEYS.QR_GIRO_BLACK,
       MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
     ]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.SEPARATE_EMAIL,
   }),
   [ROLE_KEYS.AMBASSADOR]: Object.freeze({
     key: ROLE_KEYS.AMBASSADOR,
@@ -170,6 +214,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
   }),
   [ROLE_KEYS.ECONOMIC_COUNCIL]: Object.freeze({
     key: ROLE_KEYS.ECONOMIC_COUNCIL,
@@ -184,6 +229,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
   }),
   [ROLE_KEYS.EXPERT_COUNCIL]: Object.freeze({
     key: ROLE_KEYS.EXPERT_COUNCIL,
@@ -198,6 +244,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
   }),
   [ROLE_KEYS.CURATOR]: Object.freeze({
     key: ROLE_KEYS.CURATOR,
@@ -217,6 +264,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
   }),
   [ROLE_KEYS.ADVISORY_BOARD]: Object.freeze({
     key: ROLE_KEYS.ADVISORY_BOARD,
@@ -231,6 +279,7 @@ export const ROLE_CONFIG = Object.freeze({
     flyerSalutationVariants: Object.freeze([]),
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
+    certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
   }),
 });
 
@@ -355,4 +404,15 @@ export function getStarterSetMaterialKeys(roleKey) {
  */
 export function hasStarterSet(roleKey) {
   return getStarterSetMaterialKeys(roleKey).length > 0;
+}
+
+/**
+ * Wie die Urkunde dieser Rolle beim automatisierten Versand behandelt
+ * wird — einer von `CERTIFICATE_DELIVERY_MODES` (siehe dort für die
+ * fachliche Begründung der aktuellen Werte).
+ * @param {string} roleKey
+ * @returns {string}
+ */
+export function getCertificateDeliveryMode(roleKey) {
+  return getRoleConfig(roleKey).certificateDeliveryMode;
 }

@@ -15,60 +15,76 @@
  * übertragen, wodurch bei GLEICHEM Vercel-Limit ca. 33% mehr tatsäch-
  * liche Materialgröße in einen Request passt — siehe
  * `artifacts/size-analysis/attachment-size-analysis.md`, Abschnitt 8
- * (Option C), für die Herleitung. Reine Transport-Umstellung: keine
- * Änderung an Mailtext, Materialqualität oder Anzahl der Mails.
+ * (Option C), für die Herleitung.
+ *
+ * SEIT DER TRENNUNG von Arbeits-/Marketingmaterialien und persönlicher
+ * Urkunde (siehe `core/materials/buildRepresentativeDeliveryRequest.js`,
+ * `core/materials/roleConfig.js` → `CERTIFICATE_DELIVERY_MODES`): Ein
+ * Durchlauf kann 0-2 unabhängige Empfänger-Mails (`recipientMailParts`)
+ * und 0-2 unabhängige humbee-Dokumentations-Mails (`humbeeMailParts`)
+ * erzeugen — jeweils höchstens eine für `kind: "materials"` und eine
+ * für `kind: "certificate"`. JEDER Teil wird als EIGENER, unabhängiger
+ * Request verschickt (kein künstliches Zusammenfassen in einem
+ * Request, keine künstliche Verzögerung zwischen den Requests) — das
+ * ist gerade die Lösung für das Payload-Limit-Problem, das ein
+ * kombiniertes "alles in einer Mail"-ZIP verursacht hat.
  *
  * WICHTIG — weiterhin zwei Maßnahmen gegen das Vercel-Payload-Limit:
  *
- * 1) `recipient` und `humbee` werden als ZWEI unabhängige Requests
- *    gesendet statt kombiniert in einem (unverändert gegenüber der
- *    JSON-Architektur — ein kombinierter Request überschritte bei
- *    einem vollständigen Materialsatz weiterhin das Limit, da humbee
- *    dieselben Materialien zusätzlich als Einzeldateien erhält).
- * 2) Die humbee-Anhänge werden bei Bedarf auf mehrere Mails aufgeteilt
- *    (`chunkAttachments`), falls schon die humbee-Mail ALLEIN das
- *    Limit überschreiten würde. humbee erhält in diesem Fall mehrere
- *    Mails mit fortlaufender "(Teil n/m)"-Kennzeichnung im Betreff.
+ * 1) Jeder `recipientMailParts`-Eintrag und jeder `humbeeMailParts`-
+ *    Eintrag wird als eigener Request gesendet (weiterhin: die
+ *    humbee-Materialien-Mail enthält dieselben Materialien zusätzlich
+ *    als Einzeldateien statt als ZIP, kann also für sich genommen groß
+ *    werden).
+ * 2) Die Anhänge einer einzelnen humbee-Mail werden bei Bedarf auf
+ *    mehrere Mails aufgeteilt (`chunkAttachments`), falls schon sie
+ *    ALLEIN das Limit überschreiten würde — mit fortlaufender
+ *    "(Teil n/m)"-Kennzeichnung im Betreff.
  *
- * Der Empfänger (`recipient`) bekommt IMMER genau EINE Mail mit dem
- * vollständigen ZIP-Archiv — keine Aufteilung, auf ausdrücklichen
- * Wunsch (siehe Vorgabe). Ist das ZIP allein zu groß, meldet `sendPart`
- * das mit einer konkreten, verständlichen Fehlermeldung statt eines
- * kryptischen Plattform-413.
+ * Jede Empfänger-Mail bekommt IMMER genau EINEN Anhang (ZIP bei
+ * Materialien, PDF bei der Urkunde) — keine Aufteilung. Ist der Anhang
+ * allein zu groß, meldet `sendPart` das mit einer konkreten,
+ * verständlichen Fehlermeldung statt eines kryptischen Plattform-413.
  *
  * @param {{
- *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipBlob: Blob },
- *   humbee: { to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Blob }> }
+ *   recipientMailParts: Array<{ kind: "materials"|"certificate", to: string, subject: string, text: string, html: string, attachmentFilename: string, attachmentBlob: Blob }>,
+ *   humbeeMailParts: Array<{ kind: "materials"|"certificate", to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Blob }> }>
  * }} request Ergebnis von `buildRepresentativeDeliveryRequest()`.
  * @returns {Promise<{
  *   ok: boolean,
- *   representative: { success: boolean, messageId?: string, error?: string },
- *   humbee: { success: boolean, messageId?: string, error?: string }
+ *   recipientResults: Array<{ kind: "materials"|"certificate", success: boolean, messageId?: string, error?: string }>,
+ *   humbeeResults: Array<{ kind: "materials"|"certificate", success: boolean, messageId?: string, error?: string }>
  * }>}
  */
 export async function sendRepresentativeMaterials(request) {
-  const [representative, humbee] = await Promise.all([
-    sendPart({
-      metadata: {
-        kind: "recipient",
-        to: request.recipient.to,
-        subject: request.recipient.subject,
-        text: request.recipient.text,
-        html: request.recipient.html,
-        zipFilename: request.recipient.zipFilename,
-      },
-      fileEntries: [{ filename: request.recipient.zipFilename, blob: request.recipient.zipBlob }],
-      resultKey: "representative",
-      label: "Versand an Empfänger",
-    }),
-    sendHumbee(request.humbee),
+  const recipientMailParts = request?.recipientMailParts ?? [];
+  const humbeeMailParts = request?.humbeeMailParts ?? [];
+
+  const [recipientResults, humbeeResults] = await Promise.all([
+    Promise.all(recipientMailParts.map((part) => sendRecipientPart(part))),
+    Promise.all(humbeeMailParts.map((part) => sendHumbee(part))),
   ]);
 
-  return {
-    ok: representative.success && humbee.success,
-    representative,
-    humbee,
-  };
+  const ok = [...recipientResults, ...humbeeResults].every((result) => result.success);
+
+  return { ok, recipientResults, humbeeResults };
+}
+
+async function sendRecipientPart(part) {
+  const result = await sendPart({
+    metadata: {
+      kind: "recipient",
+      to: part.to,
+      subject: part.subject,
+      text: part.text,
+      html: part.html,
+      zipFilename: part.attachmentFilename,
+    },
+    fileEntries: [{ filename: part.attachmentFilename, blob: part.attachmentBlob }],
+    resultKey: "representative",
+    label: part.kind === "certificate" ? "Versand der Urkunde" : "Versand der Materialien",
+  });
+  return { kind: part.kind, ...result };
 }
 
 // Vercel begrenzt den Request-Body von Serverless Functions (Node-
@@ -165,17 +181,20 @@ function chunkAttachments(attachments, baseMetadata) {
 }
 
 /**
- * Sendet die humbee-Dokumentation, bei Bedarf aufgeteilt auf mehrere
- * Mails (siehe `chunkAttachments`). Gilt nur dann als erfolgreich, wenn
- * ALLE Teile erfolgreich versendet wurden.
+ * Sendet eine humbee-Dokumentations-Mail (Materialien ODER Urkunde, je
+ * `humbee.kind`), bei Bedarf aufgeteilt auf mehrere Mails (siehe
+ * `chunkAttachments`). Gilt nur dann als erfolgreich, wenn ALLE Teile
+ * erfolgreich versendet wurden.
  */
 async function sendHumbee(humbee) {
-  const { attachments, ...restOfHumbee } = humbee;
+  const { attachments, kind, ...restOfHumbee } = humbee;
+  const label = kind === "certificate" ? "Dokumentation an humbee (Urkunde)" : "Dokumentation an humbee (Materialien)";
   const baseMetadata = { kind: "humbee", to: restOfHumbee.to, subject: restOfHumbee.subject, text: restOfHumbee.text };
   const groups = chunkAttachments(attachments, baseMetadata);
 
   if (groups.length === 1) {
-    return sendPart({ metadata: baseMetadata, fileEntries: groups[0], resultKey: "humbee", label: "Dokumentation an humbee" });
+    const result = await sendPart({ metadata: baseMetadata, fileEntries: groups[0], resultKey: "humbee", label });
+    return { kind, ...result };
   }
 
   const partResults = await Promise.all(
@@ -184,13 +203,14 @@ async function sendHumbee(humbee) {
         metadata: { ...baseMetadata, subject: `${restOfHumbee.subject} (Teil ${index + 1}/${groups.length})` },
         fileEntries: group,
         resultKey: "humbee",
-        label: `Dokumentation an humbee (Teil ${index + 1}/${groups.length})`,
+        label: `${label} (Teil ${index + 1}/${groups.length})`,
       })
     )
   );
 
   const allSucceeded = partResults.every((part) => part.success);
   return {
+    kind,
     success: allSucceeded,
     messageId: allSucceeded ? partResults.map((part) => part.messageId).filter(Boolean).join(", ") : undefined,
     error: allSucceeded ? undefined : partResults.filter((part) => !part.success).map((part) => part.error).join(" "),
@@ -198,8 +218,8 @@ async function sendHumbee(humbee) {
 }
 
 /**
- * Sendet einen einzelnen Versandteil (nur `recipient` ODER nur
- * `humbee`, ggf. mit einer Teilmenge der humbee-Anhänge) als
+ * Sendet einen einzelnen Versandteil (eine Empfänger-Mail ODER eine
+ * humbee-Mail, ggf. mit einer Teilmenge der humbee-Anhänge) als
  * `multipart/form-data`-Request an `/api/send-representative-mail`
  * und liefert dessen Teilergebnis unter dem jeweiligen `resultKey`
  * zurück.

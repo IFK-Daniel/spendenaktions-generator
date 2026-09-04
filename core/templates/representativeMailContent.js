@@ -37,8 +37,14 @@ function buildBodyParagraphs({ firstName, gender, ifkId, role, includeFlyerSieHi
 
   return [
     `Hallo ${firstName},`,
-    `anbei erhältst du deine personalisierten Materialien für deinen Einsatz als ${roleLabel} von It's for Kids.`,
-    "Das ZIP-Archiv enthält alle aktuell verfügbaren Materialien, die speziell für dich erstellt wurden.",
+    `anbei erhältst du deine Arbeits- und Marketingmaterialien für deinen Einsatz als ${roleLabel} von It's for Kids.`,
+    // Bewusst "Arbeits- und Marketingmaterialien" statt "alle
+    // Materialien": seit der fachlichen Trennung von Marketingmaterial
+    // und persönlicher Urkunde (siehe `core/materials/roleConfig.js`,
+    // `CERTIFICATE_DELIVERY_MODES`) ist die Urkunde NICHT mehr Teil
+    // dieses ZIP-Archivs, sondern kommt — sofern ausgewählt — in einer
+    // eigenen, separaten Mail (`representativeCertificateMailContent.js`).
+    "Das ZIP-Archiv enthält deine ausgewählten Arbeits- und Marketingmaterialien, die speziell für dich erstellt wurden.",
     // Nur relevant, wenn tatsächlich ein Flyer OHNE Sie-Variante
     // versendet wurde (Standardfall seit dem Standard-Starter-Set,
     // siehe `core/materials/roleConfig.js`, `DEFAULT_FLYER_SALUTATION_VARIANTS`)
@@ -47,7 +53,7 @@ function buildBodyParagraphs({ firstName, gender, ifkId, role, includeFlyerSieHi
     // damit dieser Hinweis nie fälschlich erscheint, wenn ohnehin schon
     // beide Varianten verschickt wurden oder gar kein Flyer dabei ist.
     includeFlyerSieHint
-      ? "Da wir bei It's for Kids grundsätzlich per Du sind, erhältst du deinen Flyer standardmäßig in der Du-Version. Wenn du zusätzlich eine Variante mit der Anrede „Sie“ benötigst, erstellen wir sie dir gerne separat."
+      ? "Da wir bei It's for Kids grundsätzlich duzen, erhältst du deine Flyer standardmäßig in der Du-Version. Wenn du zusätzlich eine Variante mit der Anrede „Sie“ benötigst, erstellen wir sie dir natürlich gerne."
       : null,
     trimmedIfkId
       ? `Deine persönliche IFK-ID lautet: ${trimmedIfkId}. Die IFK-ID dient ausschließlich der internen eindeutigen Zuordnung. Deshalb ist sie beispielsweise auch im Verwendungszweck des GiroCodes für die Banking-App enthalten.`

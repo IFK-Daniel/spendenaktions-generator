@@ -785,25 +785,21 @@ textarea.field-complete {
   color: var(--text-muted);
 }
 
-.material-item--sub {
-  grid-column: 1 / -1;
-  background: var(--field-bg);
+.material-subsection {
+  margin-top: 20px;
+}
+
+.material-subsection:first-of-type {
+  margin-top: 8px;
+}
+
+.material-subsection-title {
+  margin: 0 0 8px;
   font-size: 13px;
-  cursor: default;
-  flex-wrap: wrap;
-}
-
-.salutation-variant-label {
+  font-weight: 600;
   color: var(--text-muted);
-}
-
-.salutation-variant-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 0;
-  border: none;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .starter-set-btn {
@@ -826,6 +822,11 @@ textarea.field-complete {
 
 .starter-set-hint {
   margin: 6px 0 0;
+}
+
+#flyer-salutation-exclusion-hint,
+#certificate-blocked-notice {
+  margin: 8px 0 0;
 }
 
 .delivery-section {

@@ -138,11 +138,24 @@ const recipientPayload = JSON.stringify({
     zipContent: zipBase64,
   },
 });
-console.log(`\nrecipient-Request (ZIP als Base64 im JSON) | ${recipientPayload.length} Byte`);
+console.log(`\nrecipient-Request (ALT: ZIP als Base64 im JSON) | ${recipientPayload.length} Byte`);
+
+// multipart/form-data-Payload wie sendRepresentativeMaterials.js SEIT der
+// Umstellung "fix: send companion materials as multipart form data" —
+// exakt gemessen (new Response(formData).arrayBuffer()), keine Schätzung.
+const multipartFormData = new FormData();
+multipartFormData.append(
+  "metadata",
+  JSON.stringify({ kind: "recipient", to: "test@example.com", subject: "Deine Materialien", text: "…", html: "<p>…</p>", zipFilename: zip.filename })
+);
+multipartFormData.append("files", zip.blob, zip.filename);
+const multipartPayloadBytes = (await new Response(multipartFormData).arrayBuffer()).byteLength;
+console.log(`recipient-Request (NEU: multipart/form-data) | ${multipartPayloadBytes} Byte`);
+console.log(`Transport-Ersparnis durch multipart statt Base64/JSON | ${recipientPayload.length - multipartPayloadBytes} Byte (${((1 - multipartPayloadBytes / recipientPayload.length) * 100).toFixed(1)}%)`);
 
 const MAX_REQUEST_BYTES = 4_450_000;
-console.log(`MAX_REQUEST_BYTES (aktuelles Limit) | ${MAX_REQUEST_BYTES} Byte`);
-console.log(`Passt unter Limit: ${recipientPayload.length <= MAX_REQUEST_BYTES ? "JA" : "NEIN"} (${(recipientPayload.length / MAX_REQUEST_BYTES * 100).toFixed(0)}% des Limits, Reserve ${((1 - recipientPayload.length / MAX_REQUEST_BYTES) * 100).toFixed(0)}%)`);
+console.log(`\nMAX_REQUEST_BYTES (aktuelles Limit) | ${MAX_REQUEST_BYTES} Byte`);
+console.log(`Multipart passt unter Limit: ${multipartPayloadBytes <= MAX_REQUEST_BYTES ? "JA" : "NEIN"} (${(multipartPayloadBytes / MAX_REQUEST_BYTES * 100).toFixed(1)}% des Limits, Reserve ${((1 - multipartPayloadBytes / MAX_REQUEST_BYTES) * 100).toFixed(1)}%)`);
 
 const outDir = new URL("../artifacts/size-analysis/", import.meta.url);
 mkdirSync(outDir, { recursive: true });
@@ -158,9 +171,11 @@ writeFileSync(
       files: files.map((f) => ({ filename: f.filename, size: f.content.length })),
       totalRaw,
       zipSize: zipBuf.length,
-      recipientPayloadBytes: recipientPayload.length,
+      legacyBase64JsonPayloadBytes: recipientPayload.length,
+      multipartPayloadBytes,
       maxRequestBytes: MAX_REQUEST_BYTES,
-      fitsUnderLimit: recipientPayload.length <= MAX_REQUEST_BYTES,
+      fitsUnderLimit: multipartPayloadBytes <= MAX_REQUEST_BYTES,
+      reservePercent: (1 - multipartPayloadBytes / MAX_REQUEST_BYTES) * 100,
     },
     null,
     2

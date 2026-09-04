@@ -845,12 +845,25 @@ Mailanhang erzeugt.
    Branding, wie sie bereits in `api/send-email.js` verwendet wird),
    sowie Betreff/Text für die humbee-Mail
    (`core/templates/humbeeMailContent.js`). ZIP- und Einzeldatei-
-   Inhalte werden über `core/mail/encodeAttachmentBase64.js` als
-   Base64-Strings kodiert (browser- und Node-kompatibel, ohne
-   Duplikat der ZIP-Inhaltsnormalisierung).
-5. `core/mail/sendRepresentativeMaterials.js` (reiner `fetch`-Wrapper,
-   analog zu `core/mail/sendGeneratedMaterials.js`) schickt den
-   Payload an `POST /api/send-representative-mail`.
+   Inhalte bleiben rohe `Blob`s (`recipient.zipBlob`,
+   `humbee.attachments[].content`) — **keine** Base64-Kodierung mehr
+   (siehe Punkt 5).
+5. `core/mail/sendRepresentativeMaterials.js` (analog zu
+   `core/mail/sendGeneratedMaterials.js` ein reiner Transport-Wrapper,
+   aber MIT eigener Logik zur Größenprüfung/-Aufteilung) baut daraus
+   `multipart/form-data`-Requests (`FormData`, ein `metadata`-JSON-Feld
+   plus die Dateien als eigene `files`-Teile) und schickt sie an
+   `POST /api/send-representative-mail`. **Transport-Historie**: bis
+   einschließlich Commit `fix: further reduce companion material
+   payload` wurden Dateiinhalte als Base64-Strings in einem
+   JSON-Body übertragen — das vergrößerte sie um Faktor 4/3 (+33%) und
+   ließ bei einem vollständigen Materialsatz kaum Reserve unter
+   Vercels ~4,5-MB-Request-Body-Limit. Die Umstellung auf
+   `multipart/form-data` (Commit `fix: send companion materials as
+   multipart form data`) überträgt Dateien roh/unkodiert — bei
+   gleichem Plattform-Limit passt dadurch ca. 33% mehr tatsächliche
+   Materialgröße in einen Request, ohne jede Qualitätsreduktion.
+   Details/Messwerte: `artifacts/size-analysis/attachment-size-analysis.md`.
 6. Die Serverless-Function versendet über
    `core/mail/deliverRepresentativeMaterials.js` zwei unabhängige
    Mails (Repräsentant, humbee) und liefert für jede einzeln
@@ -886,18 +899,23 @@ Code-Änderung) — **keine** ZIP-Datei.
 
 **Serverseitig** (`api/send-representative-mail.js`, `api/_lib/
 buildMailTransporter.js`, `core/mail/deliverRepresentativeMaterials.js`):
-`api/send-representative-mail.js` bleibt bewusst dünn — Request-
-Validierung (Empfänger- und humbee-Adresse über
-`core/mail/validateEmail.js`, Pflichtfelder), Base64-Dekodierung der
-Anhänge und Aufbau des `nodemailer`-Transporters über
-`api/_lib/buildMailTransporter.js` (kapselt denselben `SMTP_*`-Aufbau
-wie `api/send-email.js`; bewusst als separate Datei angelegt statt von
-dort importiert, da der bestehende öffentliche QR-Code-Generator und
-dessen Mailfunktion laut Vorgabe nicht verändert werden dürfen). Der
-eigentliche Versand inkl. Protokollierung liegt im DOM-freien,
-ohne echten Mailserver testbaren `core/mail/
-deliverRepresentativeMaterials.js` (SMTP-Transport über injizierbares
-`deps.sendMail`).
+`api/send-representative-mail.js` bleibt bewusst dünn — Multipart-
+Parsing (`busboy`, direkt auf dem rohen `req`-Stream; Vercel
+Node-Functions parsen `req.body` automatisch nur für JSON/urlencoded/
+Text, für `multipart/form-data` bleibt `req` ein lesbarer Stream),
+Request-Validierung (Empfänger- und humbee-Adresse über
+`core/mail/validateEmail.js`, Pflichtfelder) und Aufbau des
+`nodemailer`-Transporters über `api/_lib/buildMailTransporter.js`
+(kapselt denselben `SMTP_*`-Aufbau wie `api/send-email.js`; bewusst
+als separate Datei angelegt statt von dort importiert, da der
+bestehende öffentliche QR-Code-Generator und dessen Mailfunktion laut
+Vorgabe nicht verändert werden dürfen). Der eigentliche Versand inkl.
+Protokollierung liegt im DOM-freien, ohne echten Mailserver testbaren
+`core/mail/deliverRepresentativeMaterials.js` (SMTP-Transport über
+injizierbares `deps.sendMail`) — dieses Modul erwartete bereits vor
+der Multipart-Umstellung `Buffer`-Anhänge und musste für die Umstellung
+**nicht** verändert werden (`busboy` liefert Dateiteile bereits als
+`Buffer`, genau wie zuvor `Buffer.from(base64, "base64")`).
 
 **Protokollierung** (`core/mail/deliverRepresentativeMaterials.js`):
 Repräsentanten- und humbee-Versand werden als zwei unabhängige, klar
@@ -930,8 +948,6 @@ geworfen" reicht nicht als Erfolgsnachweis.
   der Repräsentanten-Mail.
 - `core/templates/humbeeMailContent.js` — Betreff/Text der
   humbee-Mail.
-- `core/mail/encodeAttachmentBase64.js` — Content (Blob/ArrayBuffer/
-  Uint8Array) → Base64-String.
 - `core/materials/buildRepresentativeDeliveryRequest.js` — baut den
   vollständigen Request-Payload; exportiert zusätzlich
   `resolveRepresentativeRecipient` (Standard- vs. abweichende
@@ -945,9 +961,14 @@ geworfen" reicht nicht als Erfolgsnachweis.
   Versand-Orchestrierung (zwei unabhängige `sendMail`-Aufrufe,
   Protokollierung, Ablehnungs-Erkennung); `sendMail` ist injizierbar,
   daher ohne echten Mailserver testbar.
-- `core/mail/sendRepresentativeMaterials.js` — `fetch`-Wrapper zum
-  neuen Endpunkt; liefert
+- `core/mail/sendRepresentativeMaterials.js` — baut `multipart/form-
+  data`-Requests (`FormData`) zum Endpunkt und sendet sie per `fetch`;
+  liefert
   `{ ok, representative: { success, messageId?, error? }, humbee: { success, messageId?, error? } }`.
+  Misst die tatsächliche Multipart-Bytezahl vor dem Versand exakt
+  (`new Response(formData).arrayBuffer()`, keine Schätzung) und
+  verweigert den Versand mit einer konkreten Fehlermeldung, wenn ein
+  Teil das ~4,45-MB-Sicherheitslimit überschreiten würde.
 
 Alle oben genannten Core-Module sind DOM-frei und ausschließlich über
 Parameter/Rückgabewerte nutzbar; `core/mail/sendRepresentativeMaterials.js`
@@ -962,9 +983,10 @@ des öffentlichen Generators.
 
 **Tests**: `getRepresentativeRoleLabel.test.js`,
 `buildMaterialZipFilename.test.js`, `buildMaterialZip.test.js`,
-`encodeAttachmentBase64.test.js`, `representativeMailContent.test.js`,
+`representativeMailContent.test.js`,
 `humbeeMailContent.test.js`, `buildRepresentativeDeliveryRequest.test.js`,
-`guessAttachmentMimeType.test.js`, `deliverRepresentativeMaterials.test.js`
+`guessAttachmentMimeType.test.js`, `deliverRepresentativeMaterials.test.js`,
+`sendRepresentativeMaterials.test.js`, `send-representative-mail.test.js`
 (Node.js eingebauter Test-Runner, ausführbar via `npm test`) — decken
 u. a. ab: Standard- vs. abweichender Empfänger, Ablehnung einer
 ungültigen abweichenden Adresse, Rollenbezeichnung nach Geschlecht,
@@ -972,13 +994,15 @@ ZIP-Dateiname und -Inhalt, humbee-Betreffschema, getrennte Anhänge
 (Repräsentant erhält nur das ZIP, humbee nur Einzeldateien), dass
 beide Versandaufrufe unabhängig vom Ergebnis des jeweils anderen
 durchgeführt werden, dass ein von der SMTP-Antwort abgelehnter
-Empfänger als Fehlschlag gilt, sowie dass die Logs beide Vorgänge
-eindeutig unterscheiden und keine Empfängeradressen, Betreffs,
-Dateinamen oder Mailtexte enthalten. Keine echten Zugangsdaten oder
-echten Repräsentantendaten in den Tests.
-`core/mail/sendRepresentativeMaterials.js` ist analog zu
-`core/mail/sendGeneratedMaterials.js` bewusst ungetestet (reiner
-`fetch`-Wrapper ohne eigene Logik).
+Empfänger als Fehlschlag gilt, dass die Logs beide Vorgänge eindeutig
+unterscheiden und keine Empfängeradressen, Betreffs, Dateinamen oder
+Mailtexte enthalten, sowie (Multipart-spezifisch) dass `FormData`
+weder Base64 noch die Metadaten in den Dateiteilen enthält, dass alle
+Dateien mit erhaltenem Namen/MIME-Typ ankommen, und dass die
+Payload-Größe eines realistischen vollständigen Pakets unter der
+Sicherheitsgrenze bleibt (Regressionstest gegen künftig wachsende
+Materialien). Keine echten Zugangsdaten oder echten
+Repräsentantendaten in den Tests.
 
 **Abhängigkeiten**: siehe Abschnitt 7 sowie die Core-Modul-Liste oben.
 `api/send-representative-mail.js` → `api/_lib/buildMailTransporter.js`,

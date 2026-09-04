@@ -1,5 +1,5 @@
 {
-  "note": "Zweite Optimierungsrunde. Ersetzt die erste Fassung dieser Datei vollständig. Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket. Das Testfoto ist eine an das real vom Nutzer beobachtete Paketgröße (~2MB je Flyer vor Optimierung) kalibrierte, aber weiterhin synthetische Rekonstruktion eines Smartphone-Fotos — kein echtes Nutzerfoto war verfügbar. Die ERSTE Berichtsfassung verwendete ein bewusst extremeres Worst-Case-Testfoto (34,9MB Payload) zur Ursachenermittlung, das NICHT der realen Paketgröße entsprach; diese Fassung korrigiert das.",
+  "note": "Dritte Optimierungsrunde (Transport-Umstellung auf multipart/form-data, siehe 'multipartMigration' unten). Ersetzt die vorherige Fassung dieser Datei vollständig. Alle Werte real gemessen (node scripts/measure-representative-package.mjs) mit einem typischen vollständigen Repräsentanten-Materialpaket. Das Testfoto ist eine an das real vom Nutzer beobachtete Paketgröße (~2MB je Flyer vor Optimierung) kalibrierte, aber weiterhin synthetische Rekonstruktion eines Smartphone-Fotos — kein echtes Nutzerfoto war verfügbar. Die ERSTE Berichtsfassung verwendete ein bewusst extremeres Worst-Case-Testfoto (34,9MB Payload) zur Ursachenermittlung, das NICHT der realen Paketgröße entsprach; das wurde in Runde 2 korrigiert.",
   "maxRequestBytes": 4450000,
   "targetReservePercent": 10,
   "targetPayloadBytes": 4005000,
@@ -66,6 +66,30 @@
       "percentOfLimit": 99,
       "fitsUnderLimit": true,
       "reservePercent": 1.0
+    },
+    "nach_runde_3_multipart_transport": {
+      "description": "Nach Runde 3: Transport von recipient/humbee-Requests auf multipart/form-data umgestellt (core/mail/sendRepresentativeMaterials.js) statt Base64-Strings in JSON. KEINE Material-/Qualitätsänderung gegenüber Runde 2 -- exakt dieselben Dateien, nur anders übertragen.",
+      "photoBytes": 22504,
+      "photoFormat": "image/jpeg (900x1200px, unverändert seit Runde 2)",
+      "files": {
+        "Flyer_Druckerei_Du.pdf": 660108,
+        "Flyer_Druckerei_Sie.pdf": 660012,
+        "Flyer_Home_Du.pdf": 657619,
+        "Flyer_Home_Sie.pdf": 657531,
+        "Urkunde_Repraesentant.pdf": 648885,
+        "PayPal_QR_schwarz.png": 3400,
+        "GiroCode_schwarz.png": 2020,
+        "Hinweise_zur_Verwendung_der_Materialien.pdf": 13419
+      },
+      "totalRawBytes": 3302994,
+      "zipBytes": 3304002,
+      "legacyBase64JsonPayloadBytes": 4405491,
+      "multipartPayloadBytes": 3304431,
+      "transportSavingsBytes": 1101060,
+      "transportSavingsPercent": 25.0,
+      "percentOfLimit": 74.3,
+      "fitsUnderLimit": true,
+      "reservePercent": 25.7
     }
   },
   "certificateBackgroundOptimization": {
@@ -111,6 +135,22 @@
     "payloadOveragePercent": 10.0,
     "fitsAbsoluteLimit": true,
     "fitsWithRequestedReserve": false,
-    "recommendedNextStep": "multipart/form-data statt Base64+JSON (Abschnitt 8, Option C in attachment-size-analysis.md) -- reduziert Transport-Overhead um ~33% ohne Qualitäts- oder Mailanzahl-Änderung; nicht umgesetzt in dieser Runde (Vorgabe: nichts Großes umbauen ohne Freigabe)"
+    "recommendedNextStep": "multipart/form-data statt Base64+JSON (Abschnitt 8, Option C in attachment-size-analysis.md) -- reduziert Transport-Overhead um ~33% ohne Qualitäts- oder Mailanzahl-Änderung; nicht umgesetzt in dieser Runde (Vorgabe: nichts Großes umbauen ohne Freigabe)",
+    "resolvedInRound3": true
+  },
+  "multipartMigration": {
+    "implementedIn": "fix: send companion materials as multipart form data",
+    "clientChange": "core/mail/sendRepresentativeMaterials.js baut FormData (metadata-JSON-Feld + files-Dateiteile) statt JSON.stringify mit Base64; misst die reale Payload-Größe exakt via new Response(formData).arrayBuffer() vor jedem Versand",
+    "serverChange": "api/send-representative-mail.js parst multipart/form-data über core/mail/parseMultipartFormData.js (busboy) statt Vercels automatischem JSON-Body-Parser; core/mail/buildRepresentativeMailPayloadsFromMultipart.js ordnet Metadata+Dateien in dasselbe Format ein, das deliverRepresentativeMaterials.js (unverändert) erwartet",
+    "removedFiles": ["core/mail/encodeAttachmentBase64.js", "core/mail/encodeAttachmentBase64.test.js"],
+    "newDependency": "busboy@^1.6.0 (Server-only, kein Einfluss auf Browser-Bundle-Größe)",
+    "backwardCompatibility": "Endpunkt ausschließlich vom internen Materialgenerator genutzt (keine weiteren Aufrufer im Repository) -- vollständig migriert, kein paralleler Alt-JSON-Pfad",
+    "resultRawZipBytes": 3304002,
+    "resultMultipartPayloadBytes": 3304431,
+    "resultPercentOfLimit": 74.3,
+    "resultReservePercent": 25.7,
+    "targetReservePercent": 10,
+    "targetMet": true,
+    "finalDecision": "A: Das vollständige Paket passt mit 25.7% Reserve in einen einzelnen Vercel-Request -- deutlich über den geforderten mindestens 10%. Keine Aufteilung auf mehrere Mails, keine weitere Qualitätsreduktion."
   }
 }

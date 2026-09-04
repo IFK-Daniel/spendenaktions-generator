@@ -10,13 +10,13 @@ function fakeRequest() {
       text: "Hallo Max",
       html: "<p>Hallo Max</p>",
       zipFilename: "IFK_Materialien.zip",
-      zipContent: Buffer.from("zip-inhalt").toString("base64"),
+      zipBlob: new Blob(["zip-inhalt"]),
     },
     humbee: {
       to: "office@its-for-kids.de",
       subject: "Repräsentant NRW / Region / Mustermann, Max",
       text: "Für Max wurden Materialien erstellt.",
-      attachments: [{ filename: "qr.png", content: Buffer.from("png-inhalt").toString("base64") }],
+      attachments: [{ filename: "qr.png", content: new Blob(["png-inhalt"]) }],
     },
   };
 }
@@ -37,17 +37,23 @@ function jsonResponse(status, body) {
   };
 }
 
-test("beide Teile werden als zwei getrennte Requests gesendet", () =>
+async function readMetadata(formData) {
+  return JSON.parse(formData.get("metadata"));
+}
+
+test("beide Teile werden als zwei getrennte multipart/form-data-Requests gesendet", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      assert.ok(opts.body instanceof FormData, "Request-Body muss FormData sein, kein JSON.stringify(...)");
+      assert.ok(!("headers" in opts) || !opts.headers?.["Content-Type"], "Content-Type darf nicht manuell gesetzt sein (Boundary käme sonst vom Browser nicht korrekt mit)");
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
-      if (body.humbee) {
+      if (metadata.kind === "humbee") {
         return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee@x>" } });
       }
-      throw new Error("unerwarteter Request-Body: " + opts.body);
+      throw new Error("unerwartete metadata.kind: " + metadata.kind);
     },
     async () => {
       const result = await sendRepresentativeMaterials(fakeRequest());
@@ -57,15 +63,54 @@ test("beide Teile werden als zwei getrennte Requests gesendet", () =>
     }
   ));
 
-test("kein Request enthält recipient UND humbee gleichzeitig", () =>
+test("FormData enthält kein Base64 — Dateien sind rohe Binärteile mit erhaltenem Namen", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
+        const zipEntry = opts.body.get("files");
+        assert.ok(zipEntry instanceof Blob, "Datei-Teil muss ein Blob/File sein");
+        assert.equal(zipEntry.name, "IFK_Materialien.zip");
+        const text = await zipEntry.text();
+        assert.equal(text, "zip-inhalt", "Inhalt darf nicht Base64-kodiert sein");
+        return jsonResponse(200, { ok: true, representative: { success: true } });
+      }
+      const files = opts.body.getAll("files");
+      assert.equal(files.length, 1);
+      assert.equal(files[0].name, "qr.png");
+      assert.equal(await files[0].text(), "png-inhalt");
+      return jsonResponse(200, { ok: true, humbee: { success: true } });
+    },
+    () => sendRepresentativeMaterials(fakeRequest())
+  ));
+
+test("recipient-Metadata enthält alle Mailfelder, aber keine Dateiinhalte", () =>
+  withFetch(
+    async (url, opts) => {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
+        assert.equal(metadata.to, "max.mustermann@example.com");
+        assert.equal(metadata.subject, "Deine Materialien");
+        assert.equal(metadata.text, "Hallo Max");
+        assert.equal(metadata.html, "<p>Hallo Max</p>");
+        assert.equal(metadata.zipFilename, "IFK_Materialien.zip");
+        assert.equal("zipContent" in metadata, false, "metadata darf keine Base64-Dateiinhalte mehr enthalten");
+        return jsonResponse(200, { ok: true, representative: { success: true } });
+      }
+      return jsonResponse(200, { ok: true, humbee: { success: true } });
+    },
+    () => sendRepresentativeMaterials(fakeRequest())
+  ));
+
+test("kein Request enthält recipient- UND humbee-Metadata gleichzeitig", () =>
+  withFetch(
+    async (url, opts) => {
+      const metadata = await readMetadata(opts.body);
       assert.ok(
-        (body.recipient && !body.humbee) || (body.humbee && !body.recipient),
-        "jeder Request darf nur recipient ODER humbee enthalten, nie beide (Grund: Vercel-Payload-Limit)"
+        metadata.kind === "recipient" || metadata.kind === "humbee",
+        "jeder Request darf nur eine Art Metadata enthalten, nie beide (Grund: Vercel-Payload-Limit)"
       );
-      return jsonResponse(200, body.recipient ? { ok: true, representative: { success: true } } : { ok: true, humbee: { success: true } });
+      return jsonResponse(200, metadata.kind === "recipient" ? { ok: true, representative: { success: true } } : { ok: true, humbee: { success: true } });
     },
     () => sendRepresentativeMaterials(fakeRequest())
   ));
@@ -73,8 +118,8 @@ test("kein Request enthält recipient UND humbee gleichzeitig", () =>
 test("representative schlägt fehl, humbee erfolgreich: ok=false, Fehler nur bei representative", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: false, representative: { success: false, error: "SMTP abgelehnt." } });
       }
       return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee@x>" } });
@@ -91,8 +136,8 @@ test("representative schlägt fehl, humbee erfolgreich: ok=false, Fehler nur bei
 test("humbee schlägt fehl, representative erfolgreich: ok=false, Fehler nur bei humbee", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
       return jsonResponse(200, { ok: false, humbee: { success: false, error: "humbee SMTP down." } });
@@ -109,8 +154,8 @@ test("humbee schlägt fehl, representative erfolgreich: ok=false, Fehler nur bei
 test("Plattform-Fehler ohne JSON-Antwort (z. B. 413) führt zu einer verständlichen, HTTP-Status-haltigen Fehlermeldung", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
       return {
@@ -130,16 +175,15 @@ test("Plattform-Fehler ohne JSON-Antwort (z. B. 413) führt zu einer verständli
     }
   ));
 
-test("zu große Anhänge werden schon vor dem Request erkannt und nicht gesendet", async () => {
-  const hugeBase64 = "A".repeat(4_500_000);
+test("zu große Anhänge werden schon vor dem Request erkannt (anhand der echten Multipart-Größe) und nicht gesendet", async () => {
   const request = fakeRequest();
-  request.humbee.attachments = [{ filename: "riesig.pdf", content: hugeBase64 }];
+  request.humbee.attachments = [{ filename: "riesig.pdf", content: new Blob([new Uint8Array(4_500_000)]) }];
 
   let fetchCalled = false;
   await withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
       fetchCalled = true;
@@ -157,8 +201,8 @@ test("zu große Anhänge werden schon vor dem Request erkannt und nicht gesendet
 test("Netzwerkfehler beim Fetch führt zu einer eigenen Fehlermeldung statt eines Absturzes", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         throw new TypeError("Failed to fetch");
       }
       return jsonResponse(200, { ok: true, humbee: { success: true } });
@@ -173,22 +217,26 @@ test("Netzwerkfehler beim Fetch führt zu einer eigenen Fehlermeldung statt eine
 test("humbee-Anhänge, die zusammen zu groß für einen Request sind, werden auf mehrere Mails aufgeteilt", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
-      // Jeder humbee-Teil-Request muss für sich unter dem Limit bleiben.
-      assert.ok(opts.body.length < 4_000_000, "jeder Teil-Request muss unter dem Byte-Limit bleiben");
+      // Jeder humbee-Teil-Request muss für sich unter dem Limit bleiben —
+      // jetzt anhand der tatsächlichen (unkodierten) Multipart-Bytezahl.
+      const bytes = Buffer.from(await new Response(opts.body).arrayBuffer()).length;
+      assert.ok(bytes < 4_450_000, "jeder Teil-Request muss unter dem Byte-Limit bleiben");
       return jsonResponse(200, {
         ok: true,
-        humbee: { success: true, messageId: `<humbee-${body.humbee.attachments.length}@x>` },
+        humbee: { success: true, messageId: `<humbee-${opts.body.getAll("files").length}@x>` },
       });
     },
     async () => {
       const request = fakeRequest();
-      // Drei ~1.6 MB base64-Anhänge (~4.8 MB zusammen) sprengen einen
-      // einzelnen Request, passen aber jeweils einzeln locker darunter.
-      const bigAttachment = (name) => ({ filename: name, content: "A".repeat(1_600_000) });
+      // Drei ~1,6 MB-Anhänge (~4,8 MB zusammen, unkodiert) sprengen einen
+      // einzelnen Request, passen aber jeweils einzeln locker darunter —
+      // ohne Base64-Aufblähung ist das jetzt sogar deutlich mehr Reserve
+      // als in der alten Base64/JSON-Architektur.
+      const bigAttachment = (name) => ({ filename: name, content: new Blob([new Uint8Array(1_600_000)]) });
       request.humbee.attachments = [bigAttachment("flyer-druckerei.pdf"), bigAttachment("flyer-home.pdf"), bigAttachment("urkunde.pdf")];
 
       const result = await sendRepresentativeMaterials(request);
@@ -200,18 +248,18 @@ test("humbee-Anhänge, die zusammen zu groß für einen Request sind, werden auf
 test("Teilaufteilung der humbee-Mail: schlägt ein Teil fehl, gilt humbee insgesamt als fehlgeschlagen mit konkreter Fehlermeldung", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
-      if (body.humbee.subject.includes("Teil 1")) {
+      if (metadata.subject.includes("Teil 1")) {
         return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee-1@x>" } });
       }
       return jsonResponse(200, { ok: false, humbee: { success: false, error: "SMTP abgelehnt (Teil 2)." } });
     },
     async () => {
       const request = fakeRequest();
-      const bigAttachment = (name) => ({ filename: name, content: "A".repeat(1_600_000) });
+      const bigAttachment = (name) => ({ filename: name, content: new Blob([new Uint8Array(1_600_000)]) });
       request.humbee.attachments = [bigAttachment("flyer-druckerei.pdf"), bigAttachment("flyer-home.pdf"), bigAttachment("urkunde.pdf")];
 
       const result = await sendRepresentativeMaterials(request);
@@ -224,16 +272,35 @@ test("Teilaufteilung der humbee-Mail: schlägt ein Teil fehl, gilt humbee insges
 test("humbee-Anhänge, die zusammen unter dem Limit bleiben, werden weiterhin als eine einzige Mail gesendet", () =>
   withFetch(
     async (url, opts) => {
-      const body = JSON.parse(opts.body);
-      if (body.recipient) {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
         return jsonResponse(200, { ok: true, representative: { success: true, messageId: "<rep@x>" } });
       }
-      assert.ok(!body.humbee.subject.includes("Teil"), "bei kleinem Materialsatz darf keine Teil-Kennzeichnung im Betreff stehen");
-      assert.equal(body.humbee.attachments.length, 1);
+      assert.ok(!metadata.subject.includes("Teil"), "bei kleinem Materialsatz darf keine Teil-Kennzeichnung im Betreff stehen");
+      assert.equal(opts.body.getAll("files").length, 1);
       return jsonResponse(200, { ok: true, humbee: { success: true, messageId: "<humbee@x>" } });
     },
     async () => {
       const result = await sendRepresentativeMaterials(fakeRequest());
       assert.equal(result.ok, true);
     }
+  ));
+
+test("Anleitung bleibt exklusiv beim Empfänger — humbee-Attachments sind unabhängig davon, was im ZIP steckt", () =>
+  withFetch(
+    async (url, opts) => {
+      const metadata = await readMetadata(opts.body);
+      if (metadata.kind === "recipient") {
+        // Der Empfänger bekommt genau EIN Datei-Teil: das ZIP (das die
+        // Anleitung serverseitig bereits enthält, siehe generator.js).
+        assert.equal(opts.body.getAll("files").length, 1);
+        return jsonResponse(200, { ok: true, representative: { success: true } });
+      }
+      // humbee erhält ausschließlich die in request.humbee.attachments
+      // übergebenen Dateien — keine automatisch hinzugefügte Anleitung.
+      const names = opts.body.getAll("files").map((f) => f.name);
+      assert.deepEqual(names, ["qr.png"]);
+      return jsonResponse(200, { ok: true, humbee: { success: true } });
+    },
+    () => sendRepresentativeMaterials(fakeRequest())
   ));

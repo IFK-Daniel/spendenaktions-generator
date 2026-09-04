@@ -1,5 +1,5 @@
 {
-  "label": "after-cert-and-photo-fix",
+  "label": "round3-multipart-final",
   "photoPath": "artifacts/size-analysis/photo-realistic-current-1200.jpg",
   "photoBytes": 22504,
   "photoMimeType": "image/jpeg",
@@ -39,7 +39,9 @@
   ],
   "totalRaw": 3302994,
   "zipSize": 3304002,
-  "recipientPayloadBytes": 4405491,
+  "legacyBase64JsonPayloadBytes": 4405491,
+  "multipartPayloadBytes": 3304431,
   "maxRequestBytes": 4450000,
-  "fitsUnderLimit": true
+  "fitsUnderLimit": true,
+  "reservePercent": 25.74312359550561
 }

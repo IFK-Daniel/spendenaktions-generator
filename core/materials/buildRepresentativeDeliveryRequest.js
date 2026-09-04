@@ -1,5 +1,4 @@
 import { isValidEmail } from "../mail/validateEmail.js";
-import { encodeAttachmentBase64 } from "../mail/encodeAttachmentBase64.js";
 import {
   buildRepresentativeMailSubject,
   buildRepresentativeMailText,
@@ -140,7 +139,11 @@ export function resolveRepresentativeRecipient({ person, companionEmail, alterna
  *   Rollenbezeichnung in Betreff/Text beider Mails (siehe
  *   `representativeMailContent.js`/`humbeeMailContent.js`).
  * @param {{ filename: string, blob: Blob }} params.zip Ergebnis von
- *   `buildMaterialZip()`.
+ *   `buildMaterialZip()`. Der Blob wird UNVERÄNDERT (kein Base64) in
+ *   `recipient.zipBlob` durchgereicht — der eigentliche Versand
+ *   (`core/mail/sendRepresentativeMaterials.js`) überträgt ihn als
+ *   `multipart/form-data`-Dateiteil statt als Base64-String im JSON
+ *   (siehe dortige Doku zur Vercel-Payload-Größe).
  * @param {Array<{ filename: string, content: Blob | ArrayBuffer | Uint8Array }>} params.files
  *   Die tatsächlich erzeugten Materialdateien (Ergebnis von
  *   `generateQrMaterials()`) — werden humbee einzeln angehängt.
@@ -156,9 +159,13 @@ export function resolveRepresentativeRecipient({ person, companionEmail, alterna
  * @param {string} [params.alternativeEmail] Siehe `resolveCompanionRecipient`.
  * @param {string} params.logoUrl Für die HTML-Mail an den Wegbegleiter.
  * @returns {Promise<{
- *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipContent: string },
- *   humbee: { to: string, subject: string, text: string, attachments: Array<{ filename: string, content: string }> }
+ *   recipient: { to: string, subject: string, text: string, html: string, zipFilename: string, zipBlob: Blob },
+ *   humbee: { to: string, subject: string, text: string, attachments: Array<{ filename: string, content: Blob }> }
  * }>}
+ *   `zipBlob`/`attachment.content` sind rohe `Blob`s (kein Base64) — der
+ *   Versand kodiert sie nicht mehr im JSON, sondern überträgt sie als
+ *   eigene Dateiteile eines `multipart/form-data`-Requests (siehe
+ *   `core/mail/sendRepresentativeMaterials.js`).
  * @throws {Error} Siehe `resolveCompanionRecipient`.
  */
 export async function buildRepresentativeDeliveryRequest({
@@ -195,14 +202,14 @@ export async function buildRepresentativeDeliveryRequest({
       logoUrl,
     }),
     zipFilename: zip.filename,
-    zipContent: await encodeAttachmentBase64(zip.blob),
+    zipBlob: zip.blob,
   };
 
   const humbeeAttachments = [];
   for (const file of files ?? []) {
     humbeeAttachments.push({
       filename: file.filename,
-      content: await encodeAttachmentBase64(file.content),
+      content: file.content,
     });
   }
 

@@ -1,6 +1,7 @@
 import { buildMailTransporter, getMailFromAddress } from "./_lib/buildMailTransporter.js";
-import { isValidEmail } from "../core/mail/validateEmail.js";
 import { deliverRepresentativeMaterials } from "../core/mail/deliverRepresentativeMaterials.js";
+import { parseMultipartFormData } from "../core/mail/parseMultipartFormData.js";
+import { buildRepresentativeMailPayloadsFromMultipart } from "../core/mail/buildRepresentativeMailPayloadsFromMultipart.js";
 
 const LOG_PREFIX = "[api/send-representative-mail]";
 
@@ -8,31 +9,39 @@ const LOG_PREFIX = "[api/send-representative-mail]";
  * Validiert die Anfrage und delegiert den eigentlichen Versand an
  * `core/materials/deliverRepresentativeMaterials.js` (Repräsentanten-
  * Mail mit ZIP-Anhang + separate humbee-Dokumentations-Mail mit
- * Einzeldateien). Diese Datei bleibt bewusst dünn: SMTP-Transport-
- * Aufbau (`buildMailTransporter`), Request-Validierung und Base64-
- * Dekodierung — die eigentliche Versand-/Log-Logik liegt im
- * DOM-freien, ohne echten Mailserver testbaren Core-Modul.
+ * Einzeldateien). Diese Datei bleibt bewusst dünn: Multipart-Parsing,
+ * Request-Validierung — die eigentliche Versand-/Log-Logik liegt im
+ * DOM-freien, ohne echten Mailserver testbaren Core-Modul
+ * (`deliverRepresentativeMaterials.js`, UNVERÄNDERT gegenüber der
+ * vorherigen JSON/Base64-Architektur: sie erwartete bereits vorher
+ * `recipient.zipContent`/`humbee.attachments[].content` als `Buffer` —
+ * nur WOHER dieser Buffer kommt, hat sich geändert).
  *
- * WICHTIG — `recipient` und `humbee` sind beide EINZELN optional (statt
- * wie zuvor beide zwingend erforderlich): der Client
- * (`core/mail/sendRepresentativeMaterials.js`) ruft diesen Endpunkt in
- * ZWEI getrennten Requests auf (einmal nur `recipient`, einmal nur
- * `humbee`), statt beide Mails in einem einzigen Request zu bündeln.
- * Grund: Vercel Serverless Functions (Node-Runtime) begrenzen den
- * Request-Body auf ~4,5 MB. Bei einem vollständigen Materialsatz
- * (2 Flyer-PDFs + Urkunde + QR-Codes, jeweils base64-kodiert sowohl im
- * ZIP für den Repräsentanten als auch einzeln für humbee) überschritt
- * ein kombinierter Request dieses Limit zuverlässig — Vercel hat den
- * Request dann mit `413 FUNCTION_PAYLOAD_TOO_LARGE` (Klartext, keine
- * JSON-Antwort) abgelehnt, BEVOR dieser Handler überhaupt aufgerufen
- * wurde. Der Client interpretierte die daraufhin nicht parsbare Antwort
- * als Fehlschlag beider Versände — daher die zuvor stets kombiniert
- * angezeigte Meldung "Versand an Empfänger fehlgeschlagen.
- * Dokumentation an humbee fehlgeschlagen.", unabhängig vom tatsächlichen
- * Empfänger. Das Aufteilen in zwei Requests senkt das maximale
- * Datenvolumen pro Request spürbar (kein Doppel-Transport derselben
- * Dateien als ZIP UND einzeln in einem Request) und macht Erfolg/
- * Fehlschlag jeder Mail unabhängig von der jeweils anderen sichtbar.
+ * TRANSPORT: `multipart/form-data` statt JSON mit Base64-kodierten
+ * Dateiinhalten (Migration siehe `core/mail/sendRepresentativeMaterials.js`
+ * und `artifacts/size-analysis/attachment-size-analysis.md`, Abschnitt
+ * 8). Vercel Node-Functions parsen `req.body` automatisch nur für
+ * `application/json`/`application/x-www-form-urlencoded`/`text/plain`
+ * — für `multipart/form-data` bleibt `req` ein rohes, lesbares
+ * Node-Stream-Objekt (`http.IncomingMessage`), das hier direkt an
+ * `core/mail/parseMultipartFormData.js` (intern `busboy`) weiter-
+ * gereicht wird. Kein `bodyParser`-Konfigurationsfeld nötig (das ist
+ * ein Next.js-API-Routes-Konzept, hier eine eigenständige
+ * Vercel-Function ohne Next.js).
+ *
+ * Dieser Endpunkt wird ausschließlich vom internen Materialgenerator
+ * (`src/intern/generator.js`) aufgerufen (keine weiteren Aufrufer im
+ * Repository) — daher vollständige Migration statt eines parallel
+ * unterstützten Alt-JSON-Pfads (siehe Vorgabe: "Falls der Endpunkt
+ * ausschließlich intern verwendet wird: sauber vollständig migrieren").
+ *
+ * Weiterhin: `recipient` und `humbee` sind beide EINZELN optional —
+ * der Client (`core/mail/sendRepresentativeMaterials.js`) ruft diesen
+ * Endpunkt in ZWEI getrennten Requests auf (einmal nur `recipient`,
+ * einmal nur `humbee`), damit ein einzelner Request nicht das
+ * kombinierte Datenvolumen beider Mails tragen muss (Vercel-Limit
+ * ~4,5 MB Request-Body, Node-Runtime, nicht per Konfiguration
+ * erhöhbar).
  */
 export default async function handler(req, res) {
   const runId = typeof req.headers?.["x-vercel-id"] === "string" ? req.headers["x-vercel-id"] : undefined;
@@ -45,79 +54,38 @@ export default async function handler(req, res) {
 
   console.log(`${LOG_PREFIX} request received${logMeta}`);
 
-  const { recipient, humbee } = req.body || {};
-
-  if (!recipient && !humbee) {
-    console.log(`${LOG_PREFIX} rejected: weder recipient noch humbee übergeben${logMeta}`);
-    res.status(400).json({ ok: false, error: "Weder Empfänger- noch humbee-Versanddaten übergeben." });
+  const contentType = req.headers?.["content-type"] || "";
+  if (!contentType.startsWith("multipart/form-data")) {
+    console.log(`${LOG_PREFIX} rejected: kein multipart/form-data${logMeta}`);
+    res.status(400).json({ ok: false, error: "Erwartet multipart/form-data." });
     return;
   }
 
-  let recipientPayload;
-  if (recipient) {
-    if (typeof recipient.to !== "string" || !isValidEmail(recipient.to)) {
-      console.log(`${LOG_PREFIX} rejected: ungültige Empfänger-Adresse${logMeta}`);
-      res.status(400).json({ ok: false, error: "Ungültige Empfänger-E-Mail-Adresse." });
-      return;
-    }
-    if (typeof recipient.zipFilename !== "string" || recipient.zipFilename.trim() === "") {
-      console.log(`${LOG_PREFIX} rejected: ZIP-Dateiname fehlt${logMeta}`);
-      res.status(400).json({ ok: false, error: "ZIP-Dateiname fehlt." });
-      return;
-    }
-    if (typeof recipient.zipContent !== "string" || recipient.zipContent.trim() === "") {
-      console.log(`${LOG_PREFIX} rejected: ZIP-Anhang fehlt${logMeta}`);
-      res.status(400).json({ ok: false, error: "ZIP-Anhang fehlt." });
-      return;
-    }
-    let zipBuffer;
-    try {
-      zipBuffer = Buffer.from(recipient.zipContent, "base64");
-    } catch {
-      console.log(`${LOG_PREFIX} rejected: ZIP-Anhang konnte nicht dekodiert werden${logMeta}`);
-      res.status(400).json({ ok: false, error: "Anhang konnte nicht verarbeitet werden." });
-      return;
-    }
-    recipientPayload = {
-      to: recipient.to,
-      subject: recipient.subject,
-      text: recipient.text,
-      html: recipient.html,
-      zipFilename: recipient.zipFilename,
-      zipContent: zipBuffer,
-    };
+  let parsed;
+  try {
+    parsed = await parseMultipartFormData(req);
+  } catch (err) {
+    console.log(`${LOG_PREFIX} rejected: Multipart-Parsing fehlgeschlagen (${err instanceof Error ? err.name : "unknown"})${logMeta}`);
+    res.status(400).json({ ok: false, error: "Anhänge konnten nicht verarbeitet werden." });
+    return;
   }
 
-  let humbeePayload;
-  if (humbee) {
-    if (typeof humbee.to !== "string" || !isValidEmail(humbee.to)) {
-      console.log(`${LOG_PREFIX} rejected: ungültige humbee-Adresse${logMeta}`);
-      res.status(400).json({ ok: false, error: "Ungültige humbee-E-Mail-Adresse." });
-      return;
-    }
-    if (!Array.isArray(humbee.attachments)) {
-      console.log(`${LOG_PREFIX} rejected: humbee-Anhänge fehlen${logMeta}`);
-      res.status(400).json({ ok: false, error: "humbee-Anhänge fehlen." });
-      return;
-    }
-    let humbeeAttachments;
-    try {
-      humbeeAttachments = humbee.attachments.map((att) => ({
-        filename: att.filename,
-        content: Buffer.from(att.content, "base64"),
-      }));
-    } catch {
-      console.log(`${LOG_PREFIX} rejected: humbee-Anhänge konnten nicht dekodiert werden${logMeta}`);
-      res.status(400).json({ ok: false, error: "Anhänge konnten nicht verarbeitet werden." });
-      return;
-    }
-    humbeePayload = {
-      to: humbee.to,
-      subject: humbee.subject,
-      text: humbee.text,
-      attachments: humbeeAttachments,
-    };
+  let metadata;
+  try {
+    metadata = JSON.parse(parsed.fields.metadata || "");
+  } catch {
+    console.log(`${LOG_PREFIX} rejected: metadata-Feld fehlt oder ist kein gültiges JSON${logMeta}`);
+    res.status(400).json({ ok: false, error: "Versanddaten fehlen oder sind ungültig." });
+    return;
   }
+
+  const built = buildRepresentativeMailPayloadsFromMultipart({ metadata, files: parsed.files });
+  if (!built.ok) {
+    console.log(`${LOG_PREFIX} rejected: ${built.error}${logMeta}`);
+    res.status(400).json({ ok: false, error: built.error });
+    return;
+  }
+  const { recipientPayload, humbeePayload } = built;
 
   console.log(`${LOG_PREFIX} mail aufgebaut, Maildienst wird aufgerufen${logMeta}`);
 

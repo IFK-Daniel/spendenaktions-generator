@@ -1,11 +1,14 @@
 # Analyse: Versandanhänge Repräsentanten-Materialpaket
 
-Zwei Optimierungsrunden. Diese Fassung ersetzt die erste Version des
-Berichts vollständig und trennt sauber zwischen einem künstlichen
-Worst-Case-Test (frühere Fassung dieses Berichts) und einer am realen
-Nutzerfoto kalibrierten Rekonstruktion (diese Fassung). Rohdaten:
-[`before-after-sizes.json`](./before-after-sizes.json), Einzelläufe:
-`package-*.json` in diesem Ordner.
+Drei Optimierungsrunden (Abschnitte 1–12: Runde 1+2, Materialgrößen;
+Abschnitt 13: Runde 3, Transport-Umstellung — **hier steht das
+aktuell gültige Endergebnis**, Abschnitt 12 ist der Zwischenstand VOR
+der Transport-Umstellung). Diese Fassung trennt außerdem sauber
+zwischen einem künstlichen Worst-Case-Test (frühere Berichtsfassung)
+und einer am realen Nutzerfoto kalibrierten Rekonstruktion (ab Runde 2).
+Rohdaten: [`before-after-sizes.json`](./before-after-sizes.json),
+Einzellauf der letzten Messung:
+[`package-round3-multipart.json`](./package-round3-multipart.json).
 
 ## 0. Einordnung der Messmethode (wichtig)
 
@@ -382,3 +385,186 @@ wirksamste nächste Schritt — reduziert die Transport-Overhead-Kosten
 um ca. 33 %, ohne Materialqualität oder Mailanzahl anzufassen. Das
 wurde in dieser Runde bewusst **nicht** umgesetzt (Vorgabe: "noch
 nichts Großes umbauen") und wartet auf eine bewusste Entscheidung.
+
+---
+
+## 13. Dritte Runde: Transport-Umstellung auf `multipart/form-data`
+
+Umgesetzt: Abschnitt 8, Option C (oben als "vielversprechendster
+Hebel" empfohlen). Reine Transport-Änderung — keine weitere
+Qualitätsreduktion, keine Aufteilung des Empfänger-Versands auf
+mehrere Mails, kein neuer Speicherdienst.
+
+### 13.1 Bisheriger Datenpfad (vor dieser Änderung)
+
+```
+Browser: generateFlyerMaterial()/generateCertificateMaterial()/generateMaterial()
+  → fertige PDF-/PNG-Bytes als File/Blob im Speicher
+  → buildMaterialZip.js (JSZip) → EIN ZIP-Blob
+  → encodeAttachmentBase64.js: Blob → Base64-String (btoa, byteweise)
+  → buildRepresentativeDeliveryRequest.js: { recipient: { …, zipContent: <Base64-String> } }
+  → fetch(url, { body: JSON.stringify(payload), headers: {"Content-Type":"application/json"} })
+  → api/send-representative-mail.js: req.body bereits von Vercel als JSON geparst
+  → Buffer.from(recipient.zipContent, "base64") → nodemailer attachment
+```
+
+Base64 vergrößert Binärdaten um Faktor 4/3 (+33 %) — nachgewiesen in
+Abschnitt 9 der zweiten Runde: 3.304.002 Byte ZIP → 4.405.336 Byte
+Base64 → 4.405.491 Byte JSON-Payload.
+
+### 13.2 Neuer Datenpfad
+
+```
+Browser: (Materialerzeugung UNVERÄNDERT) → File/Blob im Speicher
+  → buildMaterialZip.js (JSZip) → EIN ZIP-Blob (UNVERÄNDERT)
+  → buildRepresentativeDeliveryRequest.js: { recipient: { …, zipBlob: <Blob> } }
+    (KEIN encodeAttachmentBase64.js mehr — Datei entfernt, war danach
+    ungenutzt)
+  → sendRepresentativeMaterials.js: FormData mit einem "metadata"-JSON-
+    Textfeld (to/subject/text/html/zipFilename — OHNE Dateiinhalt) und
+    einem "files"-Dateiteil (der rohe ZIP-Blob)
+  → fetch(url, { method: "POST", body: formData })
+    — Content-Type wird BEWUSST NICHT gesetzt: der Browser erzeugt die
+    korrekte Boundary automatisch; ein manueller Header ohne Boundary
+    würde den Request unlesbar machen.
+  → api/send-representative-mail.js: Vercel parst req.body NICHT für
+    multipart/form-data (nur für JSON/urlencoded/Text) — req bleibt ein
+    roher, lesbarer Node-Stream, der an core/mail/parseMultipartFormData.js
+    (nutzt `busboy`) übergeben wird.
+  → core/mail/buildRepresentativeMailPayloadsFromMultipart.js: ordnet
+    Metadata-Feld + Dateiteil(e) in dieselbe Struktur ein, die
+    deliverRepresentativeMaterials.js schon vorher erwartete
+    ({ zipContent: Buffer } bzw. { attachments: [{filename, content: Buffer}] })
+  → core/mail/deliverRepresentativeMaterials.js — UNVERÄNDERT — →
+    nodemailer attachment
+```
+
+`core/mail/deliverRepresentativeMaterials.js` (die eigentliche
+Versand-/Protokollierungslogik) musste **nicht geändert** werden: sie
+erwartete auch vorher schon rohe `Buffer`, nur die Quelle dieses
+`Buffer` hat sich geändert (`busboy`-Dateiteil statt
+`Buffer.from(base64, "base64")`).
+
+### 13.3 Neue/geänderte Dateien
+
+| Datei | Änderung |
+|---|---|
+| `core/materials/buildRepresentativeDeliveryRequest.js` | `zipContent`/`attachment.content` sind jetzt rohe `Blob`s (`zipBlob`) statt Base64-Strings; `encodeAttachmentBase64`-Import entfernt |
+| `core/mail/sendRepresentativeMaterials.js` | Baut `FormData` statt `JSON.stringify`; misst die tatsächliche Multipart-Bytezahl exakt (`new Response(formData).arrayBuffer()`) statt einer Base64-Schätzung; humbee-Chunking unverändert im Prinzip, jetzt anhand roher Byte-Größen |
+| `api/send-representative-mail.js` | Erwartet jetzt `multipart/form-data` (400 bei anderem Content-Type); delegiert Parsing/Zuordnung an die zwei neuen Core-Module unten; sonst unverändert |
+| `core/mail/parseMultipartFormData.js` | **Neu.** Liest einen `multipart/form-data`-Request-Stream über `busboy` vollständig ein (Textfelder + Dateien mit Namen/MIME-Typ/Inhalt als `Buffer`) |
+| `core/mail/buildRepresentativeMailPayloadsFromMultipart.js` | **Neu.** Reine Zuordnungs-/Validierungslogik: `metadata` + Dateiteile → `recipientPayload`/`humbeePayload` im von `deliverRepresentativeMaterials.js` erwarteten Format |
+| `core/mail/deliverRepresentativeMaterials.js` | **Unverändert** |
+| `core/mail/encodeAttachmentBase64.js` | **Gelöscht** (nach der Migration ohne verbleibende Aufrufer) |
+| `package.json` | `busboy` (`^1.6.0`) als neue Produktions-Abhängigkeit — reiner Server-Code, taucht nicht im Browser-Bundle auf (Build-Größe unverändert, siehe `npm run build`) |
+
+### 13.4 humbee-Versand
+
+Geprüft (Vorgabe Abschnitt 6): humbee lief bereits vorher über
+denselben Browser→Function-Request-Mechanismus wie der Empfänger,
+NICHT serverseitig gechunkt — die Aufteilung auf mehrere Mails
+(`chunkAttachments` in `sendRepresentativeMaterials.js`) geschieht
+clientseitig, VOR dem Versand. Diese funktionierende Logik wurde daher
+nicht "unnötig verändert", sondern 1:1 auf Multipart übertragen: statt
+der Byte-Schätzung über `JSON.stringify(...).length` wird jetzt direkt
+mit `blob.size` gerechnet (näher an der Realität, da kein Base64-Faktor
+mehr einzurechnen ist), und jede tatsächlich zu sendende Gruppe wird
+vor dem Versand exakt vermessen. Die Anleitung bleibt weiterhin
+ausschließlich im Empfänger-ZIP enthalten — humbee erhält unverändert
+nur `lastFiles` (die individuell erzeugten Materialien ohne Anleitung,
+siehe `src/intern/generator.js`, unverändert in dieser Runde).
+
+### 13.5 Exakte Payload-Messung (realistisches vollständiges Paket)
+
+Gleiches Paket wie in Runde 2 (Flyer Druckerei Du+Sie, Flyer Home
+Du+Sie, Urkunde, PayPal-QR, GiroCode, Anleitung; realistisches, auf die
+Nutzerbeobachtung kalibriertes Testfoto, 1200px/JPEG q0.88).
+
+| | Rohgröße | Base64/JSON (ALT) | multipart/form-data (NEU) |
+|---|---:|---:|---:|
+| ZIP-Inhalt (Summe Einzeldateien) | 3.302.994 Byte | — | — |
+| ZIP-Datei | 3.304.002 Byte | — | — |
+| **Recipient-Request-Payload** | — | **4.405.491 Byte** | **3.304.431 Byte** |
+| Transport-Overhead ggü. Rohgröße | — | 33,4 % | **0,01 %** (429 Byte: Boundary + 2 Part-Header + `metadata`-JSON) |
+| Anteil am Limit (4.450.000 Byte) | — | 99,0 % | **74,3 %** |
+| Reserve | — | 1,0 % | **25,7 %** |
+
+**Transport-Ersparnis durch die Umstellung allein: 1.101.060 Byte
+(25,0 %) — bei UNVERÄNDERTER Materialqualität und UNVERÄNDERTER
+Anzahl Mails.**
+
+Reproduzierbar mit `node scripts/measure-representative-package.mjs
+--photo artifacts/size-analysis/photo-realistic-current-1200.jpg
+--label <name>` (misst jetzt zusätzlich die reale Multipart-Bytezahl);
+Rohdaten: [`package-round3-multipart.json`](./package-round3-multipart.json).
+
+### 13.6 Client-seitige Sicherheitsprüfung (Vorgabe Abschnitt 10)
+
+`sendRepresentativeMaterials.js` prüft vor jedem Request die ECHTE
+Multipart-Bytezahl (`new Response(formData).arrayBuffer()`, keine
+Schätzung) gegen `MAX_REQUEST_BYTES = 4.450.000` — denselben, bereits
+per Live-Test gegen Production ermittelten Wert wie zuvor (der Wert
+beschreibt das Transport-Limit selbst, nicht die Kodierung, und bleibt
+daher unverändert gültig). Bei Überschreitung erscheint dieselbe
+verständliche Fehlermeldung wie zuvor ("Anhänge zu groß für den
+Mailversand (X MB, Limit ca. 4,5 MB)."), jetzt aber mit der
+tatsächlichen (nicht künstlich durch Base64 aufgeblähten) Größe.
+
+### 13.7 Backward Compatibility (Vorgabe Abschnitt 11)
+
+Geprüft: `/api/send-representative-mail` wird ausschließlich vom
+internen Materialgenerator (`src/intern/generator.js`) aufgerufen —
+keine weiteren Aufrufer im Repository (`grep` über das gesamte
+Projekt). Daher **vollständige Migration** statt eines parallel
+unterstützten Alt-JSON-Pfads: der Endpunkt akzeptiert jetzt
+ausschließlich `multipart/form-data` und lehnt jeden anderen
+`Content-Type` mit einer klaren 400-Fehlermeldung ab. Das hält den
+Endpunkt einfach (keine zwei parallelen Codepfade dauerhaft zu
+pflegen) und ist ohne Risiko, da kein externer Aufrufer betroffen sein
+kann.
+
+### 13.8 Tests
+
+18 neue/aktualisierte Tests (siehe Dateien):
+- `core/mail/parseMultipartFormData.test.js` (neu, 5 Tests): Textfelder,
+  Dateien mit erhaltenem Namen/MIME-Typ, mehrere Dateien unter
+  demselben Feldnamen, bytegenaue Übertragung (inkl. Bytes, die wie
+  ein Boundary aussehen: `--`, CR/LF), Fehlerfall fehlende Boundary.
+- `core/mail/buildRepresentativeMailPayloadsFromMultipart.test.js`
+  (neu, 10 Tests): recipient-/humbee-Zuordnung, E-Mail-Validierung,
+  ZIP-Eindeutigkeit, Anleitung NICHT automatisch bei humbee, keine
+  `undefined`-Regression bei fehlenden optionalen Feldern.
+- `core/mail/sendRepresentativeMaterials.test.js` (überarbeitet, 13
+  Tests): `FormData` statt JSON, kein Base64 im Payload, Metadata ohne
+  Dateiinhalte, getrennte recipient-/humbee-Requests, humbee-Chunking
+  mit echten Byte-Größen, Anleitung bleibt exklusiv beim Empfänger.
+- `core/materials/buildRepresentativeDeliveryRequest.test.js`
+  (2 Tests angepasst): `zipBlob`/`attachment.content` sind jetzt
+  `Blob`-Instanzen statt Strings.
+- `core/mail/representativeMailPayloadSize.test.js` (neu,
+  Payload-Regressionstest, Vorgabe Abschnitt 13): baut mit dem echten
+  Rendering-Code ein vollständiges Paket und prüft `multipart`-Payload
+  `< 90% von MAX_REQUEST_BYTES` — schlägt fehl, sobald künftige
+  Materialien das Paket wieder über die Sicherheitsschwelle wachsen
+  lassen.
+
+Alle bestehenden Tests zu IFK-ID, alternativer Empfängeradresse,
+Rollenlogik, humbee-Betreff/-Text, `undefined`/`null`-Regression
+(`buildRepresentativeDeliveryRequest.test.js`) sowie zur eigentlichen
+Versand-/Protokollierungslogik (`deliverRepresentativeMaterials.test.js`,
+unverändert) laufen unverändert weiter — sie sind von der reinen
+Transport-Umstellung nicht betroffen. **634 Tests gesamt, alle grün.**
+`npm run build` erfolgreich (Bundle-Größe unverändert — `busboy` ist
+reiner Server-Code).
+
+### 13.9 Ergebnis
+
+**A. Das vollständige Paket passt jetzt mit 25,7 % Reserve in einen
+einzelnen Vercel-Request — deutlich mehr als die geforderten
+mindestens 10 %.**
+
+Keine weitere Qualitätsreduktion war nötig oder wurde vorgenommen:
+Fotoauflösung (1200px), JPEG-Qualität (88 %), Urkunden-Optimierung und
+alle übrigen Materialien sind identisch zu Runde 2. Der Empfänger
+erhält weiterhin genau eine Mail mit dem vollständigen ZIP-Archiv;
+keine Aufteilung auf mehrere Mails wurde vorgenommen.

@@ -218,7 +218,7 @@ test("buildRepresentativeDeliveryRequest: fällt ohne companionEmail auf manifes
   assert.equal(request.recipient.to, "fallback@example.com");
 });
 
-test("Repräsentant erhält genau das ZIP-Archiv, keine Einzeldateien", async () => {
+test("Repräsentant erhält genau das ZIP-Archiv als rohen Blob (kein Base64), keine Einzeldateien", async () => {
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
     zip: fakeZip(),
@@ -228,19 +228,19 @@ test("Repräsentant erhält genau das ZIP-Archiv, keine Einzeldateien", async ()
   });
 
   assert.equal(request.recipient.zipFilename, "IFK_Materialien_IFK7QX_Max_Mustermann.zip");
-  assert.equal(typeof request.recipient.zipContent, "string");
-  assert.ok(request.recipient.zipContent.length > 0);
+  assert.ok(request.recipient.zipBlob instanceof Blob);
+  assert.ok(request.recipient.zipBlob.size > 0);
   assert.deepEqual(Object.keys(request.recipient).sort(), [
     "html",
     "subject",
     "text",
     "to",
-    "zipContent",
+    "zipBlob",
     "zipFilename",
   ]);
 });
 
-test("humbee erhält die Einzeldateien und keine ZIP-Datei", async () => {
+test("humbee erhält die Einzeldateien als rohe Blobs (kein Base64) und keine ZIP-Datei", async () => {
   const files = fakeFiles();
   const request = await buildRepresentativeDeliveryRequest({
     manifest: fakeManifest(),
@@ -256,10 +256,10 @@ test("humbee erhält die Einzeldateien und keine ZIP-Datei", async () => {
     files.map((file) => file.filename)
   );
   for (const attachment of request.humbee.attachments) {
-    assert.equal(typeof attachment.content, "string");
-    assert.ok(attachment.content.length > 0);
+    assert.ok(attachment.content instanceof Blob);
+    assert.ok(attachment.content.size > 0);
   }
-  assert.ok(!("zipContent" in request.humbee));
+  assert.ok(!("zipBlob" in request.humbee));
   assert.ok(!("zipFilename" in request.humbee));
 });
 

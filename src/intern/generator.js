@@ -1,5 +1,5 @@
 import logoUrl from "../../Medien/IFK Logo nur Zähne.png";
-import { generateIfkId } from "../../core/id/generateIfkId.js";
+import { generateAndReserveIfkId } from "../../core/id/generateAndReserveIfkId.js";
 import { validateIfkId } from "../../core/id/validateIfkId.js";
 import { isIfkIdComplete } from "../../core/id/isIfkIdComplete.js";
 import { isValidEmail } from "../../core/mail/validateEmail.js";
@@ -2235,7 +2235,7 @@ export function initGenerator() {
     ifkIdGenerateBtn.classList.toggle("ifk-id-generate-btn--secondary", ifkIdInput.value.trim().length > 0);
   }
 
-  ifkIdGenerateBtn.addEventListener("click", () => {
+  ifkIdGenerateBtn.addEventListener("click", async () => {
     // Eine bereits vorhandene IFK-ID (manuell eingetragen oder aus dem
     // Screenshot übernommen) wird nie ohne Rückfrage überschrieben.
     if (ifkIdInput.value.trim()) {
@@ -2244,12 +2244,28 @@ export function initGenerator() {
       );
       if (!confirmed) return;
     }
-    ifkIdInput.value = generateIfkId();
-    updateIfkIdGenerateBtnEmphasis();
-    // Eine neu generierte IFK-ID ist per Definition gültig — gilt daher
-    // ebenso als "erledigt" (grün) wie eine importierte oder manuell
-    // eingetippte gültige ID (siehe `updateIfkIdCompletionState`).
-    updateIfkIdCompletionState();
+
+    clearError();
+    // Erst nach erfolgreicher serverseitiger Reservierung (siehe
+    // `generateAndReserveIfkId`) wird die ID angezeigt — nie eine
+    // ungeprüfte ID, die doppelt vergeben sein könnte.
+    ifkIdGenerateBtn.disabled = true;
+    try {
+      const result = await generateAndReserveIfkId();
+      if (!result.ok) {
+        showError(result.error);
+        return;
+      }
+      ifkIdInput.value = result.ifkId;
+      updateIfkIdGenerateBtnEmphasis();
+      // Eine neu generierte, erfolgreich reservierte IFK-ID ist per
+      // Definition gültig — gilt daher ebenso als "erledigt" (grün) wie
+      // eine importierte oder manuell eingetippte gültige ID (siehe
+      // `updateIfkIdCompletionState`).
+      updateIfkIdCompletionState();
+    } finally {
+      ifkIdGenerateBtn.disabled = false;
+    }
   });
 
   ifkIdInput.addEventListener("input", () => {

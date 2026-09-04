@@ -1,32 +1,61 @@
+import { validateIfkId } from "./validateIfkId.js";
+
 /**
- * Reserviert eine IFK-ID serverseitig, um Mehrfachvergabe/Kollisionen
- * zwischen gleichzeitigen Aktionen/Repräsentanten zu verhindern.
+ * Reserviert eine IFK-ID serverseitig (`/api/reserve-ifk-id`), um
+ * Mehrfachvergabe/Kollisionen zwischen gleichzeitigen Aktionen/
+ * Repräsentanten zu verhindern.
  *
- * Geplante Verantwortlichkeit: Kommunikation mit einem noch zu
- * definierenden Backend-Endpunkt (analog zu
- * `core/mail/sendGeneratedMaterials.js`), der eine gemäß
- * `generateIfkId`/`validateIfkId` formal gültige ID als "vergeben"
- * markiert. Enthält keine eigene Speicherlogik – die Persistenz liegt
- * außerhalb dieses Moduls (kein DB-Zugriff im Core). Dieses Modul bleibt
- * bewusst vollständig unabhängig von einer konkreten Datenbank: Es
- * kennt nur den künftigen API-Vertrag, nicht dessen Implementierung.
+ * Reiner Transport, analog zu `core/mail/sendRepresentativeMaterials.js`:
+ * baut keine eigene Speicherlogik, kennt nur den API-Vertrag. Die
+ * eigentliche atomare Reservierung (Redis `SET ... NX`) passiert
+ * serverseitig in `api/reserve-ifk-id.js`.
  *
- * Geplanter Datenfluss: Client ruft `generateIfkId()` → Client prüft
- * das Ergebnis optional mit `validateIfkId()` → Client ruft
- * `reserveIfkId(id)` → Server prüft/reserviert die ID gegen eine
- * Datenquelle → Rückmeldung an den Client.
- *
- * Abhängigkeiten (geplant): künftiger API-Endpunkt (`/api/...`, noch
- * nicht angelegt); die aufrufende Seite sollte die ID vorab mit
- * `validateIfkId` prüfen, um offensichtlich ungültige IDs erst gar
- * nicht zu reservieren.
- *
- * TODO: API-Endpunkt für die Reservierung definieren und implementieren.
- * TODO: Fehlerfälle klären (ID bereits vergeben, Endpunkt nicht erreichbar).
+ * Für den vollständigen "erzeugen + reservieren, bei Kollision erneut
+ * versuchen"-Ablauf siehe `generateAndReserveIfkId()`.
  *
  * @param {string} ifkId Eine gemäß `validateIfkId` formal gültige IFK-ID.
- * @returns {Promise<{ ok: boolean, error?: string }>}
+ * @returns {Promise<{ ok: boolean, reason: "reserved"|"taken"|"invalid"|"unreachable"|"server-error", error?: string }>}
+ *   `ok: true` nur, wenn die ID gerade frisch reserviert wurde (war
+ *   vorher frei). In jedem anderen Fall `ok: false` — `reason`
+ *   unterscheidet dabei "ID bereits vergeben" (`taken`, für erneuten
+ *   Versuch mit neuer ID) von echten Fehlern (`invalid`, `unreachable`,
+ *   `server-error`).
  */
 export async function reserveIfkId(ifkId) {
-  throw new Error("reserveIfkId: noch nicht implementiert");
+  const check = validateIfkId(ifkId);
+  if (!check.valid) {
+    return { ok: false, reason: "invalid", error: "Ungültige IFK-ID." };
+  }
+
+  const unreachableResult = {
+    ok: false,
+    reason: "unreachable",
+    error: "Die IFK-ID konnte gerade nicht eindeutig reserviert werden. Bitte versuche es später erneut.",
+  };
+
+  let response;
+  try {
+    response = await fetch("/api/reserve-ifk-id", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ifkId: check.normalized }),
+    });
+  } catch {
+    return unreachableResult;
+  }
+
+  const result = await response.json().catch(() => null);
+  if (!result || typeof result.ok !== "boolean") {
+    return unreachableResult;
+  }
+
+  if (!response.ok || !result.ok) {
+    return { ok: false, reason: "server-error", error: unreachableResult.error };
+  }
+
+  if (result.reserved === true) {
+    return { ok: true, reason: "reserved" };
+  }
+
+  return { ok: false, reason: "taken", error: "Diese IFK-ID ist bereits vergeben." };
 }

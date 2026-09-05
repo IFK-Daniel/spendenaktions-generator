@@ -16,8 +16,10 @@
  *   node scripts/import-ifk-ids.mjs <Datei mit einer IFK-ID pro Zeile>
  *   node scripts/import-ifk-ids.mjs < ids.txt        (Eingabe über stdin)
  *
- * Benötigt dieselben Umgebungsvariablen wie `api/reserve-ifk-id.js`:
- *   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+ * Benötigt dieselben Umgebungsvariablen wie `api/reserve-ifk-id.js`
+ * (siehe `api/_lib/upstashRedis.js` für die unterstützten Namensschemata):
+ *   UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+ *   ODER KV_REST_API_URL / KV_REST_API_TOKEN
  * (z. B. per `vercel env pull` oder manuell in der Shell exportiert).
  */
 import { readFileSync } from "node:fs";
@@ -51,7 +53,9 @@ async function readInput() {
 
 async function main() {
   if (!isUpstashConfigured()) {
-    console.error("Fehler: UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN sind nicht gesetzt.");
+    console.error(
+      "Fehler: weder UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN noch KV_REST_API_URL/KV_REST_API_TOKEN sind vollständig gesetzt."
+    );
     process.exit(1);
   }
 

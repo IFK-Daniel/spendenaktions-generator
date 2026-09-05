@@ -32,8 +32,15 @@ function withFetch(impl, fn) {
 // reicht hier also aus.
 const { isUpstashConfigured, redisSetNx } = await import("./upstashRedis.js");
 
+const CLEAR_ALL_VARS = {
+  UPSTASH_REDIS_REST_URL: undefined,
+  UPSTASH_REDIS_REST_TOKEN: undefined,
+  KV_REST_API_URL: undefined,
+  KV_REST_API_TOKEN: undefined,
+};
+
 test("isUpstashConfigured: false, wenn Env-Vars fehlen", () =>
-  withEnv({ UPSTASH_REDIS_REST_URL: undefined, UPSTASH_REDIS_REST_TOKEN: undefined }, () => {
+  withEnv(CLEAR_ALL_VARS, () => {
     assert.equal(isUpstashConfigured(), false);
   }));
 
@@ -69,9 +76,68 @@ test("redisSetNx: bereits vorhandener Key liefert false (Upstash-Antwort { resul
   ));
 
 test("redisSetNx: wirft, wenn nicht konfiguriert", () =>
-  withEnv({ UPSTASH_REDIS_REST_URL: undefined, UPSTASH_REDIS_REST_TOKEN: undefined }, async () => {
+  withEnv(CLEAR_ALL_VARS, async () => {
     await assert.rejects(() => redisSetNx("ifk:id:IFKABC", "1"));
   }));
+
+test("isUpstashConfigured: true über KV_REST_API_URL/KV_REST_API_TOKEN (Vercel-Storage-Namensschema)", () =>
+  withEnv(
+    { ...CLEAR_ALL_VARS, KV_REST_API_URL: "https://example-kv.upstash.io", KV_REST_API_TOKEN: "kv-token" },
+    () => {
+      assert.equal(isUpstashConfigured(), true);
+    }
+  ));
+
+test("redisSetNx: funktioniert über das KV_REST_API_*-Namensschema", () =>
+  withEnv(
+    { ...CLEAR_ALL_VARS, KV_REST_API_URL: "https://example-kv.upstash.io", KV_REST_API_TOKEN: "kv-token" },
+    () =>
+      withFetch(
+        async (url, opts) => {
+          assert.equal(url, "https://example-kv.upstash.io/set/ifk%3Aid%3AIFKABC/1/NX");
+          assert.equal(opts.headers.Authorization, "Bearer kv-token");
+          return { ok: true, json: async () => ({ result: "OK" }) };
+        },
+        async () => {
+          const wasSet = await redisSetNx("ifk:id:IFKABC", "1");
+          assert.equal(wasSet, true);
+        }
+      )
+  ));
+
+test("UPSTASH_REDIS_REST_*-Paar hat Vorrang, wenn beide Namensschemata gesetzt sind", () =>
+  withEnv(
+    {
+      ...CLEAR_ALL_VARS,
+      UPSTASH_REDIS_REST_URL: "https://primary.upstash.io",
+      UPSTASH_REDIS_REST_TOKEN: "primary-token",
+      KV_REST_API_URL: "https://secondary-kv.upstash.io",
+      KV_REST_API_TOKEN: "secondary-token",
+    },
+    () =>
+      withFetch(
+        async (url, opts) => {
+          assert.equal(url, "https://primary.upstash.io/set/ifk%3Aid%3AIFKABC/1/NX");
+          assert.equal(opts.headers.Authorization, "Bearer primary-token");
+          return { ok: true, json: async () => ({ result: "OK" }) };
+        },
+        () => redisSetNx("ifk:id:IFKABC", "1")
+      )
+  ));
+
+test("unvollständiges Paar (nur URL ODER nur Token je Schema) gilt als nicht konfiguriert — kein Mischen der Paare", () =>
+  withEnv(
+    {
+      ...CLEAR_ALL_VARS,
+      UPSTASH_REDIS_REST_URL: "https://primary.upstash.io",
+      // UPSTASH_REDIS_REST_TOKEN bewusst nicht gesetzt
+      KV_REST_API_TOKEN: "secondary-token",
+      // KV_REST_API_URL bewusst nicht gesetzt
+    },
+    () => {
+      assert.equal(isUpstashConfigured(), false);
+    }
+  ));
 
 test("redisSetNx: wirft bei Netzwerkfehler", () =>
   withEnv({ UPSTASH_REDIS_REST_URL: "https://example.upstash.io", UPSTASH_REDIS_REST_TOKEN: "token" }, () =>

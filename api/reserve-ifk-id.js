@@ -35,7 +35,9 @@ export default async function handler(req, res) {
   }
 
   if (!isUpstashConfigured()) {
-    console.error("[reserve-ifk-id] UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN ist nicht konfiguriert.");
+    console.error(
+      "[reserve-ifk-id] Redis ist nicht konfiguriert (weder UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN noch KV_REST_API_URL/KV_REST_API_TOKEN vollständig gesetzt)."
+    );
     res.status(503).json({
       ok: false,
       error: "Die IFK-ID konnte gerade nicht eindeutig reserviert werden. Bitte versuche es später erneut.",

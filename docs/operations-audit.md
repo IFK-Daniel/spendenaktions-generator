@@ -153,12 +153,14 @@ Vollständig aus dem Code inventarisiert (`grep -rn "process.env." api core src 
 | `INFO_RECIPIENT` | Optionale interne Benachrichtigung im **öffentlichen** Generator bei `infoOptIn: true` (`api/send-email.js`) | Öffentlicher Generator, optional | Server | Nein | Keiner (Zweig wird übersprungen) | Diese optionale zweite Mail wird einfach nicht versendet, kein Fehler |
 | `MATERIAL_ADMIN_USERNAME` | Login-Prüfung interner Generator | Interner Login | Server | **Ja** | Keiner | Login-Endpunkt antwortet mit 500 "Login ist derzeit nicht verfügbar" (siehe `api/login.js:20-24`) |
 | `MATERIAL_ADMIN_PASSWORD` | Login-Prüfung interner Generator | Interner Login | Server | **Ja** | Keiner | s. o. |
-| `UPSTASH_REDIS_REST_URL` | REST-Endpunkt-URL der Upstash-Redis-Instanz (`api/_lib/upstashRedis.js`) | IFK-ID-Reservierung (`api/reserve-ifk-id.js`, `scripts/import-ifk-ids.mjs`) | Server | Nein (Infrastruktur-URL, kein Secret im engeren Sinn, aber nicht öffentlich zu machen) | Keiner | `isUpstashConfigured()` liefert `false` → `/api/reserve-ifk-id` antwortet mit 503, "Neu generieren" zeigt die Meldung "Die IFK-ID konnte gerade nicht eindeutig reserviert werden. Bitte versuche es später erneut." und zeigt **keine** ungeprüfte ID an |
-| `UPSTASH_REDIS_REST_TOKEN` | REST-Auth-Token derselben Upstash-Redis-Instanz | IFK-ID-Reservierung | Server | **Ja** | Keiner | s. o. |
+| `UPSTASH_REDIS_REST_URL` **oder** `KV_REST_API_URL` | REST-Endpunkt-URL der Redis-Instanz (`api/_lib/upstashRedis.js`) — beide Namensschemata werden gleichwertig unterstützt (erstes Paar hat Vorrang, falls beide vollständig gesetzt sind); welcher Name tatsächlich vergeben wird, hängt davon ab, über welchen Vercel-Dialog die Ressource angelegt wird (direkte Upstash-Marketplace-Ressource → `UPSTASH_REDIS_REST_URL`; Vercel-"Storage"-Dialog → `KV_REST_API_URL`, intern ebenfalls Upstash) | IFK-ID-Reservierung (`api/reserve-ifk-id.js`, `scripts/import-ifk-ids.mjs`) | Server | Nein (Infrastruktur-URL, kein Secret im engeren Sinn, aber nicht öffentlich zu machen) | Keiner | `isUpstashConfigured()` liefert `false` → `/api/reserve-ifk-id` antwortet mit 503, "Neu generieren" zeigt die Meldung "Die IFK-ID konnte gerade nicht eindeutig reserviert werden. Bitte versuche es später erneut." und zeigt **keine** ungeprüfte ID an — **live in Production per `curl` verifiziert (Stand siehe unten): genau dieses Verhalten tritt aktuell ein**, da die Redis-Ressource noch nicht angebunden ist |
+| `UPSTASH_REDIS_REST_TOKEN` **oder** `KV_REST_API_TOKEN` | REST-Auth-Token derselben Instanz (dasselbe Namensschema wie die zugehörige URL-Variable — ein Mischen der beiden Paare gilt bewusst als "nicht konfiguriert") | IFK-ID-Reservierung | Server | **Ja** | Keiner | s. o. |
 
-**Insgesamt 11 Variablen**, alle ausschließlich serverseitig (keine `VITE_*`/`import.meta.env`-Variablen im gesamten Code gefunden — der Client kennt keine Secrets).
+**Insgesamt 11 Variablen** (das Redis-Paar zählt einfach, unabhängig davon, welches der beiden Namensschemata verwendet wird), alle ausschließlich serverseitig (keine `VITE_*`/`import.meta.env`-Variablen im gesamten Code gefunden — der Client kennt keine Secrets).
 
-**Wo bei einem Neuaufbau hinterlegen:** Ausschließlich im Vercel-Projekt unter *Project Settings → Environment Variables* (Production-Scope). Es gibt keine `.env`-Datei im Repository (durch `.gitignore` ausgeschlossen) und keinen anderen Mechanismus — ohne die 9 Mail-/Login-Variablen im Vercel-Dashboard funktionieren Login und Mailversand nicht; ohne die beiden `UPSTASH_REDIS_REST_*`-Variablen funktioniert ausschließlich "Neu generieren" für die IFK-ID nicht (manuelle Eingabe/Übernahme bestehender IDs bleibt unabhängig davon nutzbar) — der Rest der Anwendung (Materialerzeugung, Vorschau, Download) bleibt in beiden Fällen nutzbar.
+**Wo bei einem Neuaufbau hinterlegen:** Ausschließlich im Vercel-Projekt unter *Project Settings → Environment Variables* (Production-Scope). Es gibt keine `.env`-Datei im Repository (durch `.gitignore` ausgeschlossen) und keinen anderen Mechanismus — ohne die 9 Mail-/Login-Variablen im Vercel-Dashboard funktionieren Login und Mailversand nicht; ohne eines der beiden Redis-Variablenpaare funktioniert ausschließlich "Neu generieren" für die IFK-ID nicht (manuelle Eingabe/Übernahme bestehender IDs bleibt unabhängig davon nutzbar) — der Rest der Anwendung (Materialerzeugung, Vorschau, Download) bleibt in beiden Fällen nutzbar.
+
+**Aktueller Stand (2026-09-05, verifiziert per Live-`curl` gegen Production nach Commit `2ea45ed`):** Weder `UPSTASH_REDIS_REST_*` noch `KV_REST_API_*` sind in Vercel gesetzt — die Redis-Ressource wurde noch **nicht** angelegt/verbunden. Der Code ist vollständig fertig und produktionsbereit (Commits `997b24f`, `2ea45ed`, beide erfolgreich deployed) und verhält sich nachweislich fail-safe: `POST /api/reserve-ifk-id` liefert HTTP 503 mit der vorgesehenen deutschen Fehlermeldung, keine technischen Details, keine ungeprüfte ID. Sobald eines der beiden Variablenpaare in Vercel gesetzt und redeployed ist, funktioniert "Neu generieren" ohne weitere Codeänderung.
 
 ---
 
@@ -232,17 +234,41 @@ Vollständig aus dem Code inventarisiert (`grep -rn "process.env." api core src 
 
 ## Externer Dienst: Upstash Redis
 
-Neu eingeführt für die IFK-ID-Reservierung (siehe oben). Bewusst kein größerer Datenbank-Unterbau — genutzt wird ausschließlich der eine atomare Befehl `SET key value NX` über die Upstash-REST-API (`api/_lib/upstashRedis.js`, per einfachem `fetch()`, keine zusätzliche Client-Bibliothek).
+Vorgesehen für die IFK-ID-Reservierung (siehe oben). Bewusst kein größerer Datenbank-Unterbau — genutzt wird ausschließlich der eine atomare Befehl `SET key value NX` über die Upstash-REST-API (`api/_lib/upstashRedis.js`, per einfachem `fetch()`, keine zusätzliche Client-Bibliothek).
+
+**Produktionsstatus (2026-09-05): Code fertig und deployed, Ressource noch nicht angebunden.** Es existiert aktuell **keine** produktive Redis-Instanz für dieses Projekt — weder als eigenständiges Upstash-Konto noch als Vercel-Storage-Ressource. Geprüfte Automatisierungswege und warum keiner davon ohne Weiteres nutzbar war:
+
+| Geprüfter Weg | Befund |
+|---|---|
+| Lokale `vercel`-CLI (`npx vercel`) | Vorhanden und mit einer bereits bestehenden, nicht von dieser Aufgabe angelegten Session authentifiziert (Account `feigenbutzd`, persönlicher Vercel-Account des lokalen Rechnernutzers). Dieser Account ist jedoch **nicht** Mitglied des Vercel-Teams, das `spendenaktions-generator.vercel.app` tatsächlich betreibt (Deployment-Metadaten zeigen den Team-Slug `ifk-de`; ein Scope-Wechsel auf `ifk-de` schlägt mit "The specified scope does not exist" fehl — dieser Account hat dort keinen Zugriff). `vercel project ls` unter diesem Account zeigt ausschließlich fünf fremde, projektfremde Vercel-Projekte. |
+| Vercel-API-Token | Keiner in der Umgebung, in Shell-Konfigurationsdateien oder im Projekt gefunden (`env`, `.env*`, Shell-RCs — alle leer). |
+| GitHub Actions Secrets | `gh secret list` im Repository liefert null Einträge — keine `VERCEL_TOKEN` o. ä. hinterlegt (deckt sich mit dem bereits dokumentierten Befund "keine GitHub Actions im Repository"). |
+| Upstash-Account/-Token/-CLI | Keine Upstash-Konfiguration, kein Token, keine CLI-Session auf diesem Rechner gefunden. |
+| **Ergebnis** | Das Anlegen der Redis-Ressource (Upstash-Konto bzw. Vercel-Marketplace-Provisionierung) ist ein **echter, nicht automatisierbarer Schritt** — er erfordert Zugriff auf den Vercel-Account/das Vercel-Team, das das Projekt tatsächlich besitzt (`ifk-de`), zu dem in dieser Session keine Zugangsdaten vorlagen. Das Anlegen eines neuen Drittanbieter-Kontos ist zusätzlich unabhängig von der Zugriffsfrage eine für automatisierte Ausführung grundsätzlich gesperrte Aktion. |
+
+**Was stattdessen bereits vorbereitet und produktiv verifiziert ist**, damit die Anbindung selbst ohne weitere Codeänderung funktioniert, sobald die Ressource existiert:
+
+- Der Code akzeptiert gleichwertig **zwei** Namensschemata für die Environment Variables (`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` **oder** `KV_REST_API_URL`/`KV_REST_API_TOKEN`, siehe Environment-Variables-Tabelle oben) — unabhängig davon, über welchen Vercel-Dialog die Ressource angelegt wird, muss danach nichts umbenannt werden.
+- Das Fail-safe-Verhalten wurde **live gegen Production verifiziert** (Commit `2ea45ed`): `curl -X POST https://spendenaktions-generator.vercel.app/api/reserve-ifk-id -d '{"ifkId":"IFK7QX"}'` liefert `HTTP 503` mit `{"ok":false,"error":"Die IFK-ID konnte gerade nicht eindeutig reserviert werden. Bitte versuche es später erneut."}` — keine ungeprüfte ID, kein technischer Fehlertext.
 
 | Aspekt | Befund |
 |---|---|
 | Zweck | Ausschließlich Kollisionsvermeidung für neu generierte IFK-IDs — atomare "reserviere nur, wenn noch nicht vorhanden"-Prüfung. Keine weitere fachliche Funktion. |
-| Was gespeichert wird | Pro vergebener IFK-ID ein Key-Value-Paar: Key `ifk:id:<ID>` (z. B. `ifk:id:IFKLJP`), Value `"1"`. **Ausdrücklich keine** Namen, E-Mail-Adressen, Rollen, Telefonnummern oder sonstigen Wegbegleiterdaten — verifiziert: `api/reserve-ifk-id.js` und `scripts/import-ifk-ids.mjs` übergeben an `redisSetNx()` ausschließlich die validierte ID selbst. |
+| Was gespeichert wird (sobald angebunden) | Pro vergebener IFK-ID ein Key-Value-Paar: Key `ifk:id:<ID>` (z. B. `ifk:id:IFKLJP`), Value `"1"`. **Ausdrücklich keine** Namen, E-Mail-Adressen, Rollen, Telefonnummern oder sonstigen Wegbegleiterdaten — verifiziert: `api/reserve-ifk-id.js` und `scripts/import-ifk-ids.mjs` übergeben an `redisSetNx()` ausschließlich die validierte ID selbst. |
 | Was ausdrücklich nicht gespeichert wird | Keine Personendaten jeglicher Art (siehe oben), keine IP-Adressen, keine Zeitstempel im aktuellen Schema (optionale künftige Erweiterung um einen rein technischen `createdAt`-Wert wäre möglich, ohne das Kern-Schema zu ändern). |
-| Zugriffsweg | REST-API über zwei Umgebungsvariablen (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`), ausschließlich serverseitig (`api/reserve-ifk-id.js`, `scripts/import-ifk-ids.mjs`) — kein Client-seitiger Zugriff. |
-| Recovery/Übergabe | Wie bei SMTP/Login-Secrets: Zugangsdaten liegen ausschließlich im Upstash-Dashboard (Datenbank-Erstellung, REST-Token-Rotation) und im Vercel-Projekt (Environment Variables). Ohne dokumentierten Zugang zum Upstash-Account ist weder Token-Rotation noch eine Migration auf eine neue Instanz möglich, ohne den bestehenden Datenbestand (bereits vergebene IDs) zu verlieren — ein Verlust dieses Bestands wäre kein Datenschutzvorfall (keine Personendaten betroffen), würde aber das Risiko einer künftigen ID-Doppelvergabe wieder auf den Vor-Implementierungs-Zustand zurücksetzen, bis der Alt-ID-Import erneut durchgeführt wird. |
-| Erforderliche Zugangsdaten | Upstash-Account-Login (E-Mail/Passwort oder OAuth, je nach Einrichtung) plus der REST-Token der jeweiligen Datenbank. |
-| 2FA/Account-Ownership | **Nicht im Rahmen dieses Audits geprüft** (kein Zugriff auf das Upstash-Dashboard) — sollte beim Anlegen des Accounts analog zu GitHub/Vercel dokumentiert werden (wer ist Owner, ist 2FA aktiv, gibt es einen zweiten Administrator). |
+| Zugriffsweg | REST-API über eines von zwei Umgebungsvariablen-Paaren (siehe oben), ausschließlich serverseitig (`api/reserve-ifk-id.js`, `scripts/import-ifk-ids.mjs`) — kein Client-seitiger Zugriff. |
+| Recovery/Übergabe | Wie bei SMTP/Login-Secrets: Zugangsdaten liegen ausschließlich im Upstash-Dashboard bzw. Vercel-Storage-Tab (Datenbank-Erstellung, REST-Token-Rotation) und im Vercel-Projekt (Environment Variables). Ohne dokumentierten Zugang zum jeweiligen Account ist weder Token-Rotation noch eine Migration auf eine neue Instanz möglich, ohne den bestehenden Datenbestand (bereits vergebene IDs) zu verlieren — ein Verlust dieses Bestands wäre kein Datenschutzvorfall (keine Personendaten betroffen), würde aber das Risiko einer künftigen ID-Doppelvergabe wieder auf den Vor-Implementierungs-Zustand zurücksetzen, bis der Alt-ID-Import erneut durchgeführt wird. |
+| Erforderliche Zugangsdaten | Account-Login des Anbieters (Upstash direkt oder über Vercel-Storage/Marketplace provisioniert — E-Mail/Passwort oder OAuth, je nach gewähltem Weg) plus der REST-Token der jeweiligen Datenbank. |
+| 2FA/Account-Ownership | **Nicht im Rahmen dieses Audits geprüft**, da die Ressource noch nicht existiert — sollte beim Anlegen analog zu GitHub/Vercel dokumentiert werden (wer ist Owner, ist 2FA aktiv, gibt es einen zweiten Administrator). |
+
+**Verbleibender manueller Schritt (einzige Blockade für den vollständigen Produktivbetrieb):**
+
+1. Seite: [vercel.com/dashboard](https://vercel.com/dashboard), eingeloggt als Mitglied des Vercel-Teams `ifk-de` (das Team, das `spendenaktions-generator.vercel.app` betreibt)
+2. Projekt `spendenaktions-generator` öffnen → Tab **„Storage"**
+3. **„Create Database"** → Anbieter **„Upstash"** → **„Serverless Redis"**/„Upstash for Redis" auswählen (kleinste/kostenlose Region, die dem Deployment-Standort nahe ist)
+4. Beim „Connect"-Schritt: Environment **Production** ankreuzen (Preview/Development optional, für dieses Feature nicht erforderlich)
+5. Fertig — welches der beiden Namensschemata Vercel dabei vergibt, ist durch die Code-Änderung in Commit `2ea45ed` **irrelevant**, beide werden erkannt.
+6. Danach entweder selbst `node scripts/import-ifk-ids.mjs scripts/ifk-id-legacy-import.txt` mit den per `vercel env pull` gezogenen Werten ausführen, oder mir kurz Bescheid geben — sobald die Ressource verbunden und Production redeployed ist, übernehme ich Import, Idempotenz-/Kollisions-/Parallelitätstests und die finale Audit-Bestätigung selbst, ohne weitere Rückfragen.
 
 ---
 
@@ -583,12 +609,25 @@ gh api repos/IFK-Daniel/spendenaktions-generator/commits/<sha>/status
 Für folgende Systeme müssen bei einer Übergabe **Zugangsdaten separat** (nicht in dieser technischen Dokumentation) hinterlegt werden, z. B. im Sinne der Vorgabe *"Zugangsdaten befinden sich im geschützten humbee-Vorgang …"*:
 
 - **GitHub** (Account `IFK-Daniel`, ggf. Personal Access Token für `gh`)
-- **Vercel** (Team `ifk-de`, Projekt `spendenaktions-generator`)
+- **Vercel** (Team `ifk-de`, Projekt `spendenaktions-generator`) — **verifizierter Single Point of Failure:** in diesem Audit wurde geprüft, dass ein anderer, lokal bereits authentifizierter Vercel-Account (`feigenbutzd`) **keinen** Zugriff auf das Team `ifk-de` hat (`vercel project ls`/`vercel --scope ifk-de` schlagen fehl) — ohne Zugang zu einem `ifk-de`-Mitgliedskonto ist das Vercel-Projekt (Environment Variables, Deployments, Domains, künftige Storage-Ressourcen) von außen nicht administrierbar.
 - **SMTP/Mailprovider** (Host aus `SMTP_HOST`, Zugangsdaten `SMTP_USER`/`SMTP_PASS`)
 - **Interner Generator** (`MATERIAL_ADMIN_USERNAME`/`MATERIAL_ADMIN_PASSWORD`)
+- **Upstash Redis bzw. Vercel-Storage** (IFK-ID-Reservierung, siehe Abschnitt "Externer Dienst: Upstash Redis") — **Stand 2026-09-05: noch keine Ressource angelegt**, Zugang wird bei Einrichtung entweder ein eigenständiger Upstash-Account oder (bei Provisionierung über den Vercel-„Storage"-Tab) derselbe Vercel-`ifk-de`-Zugang.
 - **humbee-Postfach** `office@its-for-kids.de` (kein eigenes System dieser Anwendung, aber operativ notwendig, um die IFK-ID-Zuordnungshistorie einzusehen)
 
 Keine Werte wurden in diesem Audit ausgelesen oder dokumentiert.
+
+**Für eine vollständige Übergabe mindestens erforderlich** (Ownership/Zugriff, keine Werte):
+
+| System | Mindestrolle | 2FA/Passkey/Recovery |
+|---|---|---|
+| GitHub | Admin auf `IFK-Daniel/spendenaktions-generator` (oder Repo-Transfer auf Organisationskonto) | Organisatorisches Thema, in diesem Audit nicht geprüft — sollte bei Übergabe verifiziert und dokumentiert werden (u. a. Recovery-Codes sicher hinterlegt, nicht nur beim bisherigen Einzel-Account). |
+| Vercel | Owner/Admin im Team `ifk-de` | Wie oben — Team-Mitgliedschaft und 2FA-Status des Teams sind organisatorisch zu klären, nicht aus dem Code ableitbar. |
+| Redis/Upstash bzw. Vercel-Marketplace-Verwaltung | Owner/Admin des jeweiligen Accounts (Upstash direkt oder Vercel-`ifk-de`, je nach Einrichtungsweg — siehe oben) | Wie oben; da die Ressource noch nicht existiert, sollte dieser Punkt direkt bei der Einrichtung mitgeklärt werden (wer legt an, wer ist Owner). |
+| SMTP/Mailprovider | Admin-Zugang zum Mail-Provider-Konto (Reset-/Rotationsfähigkeit für `SMTP_USER`/`SMTP_PASS`) | Nicht geprüft (welcher Provider konkret hinter `SMTP_HOST` steht, wurde bewusst nicht durch Auslesen der Environment-Variable ermittelt). |
+| Interner Generator | Fähigkeit, `MATERIAL_ADMIN_USERNAME`/`MATERIAL_ADMIN_PASSWORD` in Vercel zu ändern (= Vercel-Zugang, kein separates System) | Kein eigenes Login-/Recovery-System (siehe Authentifizierungs-Abschnitt) — Rotation läuft ausschließlich über den Vercel-Zugang. |
+
+Keine Passwörter, Seeds oder Recovery-Codes werden hier dokumentiert — nur welche Zugriffsrolle für eine funktionsfähige Übergabe jeweils nötig ist.
 
 ---
 
@@ -603,7 +642,7 @@ Kennzeichnung nach der vorgegebenen Taxonomie:
 | Automatisierter Versand der Urkunden für Botschafter/Beirat/Kuratorium/Fachrat/Wirtschaftsrat gesperrt (`certificateDeliveryMode: "blocked"`) | **VORLÄUFIGE PROZESSENTSCHEIDUNG** | Ausdrücklich im Code als *"bewusste, vorläufige fachliche Sperre"* dokumentiert — Erzeugung/Vorschau/Download bleiben unberührt; spätere, aktuell **nicht implementierte** Optionen laut Code-Kommentar: persönliche Übergabe, physisches Starterpaket, individuelle Mail durch Vorstand/Stiftungsdirektion, automatisierter Versand aus anderer Absenderadresse. |
 | `CERTIFICATE_DELIVERY_MODES.WITH_MATERIALS` als dritter Modus vorbereitet, aber von keiner Rolle genutzt | **ZUKÜNFTIG ERWEITERBAR** | Bewusst als Wert angelegt, ohne aktuelle Verwendung — offene Architektur für einen möglichen künftigen Rollentyp. |
 | Fehlende Flyer-Vorlagen für fünf der sechs Rollen | **ZUKÜNFTIG ERWEITERBAR** | `flyerMaterialKeys: []` — Architektur ist vorbereitet (dieselbe Iterationsmechanik in `generator.js` würde eine neue Rolle ohne Sonderfall-Code aufnehmen), es fehlt schlicht das Grafiker-Artwork. |
-| IFK-ID-Reservierung/Kollisionsschutz (`reserveIfkId.js`) | **ZUKÜNFTIG ERWEITERBAR (bislang Platzhalter)** | Bewusst als zukünftiger API-Vertrag angelegt, aktuell nicht implementiert und nicht aufgerufen. |
+| IFK-ID-Reservierung/Kollisionsschutz (`reserveIfkId.js`) | **CODE FERTIG, INFRASTRUKTUR OFFEN** | Seit `997b24f`/`2ea45ed` vollständig implementiert und produktiv deployed (atomare Redis-Reservierung, fail-safe verifiziert); die zugehörige Redis-Ressource ist Stand 2026-09-05 noch nicht angebunden — siehe Abschnitt "Externer Dienst: Upstash Redis" für den einen verbleibenden manuellen Schritt. |
 | Gemeinsames Administrator-Login statt Einzelnutzer-Konten | **VORLÄUFIGE PROZESSENTSCHEIDUNG / ZUKÜNFTIGER VERBESSERUNGSPUNKT** | Im Code selbst nicht explizit als "vorläufig" kommentiert, aber laut `docs/roadmap.md` (Phase 5) als offener Ausbaupunkt vorgesehen. |
 | `docs/architecture.md`/`docs/roadmap.md` teilweise veraltet (z. B. grüne QR-Codes, Flyer-Erzeugung als "offen" beschrieben) | **DOKUMENTATIONS-SCHULD, kein Code-Zustand** | In diesem Audit festgestellt, nicht behoben (Auftrag: kein Codeänderung/keine Doku-Änderung außer der neuen Audit-Datei). |
 

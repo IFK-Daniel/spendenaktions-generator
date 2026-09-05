@@ -70,6 +70,22 @@ test("Speicherfehler bricht sofort ab, ohne weitere Versuche und ohne ID", async
   assert.equal(calls, 1, "bei einem echten Speicherfehler darf kein zweiter Versuch erfolgen");
 });
 
+test("fehlende/abgelaufene Session (401) bricht sofort ab, ohne weitere Versuche und ohne ID", async () => {
+  let calls = 0;
+  await withFetch(
+    async () => {
+      calls += 1;
+      return jsonResponse(401, { ok: false, error: "Bitte melde dich erneut an." });
+    },
+    async () => {
+      const result = await generateAndReserveIfkId();
+      assert.equal(result.ok, false);
+      assert.equal("ifkId" in result, false);
+    }
+  );
+  assert.equal(calls, 1, "ohne gültige Session darf kein zweiter Versuch erfolgen");
+});
+
 test("Netzwerkfehler liefert ok=false statt einer Ausnahme", () =>
   withFetch(
     async () => {

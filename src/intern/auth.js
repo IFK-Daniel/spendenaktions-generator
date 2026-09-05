@@ -1,5 +1,6 @@
 import { isAuthenticated, setAuthenticated, clearAuthenticated } from "../../core/auth/authSession.js";
 import { requestLogin } from "../../core/auth/requestLogin.js";
+import { requestLogout } from "../../core/auth/requestLogout.js";
 
 /**
  * Verdrahtet Login-Formular, Logout-Button und die Sichtbarkeit von
@@ -67,6 +68,11 @@ export function initAuth({ onAuthenticated }) {
   }
 
   function handleLogout() {
+    // Serverseitiges Session-Cookie löschen (bewusst "fire and forget"
+    // — s. `requestLogout()`: ein Netzwerkfehler darf den UI-Logout
+    // nicht blockieren) und unabhängig davon sofort den lokalen
+    // UI-Zustand zurücksetzen.
+    requestLogout();
     clearAuthenticated(storage);
     usernameInput.value = "";
     passwordInput.value = "";

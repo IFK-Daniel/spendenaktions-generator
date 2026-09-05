@@ -13,13 +13,19 @@ import { validateIfkId } from "./validateIfkId.js";
  * Für den vollständigen "erzeugen + reservieren, bei Kollision erneut
  * versuchen"-Ablauf siehe `generateAndReserveIfkId()`.
  *
+ * Der Request wird bewusst mit `credentials: "same-origin"` gesendet
+ * — der Endpunkt ist seit Einführung des internen Session-Cookies
+ * (`api/_lib/sessionAuth.js`) nur mit gültiger Anmeldung nutzbar; ohne
+ * das (vom Browser automatisch mitgesendete) Cookie liefert der Server
+ * `401` (siehe `reason: "unauthorized"` unten).
+ *
  * @param {string} ifkId Eine gemäß `validateIfkId` formal gültige IFK-ID.
- * @returns {Promise<{ ok: boolean, reason: "reserved"|"taken"|"invalid"|"unreachable"|"server-error", error?: string }>}
+ * @returns {Promise<{ ok: boolean, reason: "reserved"|"taken"|"invalid"|"unauthorized"|"unreachable"|"server-error", error?: string }>}
  *   `ok: true` nur, wenn die ID gerade frisch reserviert wurde (war
  *   vorher frei). In jedem anderen Fall `ok: false` — `reason`
  *   unterscheidet dabei "ID bereits vergeben" (`taken`, für erneuten
- *   Versuch mit neuer ID) von echten Fehlern (`invalid`, `unreachable`,
- *   `server-error`).
+ *   Versuch mit neuer ID) von echten Fehlern (`invalid`, `unauthorized`,
+ *   `unreachable`, `server-error`).
  */
 export async function reserveIfkId(ifkId) {
   const check = validateIfkId(ifkId);
@@ -38,10 +44,19 @@ export async function reserveIfkId(ifkId) {
     response = await fetch("/api/reserve-ifk-id", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ ifkId: check.normalized }),
     });
   } catch {
     return unreachableResult;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return {
+      ok: false,
+      reason: "unauthorized",
+      error: "Deine Anmeldung ist abgelaufen. Bitte lade die Seite neu und melde dich erneut an.",
+    };
   }
 
   const result = await response.json().catch(() => null);

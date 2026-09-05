@@ -69,7 +69,7 @@ export function isUpstashConfigured() {
  * @throws {Error} Wenn Upstash nicht konfiguriert oder nicht erreichbar
  *   ist, oder eine unerwartete Antwort liefert.
  */
-export async function redisSetNx(key, value) {
+async function runCommand(pathSegments) {
   const { url, token } = getConfig();
   if (!url || !token) {
     throw new Error(
@@ -77,7 +77,7 @@ export async function redisSetNx(key, value) {
     );
   }
 
-  const endpoint = `${url}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}/NX`;
+  const endpoint = `${url}/${pathSegments.map(encodeURIComponent).join("/")}`;
   let response;
   try {
     response = await fetch(endpoint, {
@@ -91,8 +91,64 @@ export async function redisSetNx(key, value) {
     throw new Error(`Upstash-Anfrage fehlgeschlagen (HTTP ${response.status}).`);
   }
 
-  const data = await response.json();
+  return response.json();
+}
+
+/**
+ * Setzt `key` auf `value`, aber ausschließlich dann, wenn `key` noch
+ * nicht existiert (Redis `SET key value NX`) — atomar, also sicher bei
+ * gleichzeitigen Aufrufen mit demselben `key`.
+ *
+ * @param {string} key
+ * @param {string} value
+ * @returns {Promise<boolean>} `true`, wenn `key` gerade frisch gesetzt
+ *   wurde (war vorher nicht vorhanden). `false`, wenn `key` bereits
+ *   existierte (nichts wurde verändert).
+ * @throws {Error} Wenn Upstash nicht konfiguriert oder nicht erreichbar
+ *   ist, oder eine unerwartete Antwort liefert.
+ */
+export async function redisSetNx(key, value) {
+  const data = await runCommand(["set", key, value, "NX"]);
   // Upstash liefert bei erfolgreichem SET ... NX `{ result: "OK" }`,
   // wenn der Key bereits existierte `{ result: null }`.
   return data.result === "OK";
+}
+
+/**
+ * Erhöht `key` atomar um 1 (Redis `INCR`) und setzt beim allerersten
+ * Erhöhen (Rückgabewert `1`, d. h. der Key wurde gerade neu angelegt)
+ * ein Ablaufdatum von `ttlSeconds` — ergibt ein einfaches, rollierendes
+ * Zeitfenster-Zählwerk ohne separate Infrastruktur. Genutzt für das
+ * Login-Rate-Limit (`api/login.js`), nicht für die IFK-ID-Reservierung
+ * selbst.
+ *
+ * Bewusst kein exaktes Sliding-Window (das würde eine Lua-Script/
+ * Pipeline-Transaktion erfordern) — für ein einfaches Brute-Force-
+ * Bremse reicht ein Fixed-Window-Zähler aus; minimale Ungenauigkeit an
+ * Fenstergrenzen ist hier kein Sicherheitsproblem, da die eigentliche
+ * Absicherung die Authentifizierung selbst ist (siehe `api/login.js`-
+ * Kommentar: "Rate Limiting ersetzt Authentifizierung nicht").
+ *
+ * @param {string} key
+ * @param {number} ttlSeconds
+ * @returns {Promise<number>} Der neue Zählerstand nach dem Erhöhen.
+ * @throws {Error} Wenn Upstash nicht konfiguriert oder nicht erreichbar
+ *   ist, oder eine unerwartete Antwort liefert.
+ */
+export async function redisIncrWithExpiry(key, ttlSeconds) {
+  const data = await runCommand(["incr", key]);
+  const count = data.result;
+  if (count === 1) {
+    // Ablaufdatum nur beim allerersten Erhöhen setzen (Key gerade neu
+    // angelegt) — spätere Erhöhungen im selben Fenster verlängern die
+    // TTL nicht. Best-effort: schlägt dieser zweite Aufruf fehl, bleibt
+    // der Zähler trotzdem korrekt, der Key liefe im Zweifel nur nicht
+    // automatisch ab (kein Sicherheitsproblem, nur Aufräum-Detail).
+    try {
+      await runCommand(["expire", key, String(ttlSeconds)]);
+    } catch {
+      // s. o. — bewusst kein erneuter throw.
+    }
+  }
+  return count;
 }

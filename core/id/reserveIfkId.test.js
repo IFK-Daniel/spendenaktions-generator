@@ -39,6 +39,7 @@ test("freie ID wird reserviert (ok: true, reason: reserved)", () =>
     async (url, opts) => {
       assert.equal(url, "/api/reserve-ifk-id");
       assert.equal(opts.method, "POST");
+      assert.equal(opts.credentials, "same-origin", "Session-Cookie muss mitgesendet werden");
       const body = JSON.parse(opts.body);
       assert.equal(body.ifkId, "IFK7QX");
       return jsonResponse(200, { ok: true, reserved: true });
@@ -58,6 +59,27 @@ test("bereits vergebene ID: ok=false, reason=taken", () =>
       assert.equal(result.ok, false);
       assert.equal(result.reason, "taken");
       assert.match(result.error, /bereits vergeben/);
+    }
+  ));
+
+test("keine/abgelaufene Session (401): ok=false, reason=unauthorized, verständliche deutsche Meldung", () =>
+  withFetch(
+    async () => jsonResponse(401, { ok: false, error: "Bitte melde dich erneut an." }),
+    async () => {
+      const result = await reserveIfkId("IFK7QX");
+      assert.equal(result.ok, false);
+      assert.equal(result.reason, "unauthorized");
+      assert.match(result.error, /erneut an/);
+    }
+  ));
+
+test("verweigerte Session (403): ok=false, reason=unauthorized", () =>
+  withFetch(
+    async () => jsonResponse(403, { ok: false, error: "..." }),
+    async () => {
+      const result = await reserveIfkId("IFK7QX");
+      assert.equal(result.ok, false);
+      assert.equal(result.reason, "unauthorized");
     }
   ));
 

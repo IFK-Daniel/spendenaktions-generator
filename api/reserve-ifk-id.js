@@ -1,10 +1,20 @@
 import { validateIfkId } from "../core/id/validateIfkId.js";
 import { isUpstashConfigured, redisSetNx } from "./_lib/upstashRedis.js";
+import { hasValidSession } from "./_lib/sessionAuth.js";
 
 /**
  * Reserviert serverseitig eine IFK-ID atomar (`SET key 1 NX` über
  * Upstash Redis), damit "Neu generieren" nie doppelt dieselbe ID
  * ausgibt (siehe `core/id/reserveIfkId.js`, `core/id/generateAndReserveIfkId.js`).
+ *
+ * ZUGRIFFSSCHUTZ: Dieser Endpunkt verändert dauerhaften Zustand (jede
+ * erfolgreiche Reservierung entzieht dem begrenzten IFK-ID-Namensraum
+ * — 32.768 mögliche IDs, siehe `core/id/generateIfkId.js` — dauerhaft
+ * eine ID) und erfordert deshalb eine gültige interne Session
+ * (`api/_lib/sessionAuth.js`, gesetzt über `/api/login`). Ohne gültiges
+ * Session-Cookie: `401`, KEINE Redis-Operation — weder lesend noch
+ * schreibend. Die Prüfung steht bewusst als Erstes, vor jeder
+ * Body-/Formatverarbeitung.
  *
  * Speicherschema (siehe `docs/operations-audit.md`):
  *   Key:   `ifk:id:<ID>` (z. B. `ifk:id:IFKLJP`)
@@ -18,12 +28,18 @@ import { isUpstashConfigured, redisSetNx } from "./_lib/upstashRedis.js";
  *   200 { ok: true, reserved: true }   — ID war frei, ist jetzt reserviert.
  *   200 { ok: true, reserved: false }  — ID war bereits vergeben.
  *   400 { ok: false, error }           — ID formal ungültig.
+ *   401 { ok: false, error }           — keine gültige interne Session.
  *   503 { ok: false, error }           — Speicher nicht konfiguriert/erreichbar;
  *                                         es wurde in diesem Fall NICHTS reserviert.
  */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  if (!hasValidSession(req)) {
+    res.status(401).json({ ok: false, error: "Bitte melde dich erneut an." });
     return;
   }
 

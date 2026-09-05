@@ -30,7 +30,7 @@ function withFetch(impl, fn) {
 // `upstashRedis.js` `process.env` bei jedem Aufruf frisch liest
 // (keine Top-Level-Konstanten) — ein einmaliger Import zu Testbeginn
 // reicht hier also aus.
-const { isUpstashConfigured, redisSetNx } = await import("./upstashRedis.js");
+const { isUpstashConfigured, redisSetNx, redisIncrWithExpiry } = await import("./upstashRedis.js");
 
 const CLEAR_ALL_VARS = {
   UPSTASH_REDIS_REST_URL: undefined,
@@ -187,4 +187,63 @@ test("parallele Reservierungsversuche auf denselben Key: exakt einer gewinnt (at
         assert.equal(winners.length, 1, "genau ein paralleler Versuch darf gewinnen");
       }
     );
+  }));
+
+test("redisIncrWithExpiry: erster Aufruf liefert 1 und setzt ein Ablaufdatum", () =>
+  withEnv({ UPSTASH_REDIS_REST_URL: "https://example.upstash.io", UPSTASH_REDIS_REST_TOKEN: "token" }, () => {
+    const calledUrls = [];
+    return withFetch(
+      async (url) => {
+        calledUrls.push(url);
+        if (url.includes("/incr/")) return { ok: true, json: async () => ({ result: 1 }) };
+        if (url.includes("/expire/")) return { ok: true, json: async () => ({ result: 1 }) };
+        throw new Error("unerwarteter Befehl: " + url);
+      },
+      async () => {
+        const count = await redisIncrWithExpiry("ifk:loginrate:1.2.3.4", 300);
+        assert.equal(count, 1);
+        assert.ok(calledUrls.some((u) => u === "https://example.upstash.io/incr/ifk%3Aloginrate%3A1.2.3.4"));
+        assert.ok(calledUrls.some((u) => u === "https://example.upstash.io/expire/ifk%3Aloginrate%3A1.2.3.4/300"));
+      }
+    );
+  }));
+
+test("redisIncrWithExpiry: spätere Aufrufe im selben Fenster setzen die TTL nicht erneut", () =>
+  withEnv({ UPSTASH_REDIS_REST_URL: "https://example.upstash.io", UPSTASH_REDIS_REST_TOKEN: "token" }, () => {
+    let expireCalls = 0;
+    return withFetch(
+      async (url) => {
+        if (url.includes("/incr/")) return { ok: true, json: async () => ({ result: 4 }) };
+        if (url.includes("/expire/")) {
+          expireCalls += 1;
+          return { ok: true, json: async () => ({ result: 1 }) };
+        }
+        throw new Error("unerwarteter Befehl: " + url);
+      },
+      async () => {
+        const count = await redisIncrWithExpiry("ifk:loginrate:1.2.3.4", 300);
+        assert.equal(count, 4);
+        assert.equal(expireCalls, 0, "EXPIRE darf nur beim allerersten INCR (Ergebnis 1) aufgerufen werden");
+      }
+    );
+  }));
+
+test("redisIncrWithExpiry: liefert den Zählerstand trotzdem, wenn EXPIRE fehlschlägt (best effort)", () =>
+  withEnv({ UPSTASH_REDIS_REST_URL: "https://example.upstash.io", UPSTASH_REDIS_REST_TOKEN: "token" }, () =>
+    withFetch(
+      async (url) => {
+        if (url.includes("/incr/")) return { ok: true, json: async () => ({ result: 1 }) };
+        if (url.includes("/expire/")) return { ok: false, status: 500, json: async () => ({}) };
+        throw new Error("unerwarteter Befehl: " + url);
+      },
+      async () => {
+        const count = await redisIncrWithExpiry("ifk:loginrate:1.2.3.4", 300);
+        assert.equal(count, 1);
+      }
+    )
+  ));
+
+test("redisIncrWithExpiry: wirft, wenn nicht konfiguriert", () =>
+  withEnv(CLEAR_ALL_VARS, async () => {
+    await assert.rejects(() => redisIncrWithExpiry("ifk:loginrate:1.2.3.4", 300));
   }));

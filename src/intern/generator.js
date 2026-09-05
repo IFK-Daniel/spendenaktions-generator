@@ -1708,6 +1708,11 @@ export function initGenerator() {
     if (federalStateInput.value.trim()) return true;
     if (regionInput.value.trim()) return true;
     if (paypalInput.value.trim()) return true;
+    // Die IFK-ID zählt genauso als "vorhandene Daten" wie jedes andere
+    // Feld — z. B. wenn eine per "Neu generieren" erzeugte ID bereits
+    // im Formular steht, aber sonst noch nichts ausgefüllt ist. Keine
+    // Sonderbehandlung zugunsten der IFK-ID (siehe `handleApplyScreenshotFields`).
+    if (ifkIdInput.value.trim()) return true;
     return false;
   }
 
@@ -1779,11 +1784,25 @@ export function initGenerator() {
       if (isAutoRecognized("emailForForm", fields.emailForForm)) markFieldAsImported("email", fields.emailForForm.value);
     }
 
-    // Eine bereits manuell eingetragene IFK-ID wird vor dem Import nie
-    // stillschweigend überschrieben; eine neue IFK-ID wird hier nie
-    // automatisch erzeugt (dafür bleibt bewusst nur der bestehende
-    // "Neu generieren"-Button zuständig).
-    if (!ifkIdInput.value.trim() && isApplyable("ifkId", fields.ifkId)) {
+    // Die IFK-ID wird wie jedes andere Feld behandelt: Ob ein bereits
+    // vorhandener Wert (z. B. eine per "Neu generieren" erzeugte ID)
+    // überschrieben wird, entscheidet ausschließlich die Bestätigung
+    // oben (`formHasExistingData()`/`window.confirm`) — keine
+    // zusätzliche Sonderprüfung hier. Eine bestehende, aus humbee
+    // stammende IFK-ID gilt als bereits vergeben; sie wird hier nur
+    // übernommen und angezeigt, NICHT über `reserveIfkId()` erneut
+    // reserviert (das passiert ausschließlich beim expliziten Klick auf
+    // "Neu generieren", siehe `ifkIdGenerateBtn`-Handler). Eine neue
+    // IFK-ID wird hier nie automatisch erzeugt.
+    //
+    // Bekannte, bewusst in Kauf genommene Nebenwirkung: War die zuvor
+    // im Feld stehende ID eine per "Neu generieren" frisch reservierte
+    // ID, bleibt sie in Redis reserviert, auch wenn sie hier durch die
+    // Screenshot-ID ersetzt wird (siehe `docs/operations-audit.md`,
+    // Abschnitt "IFK-ID" — kein automatisches Freigeben, da nicht
+    // sicher unterscheidbar, ob eine ID zwischenzeitlich bereits anderweitig
+    // verwendet wurde; das Redis-Schema exponiert bewusst kein `DEL`).
+    if (isApplyable("ifkId", fields.ifkId)) {
       ifkIdInput.value = fields.ifkId.value;
       updateIfkIdGenerateBtnEmphasis();
       updateIfkIdCompletionState();

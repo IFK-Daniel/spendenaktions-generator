@@ -3,6 +3,30 @@ import { repairPaypalUrlLine } from "./repairPaypalUrlLine.js";
 const REGION_UPSCALE = 2;
 
 /**
+ * Liest die ausgewählte Datei selbst vollständig in den Speicher. Grund:
+ * `tesseract.js` liest ein übergebenes `File`/`Blob` intern per
+ * `FileReader` — in Safari scheitert das gelegentlich mit "File could not
+ * be read! Code=0". Die Bytes selbst zu lesen (erst `Blob.arrayBuffer()`,
+ * dann `FileReader` als Rückfall) und dem Worker diese zu übergeben,
+ * umgeht das.
+ */
+async function readFileBytes(file) {
+  if (typeof file.arrayBuffer === "function") {
+    try {
+      return new Uint8Array(await file.arrayBuffer());
+    } catch {
+      // Rückfall auf FileReader
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
  * Schneidet einen Bereich des Screenshots aus und vergrößert ihn — die
  * zweite, gezielte Lesung einer umgebrochenen PayPal-URL
  * (`repairPaypalUrlLine`) ist auf dem vergrößerten Ausschnitt deutlich
@@ -95,7 +119,8 @@ export async function runScreenshotOcr(file) {
   });
 
   try {
-    const { data } = await worker.recognize(file, {}, { blocks: true });
+    const imageBytes = await readFileBytes(file);
+    const { data } = await worker.recognize(imageBytes, {}, { blocks: true });
 
     const lines = (data.blocks || [])
       .flatMap((block) => block.paragraphs || [])
@@ -123,7 +148,7 @@ export async function runScreenshotOcr(file) {
     let repairedLines = lines;
     try {
       repairedLines = await repairPaypalUrlLine(lines, async (rect) => {
-        const region = await cropAndUpscale(file, rect);
+        const region = await cropAndUpscale(new Blob([imageBytes], { type: file.type || "image/png" }), rect);
         await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
         const { data: regionData } = await worker.recognize(region);
         return { text: regionData.text, confidence: regionData.confidence };

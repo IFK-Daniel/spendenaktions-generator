@@ -1,6 +1,8 @@
 import { repairPaypalUrlLine } from "./repairPaypalUrlLine.js";
 
-const REGION_UPSCALE = 2;
+// Vergrößerungen für die Zweitlesung der PayPal-URL. Die Lesungen weichen
+// je nach Maßstab leicht ab; `pickPaypalReading` wählt/prüft sie.
+const REGION_UPSCALES = [1, 2, 3];
 
 /**
  * Liest die ausgewählte Datei selbst vollständig in den Speicher. Grund:
@@ -33,7 +35,7 @@ async function readFileBytes(file) {
  * zeichengenauer. Reines Browser-Canvas, keine OffscreenCanvas-
  * Abhängigkeit (Safari).
  */
-async function cropAndUpscale(file, rect) {
+async function cropAndUpscale(file, rect, scale) {
   const bitmap = await createImageBitmap(file);
   try {
     const left = Math.max(0, Math.round(rect.left));
@@ -41,8 +43,8 @@ async function cropAndUpscale(file, rect) {
     const width = Math.max(1, Math.min(Math.round(rect.width), bitmap.width - left));
     const height = Math.max(1, Math.min(Math.round(rect.height), bitmap.height - top));
     const canvas = document.createElement("canvas");
-    canvas.width = width * REGION_UPSCALE;
-    canvas.height = height * REGION_UPSCALE;
+    canvas.width = width * scale;
+    canvas.height = height * scale;
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
@@ -151,10 +153,15 @@ export async function runScreenshotOcr(file) {
     let repairedLines = lines;
     try {
       repairedLines = await repairPaypalUrlLine(lines, async (rect) => {
-        const region = await cropAndUpscale(new Blob([imageBytes], { type: file.type || "image/png" }), rect);
+        const sourceBlob = new Blob([imageBytes], { type: file.type || "image/png" });
         await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
-        const { data: regionData } = await worker.recognize(region);
-        return { text: regionData.text, confidence: regionData.confidence };
+        const readings = [];
+        for (const scale of REGION_UPSCALES) {
+          const region = await cropAndUpscale(sourceBlob, rect, scale);
+          const { data: regionData } = await worker.recognize(region);
+          readings.push({ text: regionData.text, confidence: regionData.confidence });
+        }
+        return { readings };
       });
     } catch {
       repairedLines = lines;

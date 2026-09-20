@@ -50,3 +50,39 @@ test("keine Paypal-URL-Beschriftung → unverändert", async () => {
   const lines = [line([w("Vorname", 44, 117, 263), w("Thommy", 259, 372, 263)])];
   assert.equal(await repairPaypalUrlLine(lines, async () => ({ text: "https://paypal.com/x" })), lines);
 });
+
+import { pickPaypalReading, UNCERTAIN_REPAIR_CONFIDENCE } from "./repairPaypalUrlLine.js";
+
+const url = (id) => `https://www.paypal.com/donate/?hosted_button_id=${id}`;
+
+test("Lesung mit eingeschobenem Zeichen (14 statt 13) wird verworfen, die mit 13 Zeichen gewinnt", () => {
+  const picked = pickPaypalReading([
+    { text: url("Z9K6B8H3GK4AU"), confidence: 61 },
+    { text: url("Z9IK6B8H3GK4AU"), confidence: 75 },
+    { text: url("Z9IK6B8H3GK4AU"), confidence: 70 },
+  ]);
+  assert.equal(picked.url, url("Z9K6B8H3GK4AU"));
+  // Nur EINE gültige Lesung → nicht als sicher gewertet (unter der Schwelle 60).
+  assert.ok(picked.confidence <= UNCERTAIN_REPAIR_CONFIDENCE);
+});
+
+test("mindestens zwei übereinstimmende gültige Lesungen → sicher gelesen (Konfidenz bleibt)", () => {
+  const picked = pickPaypalReading([
+    { text: url("Q2KB9IRP3MBCR6"), confidence: 60 },
+    { text: url("Q2KB9RP3MBCR6"), confidence: 88 },
+    { text: url("Q2KB9RP3MBCR6"), confidence: 84 },
+  ]);
+  assert.equal(picked.url, url("Q2KB9RP3MBCR6"));
+  assert.equal(picked.confidence, 88);
+});
+
+test("keine Lesung mit gültiger ID-Länge → erste Lesung, aber prüfbedürftig", () => {
+  const picked = pickPaypalReading([{ text: url("ABC"), confidence: 90 }]);
+  assert.equal(picked.url, url("ABC"));
+  assert.equal(picked.confidence, UNCERTAIN_REPAIR_CONFIDENCE);
+});
+
+test("kein PayPal-Link in den Lesungen → null", () => {
+  assert.equal(pickPaypalReading([{ text: "Rauschen" }]), null);
+  assert.equal(pickPaypalReading([]), null);
+});

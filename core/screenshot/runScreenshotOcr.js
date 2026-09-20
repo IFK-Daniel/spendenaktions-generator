@@ -47,9 +47,12 @@ async function cropAndUpscale(file, rect) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, left, top, width, height, 0, 0, canvas.width, canvas.height);
-    return await new Promise((resolve, reject) =>
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Canvas-Export fehlgeschlagen"))), "image/png")
+    const blob = await new Promise((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Canvas-Export fehlgeschlagen"))), "image/png")
     );
+    // Als Bytes zurückgeben (nicht als Blob): tesseract.js liest ein Blob
+    // per FileReader, was in Safari scheitern kann.
+    return await readFileBytes(blob);
   } finally {
     bitmap.close?.();
   }

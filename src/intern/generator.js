@@ -1717,7 +1717,7 @@ export function initGenerator() {
             return await runScreenshotOcr(ocrFile);
           } catch (err) {
             console.error("Screenshot-OCR fehlgeschlagen:", err);
-            ocrErrorDetail = String((err && err.message) || err).slice(0, 200);
+            ocrErrorDetail = `ocr-v3: ${String((err && err.message) || err).slice(0, 200)}`;
             throw err;
           }
         },

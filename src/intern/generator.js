@@ -1690,6 +1690,20 @@ export function initGenerator() {
     showScreenshotStatus("Screenshot wird ausgewertet …", "loading");
 
     try {
+      // Datei SOFORT beim Auswählen vollständig in den Speicher lesen und
+      // ab hier nur noch diese Kopie verwenden. Safari kann das ausgewählte
+      // `File` später (nach dem Laden von OCR-Bibliothek/Worker) nicht
+      // mehr lesen ("Datei konnte nicht gelesen werden").
+      try {
+        file = new File([await file.arrayBuffer()], file.name, { type: file.type });
+      } catch {
+        showScreenshotStatus(
+          "Die Datei konnte vom Browser nicht gelesen werden. Bitte die Datei erneut auswählen oder lokal speichern (nicht in iCloud/Netzlaufwerk).",
+          "error"
+        );
+        return;
+      }
+
       // Der eigentliche Fehler der OCR wird sonst verschluckt
       // (`extractRepresentativeDataFromScreenshot` liefert nur die
       // Kategorie) — für die Fehlersuche (z. B. Safari) in der Konsole

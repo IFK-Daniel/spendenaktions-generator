@@ -1,5 +1,6 @@
 import { buildExtractionFields } from "./buildExtractionFields.js";
 import { extractRawFieldsFromOcrLines } from "./extractRawFieldsFromOcrLines.js";
+import { detectRoleFromOcrLines } from "./detectRoleFromOcrLines.js";
 import { classifyExtractionException } from "./classifyExtractionException.js";
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -74,5 +75,12 @@ export async function extractRepresentativeDataFromScreenshot({
   }
 
   const rawFields = extractRawFieldsFromOcrLines(ocrResult && ocrResult.lines);
-  return { ok: true, fields: buildExtractionFields(rawFields) };
+  // `detectedRole`: Wegbegleiter-Typ aus dem Vorgangstitel (Schlüssel aus
+  // `ROLE_KEYS`) oder `null` — bewusst NEBEN `fields`, damit die
+  // Felderstruktur (Vorschau-Tabelle, Korrektur) unverändert bleibt.
+  return {
+    ok: true,
+    fields: buildExtractionFields(rawFields),
+    detectedRole: detectRoleFromOcrLines(ocrResult && ocrResult.lines),
+  };
 }

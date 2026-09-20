@@ -649,6 +649,8 @@ export function initGenerator() {
   // und beim Verlassen der Seite freigegeben (siehe `revokeActiveObjectUrls`).
   let activeObjectUrls = [];
   let lastExtractionFields = null;
+  // Aus dem Vorgangstitel erkannter Wegbegleiter-Typ (Schlüssel) oder null.
+  let lastDetectedRole = null;
   let isExtractingScreenshot = false;
   // Felder, die der Nutzer über die Korrektur-Tabelle bestätigt hat —
   // UNABHÄNGIG davon, ob sich der Wert dabei tatsächlich geändert hat
@@ -1549,6 +1551,25 @@ export function initGenerator() {
       screenshotPreviewBody.appendChild(row);
     }
 
+    // Erkannter Wegbegleiter-Typ (nur Anzeige — gesetzt wird er erst mit
+    // "Erkannte Daten ins Formular übernehmen", siehe
+    // `handleApplyScreenshotFields`).
+    const roleRow = document.createElement("tr");
+    const roleLabelCell = document.createElement("td");
+    roleLabelCell.textContent = "Wegbegleiter";
+    const roleValueCell = document.createElement("td");
+    roleValueCell.dataset.label = "Erkannter Wert";
+    const roleStatusCell = document.createElement("td");
+    roleStatusCell.dataset.label = "Status";
+    const roleStatus = lastDetectedRole ? "recognized" : "not_recognized";
+    roleValueCell.textContent = lastDetectedRole ? getRoleConfig(lastDetectedRole).label : "—";
+    const roleBadge = document.createElement("span");
+    roleBadge.className = `screenshot-preview-status ${roleStatus}`;
+    roleBadge.textContent = SCREENSHOT_STATUS_LABELS[roleStatus];
+    roleStatusCell.appendChild(roleBadge);
+    roleRow.append(roleLabelCell, roleValueCell, roleStatusCell);
+    screenshotPreviewBody.insertBefore(roleRow, screenshotPreviewBody.firstChild);
+
     updateApplyButtonState();
     screenshotImportPreview.hidden = false;
   }
@@ -1672,6 +1693,7 @@ export function initGenerator() {
     clearScreenshotStatus();
     clearScreenshotPreview();
     lastExtractionFields = null;
+    lastDetectedRole = null;
 
     if (!file) return;
 
@@ -1725,6 +1747,7 @@ export function initGenerator() {
 
       if (result.ok) {
         lastExtractionFields = result.fields;
+        lastDetectedRole = isValidRoleKey(result.detectedRole) ? result.detectedRole : null;
         await loadScreenshotSource(file);
         showScreenshotStatus("Screenshot erfolgreich ausgewertet. Bitte erkannte Daten prüfen.", "success");
         renderScreenshotPreview(result.fields);
@@ -1773,6 +1796,14 @@ export function initGenerator() {
     }
 
     const fields = lastExtractionFields;
+
+    // Wegbegleiter-Typ zuerst umstellen: Er entscheidet unten, ob
+    // Bundesland/Region übernommen werden, und blendet die passenden
+    // Felder/Materialien ein (`applyRoleToForm`).
+    if (lastDetectedRole && lastDetectedRole !== selectedRoleKey()) {
+      roleSelect.value = lastDetectedRole;
+      applyRoleToForm();
+    }
 
     // Ein per Klick-Korrektur manuell geprüftes Feld gilt als ebenso
     // übernehmbar wie ein automatisch mit hoher Konfidenz erkanntes —

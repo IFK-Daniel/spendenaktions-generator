@@ -85,3 +85,20 @@ test("OCR-Fehler wird abgebildet", async () => {
   });
   assert.deepEqual(result, { ok: false, reason: "ocr_error" });
 });
+
+test("liefert den aus dem Vorgangstitel erkannten Wegbegleiter-Typ als detectedRole (oder null)", async () => {
+  const withTitle = await extractRepresentativeDataFromScreenshot({
+    file: new Blob(["x"]),
+    mimeType: "image/png",
+    runOcr: async () => ({ lines: [{ text: "Botschafter / Böhlig, Thommy-Luke" }, { text: "Vorname Thommy-Luke" }] }),
+  });
+  assert.equal(withTitle.detectedRole, "ambassador");
+  assert.equal(withTitle.fields.firstName.value, "Thommy-Luke");
+
+  const withoutTitle = await extractRepresentativeDataFromScreenshot({
+    file: new Blob(["x"]),
+    mimeType: "image/png",
+    runOcr: async () => ({ lines: [{ text: "Vorname Thommy-Luke" }] }),
+  });
+  assert.equal(withoutTitle.detectedRole, null);
+});

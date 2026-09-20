@@ -43,6 +43,10 @@ import { flyerRepresentativeFemaleDuFrontTemplate } from "../../templates/flyer-
 import { flyerRepresentativeFemaleSieFrontTemplate } from "../../templates/flyer-representative-female-sie-front/template.config.js";
 import { flyerRepresentativeMaleDuFrontTemplate } from "../../templates/flyer-representative-male-du-front/template.config.js";
 import { flyerRepresentativeMaleSieFrontTemplate } from "../../templates/flyer-representative-male-sie-front/template.config.js";
+import {
+  COMPANION_FLYER_FRONT_TEMPLATES_HOME,
+  COMPANION_FLYER_FRONT_TEMPLATES_PRINT,
+} from "../../templates/flyer-companion-fronts/template.config.js";
 import { sharedFlyerBackTemplate } from "../../templates/flyer-shared-back/template.config.js";
 import { flyerRepresentativeFemaleDuPrintTemplate } from "../../templates/flyer-representative-female-du-print/template.config.js";
 import { flyerRepresentativeFemaleSiePrintTemplate } from "../../templates/flyer-representative-female-sie-print/template.config.js";
@@ -142,11 +146,20 @@ const REPRESENTATIVE_FLYER_FRONT_TEMPLATES_PRINT = Object.freeze({
  * die Imposition). `resolveRepresentativeFlyerFrontTemplate` selbst
  * bleibt unverändert Geschlecht/Ansprache-only (kein Fallback).
  */
-function resolveFlyerFrontTemplateForJob(materialKey, gender, salutation) {
-  const table =
-    materialKey === MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI
-      ? REPRESENTATIVE_FLYER_FRONT_TEMPLATES_PRINT
-      : REPRESENTATIVE_FLYER_FRONT_TEMPLATES_HOME;
+function resolveFlyerFrontTemplateForJob(roleKey, materialKey, gender, salutation) {
+  const isPrint = materialKey === MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI;
+  let table;
+  if (roleKey === ROLE_KEYS.REPRESENTATIVE) {
+    table = isPrint ? REPRESENTATIVE_FLYER_FRONT_TEMPLATES_PRINT : REPRESENTATIVE_FLYER_FRONT_TEMPLATES_HOME;
+  } else {
+    // Botschafter/Beirat/Fachrat/Kuratorium/Wirtschaftsrat: eigene
+    // Vorderseiten je Rolle (`templates/flyer-companion-fronts/`), keine
+    // Rückfallebene auf die Repräsentanten-Flyer.
+    table = (isPrint ? COMPANION_FLYER_FRONT_TEMPLATES_PRINT : COMPANION_FLYER_FRONT_TEMPLATES_HOME)[roleKey];
+    if (!table) {
+      throw new Error(`Für den Wegbegleiter-Typ "${roleKey}" ist keine Flyer-Vorderseite hinterlegt.`);
+    }
+  }
   return resolveRepresentativeFlyerFrontTemplate(table, gender, salutation);
 }
 
@@ -1677,10 +1690,23 @@ export function initGenerator() {
     showScreenshotStatus("Screenshot wird ausgewertet …", "loading");
 
     try {
+      // Der eigentliche Fehler der OCR wird sonst verschluckt
+      // (`extractRepresentativeDataFromScreenshot` liefert nur die
+      // Kategorie) — für die Fehlersuche (z. B. Safari) in der Konsole
+      // protokollieren und kurz an die Meldung anhängen.
+      let ocrErrorDetail = "";
       const result = await extractRepresentativeDataFromScreenshot({
         file,
         mimeType: file.type,
-        runOcr: runScreenshotOcr,
+        runOcr: async (ocrFile) => {
+          try {
+            return await runScreenshotOcr(ocrFile);
+          } catch (err) {
+            console.error("Screenshot-OCR fehlgeschlagen:", err);
+            ocrErrorDetail = String((err && err.message) || err).slice(0, 200);
+            throw err;
+          }
+        },
       });
 
       if (result.ok) {
@@ -1689,7 +1715,8 @@ export function initGenerator() {
         showScreenshotStatus("Screenshot erfolgreich ausgewertet. Bitte erkannte Daten prüfen.", "success");
         renderScreenshotPreview(result.fields);
       } else {
-        showScreenshotStatus(getScreenshotExtractionErrorMessage(result.reason), "error");
+        const detail = ocrErrorDetail ? ` (Details: ${ocrErrorDetail})` : "";
+        showScreenshotStatus(`${getScreenshotExtractionErrorMessage(result.reason)}${detail}`, "error");
       }
     } catch {
       showScreenshotStatus(getScreenshotExtractionErrorMessage(), "error");
@@ -2166,7 +2193,7 @@ export function initGenerator() {
 
         for (const job of flyerVariantJobs) {
           const gender = manifest.person.gender;
-          const frontTemplateConfig = resolveFlyerFrontTemplateForJob(job.entry.key, gender, job.salutation);
+          const frontTemplateConfig = resolveFlyerFrontTemplateForJob(role, job.entry.key, gender, job.salutation);
           const backTemplateConfig = resolveFlyerBackTemplateForJob(job.entry.key);
           const generateFn = job.entry.key === MATERIAL_TYPE_KEYS.FLYER_HOME ? generateFlyerHomeSheet : generateFlyerMaterial;
           const flyerFile = await generateFn({

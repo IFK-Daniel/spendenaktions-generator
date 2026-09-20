@@ -41,6 +41,16 @@ export const SHARED_FLYER_BACK_KEY = "SHARED_FLYER_BACK";
 export const REPRESENTATIVE_FLYER_SALUTATION_VARIANTS = Object.freeze(["du", "sie"]);
 
 /**
+ * Ansprache-Varianten der Wegbegleiter-Flyer außer dem Repräsentanten
+ * (Botschafter, Beirat, Fachrat, Kuratorium, Wirtschaftsrat): jede Rolle
+ * hat Vorderseiten für Du UND Sie (je Geschlecht), siehe
+ * `templates/flyer-companion-fronts/`.
+ */
+export const COMPANION_FLYER_SALUTATION_VARIANTS = Object.freeze(["du", "sie"]);
+
+const FLYER_MATERIAL_KEYS_ALL = Object.freeze([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]);
+
+/**
  * Standard-Ansprache-Variante(n), die ohne bewusste Zusatzauswahl
  * erzeugt werden, sobald ein Flyer-Material gewählt ist — sowohl bei
  * manueller Auswahl als auch im Standard-Starter-Set (siehe
@@ -138,8 +148,8 @@ function neutralRoleLabel(label) {
  *   Anwender-Auswahlfeld, siehe `src/intern/generator.js`,
  *   `getFlyerSalutationVariants`). `["du", "sie"]` beim Repräsentanten
  *   (zwei Vorderseiten-Vorlagen je Geschlecht); leer bei jeder Rolle
- *   ohne eigene Ansprache-Varianten. Eine künftige Rolle mit eigenen
- *   Du-/Sie-Vorlagen (z. B. Botschafter) muss hier nur diese Liste
+ *   ohne eigene Ansprache-Varianten (aktuell keine — alle Rollen haben
+ *   Du-/Sie-Vorlagen je Geschlecht). Eine künftige Rolle muss hier nur diese Liste
  *   sowie ihre Vorderseiten-Vorlagen ergänzen — dieselbe
  *   Iterations-Mechanik in `generator.js` wird automatisch wiederverwendet,
  *   ohne dort verteilte Rollen-Sonderfälle.
@@ -181,7 +191,7 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE,
     certificateRequiresGender: true,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_REPRESENTATIVE]),
-    flyerMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI, MATERIAL_TYPE_KEYS.FLYER_HOME]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
     flyerSalutationVariants: REPRESENTATIVE_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
@@ -209,9 +219,9 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR,
     certificateRequiresGender: true,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_AMBASSADOR]),
-    flyerMaterialKeys: Object.freeze([]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
-    flyerSalutationVariants: Object.freeze([]),
+    flyerSalutationVariants: COMPANION_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
     certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
@@ -224,9 +234,9 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL,
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ECONOMIC_COUNCIL]),
-    flyerMaterialKeys: Object.freeze([]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
-    flyerSalutationVariants: Object.freeze([]),
+    flyerSalutationVariants: COMPANION_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
     certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
@@ -239,9 +249,9 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL,
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_EXPERT_COUNCIL]),
-    flyerMaterialKeys: Object.freeze([]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
-    flyerSalutationVariants: Object.freeze([]),
+    flyerSalutationVariants: COMPANION_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
     certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
@@ -259,9 +269,9 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM,
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_CURATORIUM]),
-    flyerMaterialKeys: Object.freeze([]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
-    flyerSalutationVariants: Object.freeze([]),
+    flyerSalutationVariants: COMPANION_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
     certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,
@@ -274,9 +284,9 @@ export const ROLE_CONFIG = Object.freeze({
     certificateMaterialKey: MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD,
     certificateRequiresGender: false,
     certificateMaterialKeys: Object.freeze([MATERIAL_TYPE_KEYS.CERTIFICATE_ADVISORY_BOARD]),
-    flyerMaterialKeys: Object.freeze([]),
+    flyerMaterialKeys: FLYER_MATERIAL_KEYS_ALL,
     flyerBackTemplateKey: SHARED_FLYER_BACK_KEY,
-    flyerSalutationVariants: Object.freeze([]),
+    flyerSalutationVariants: COMPANION_FLYER_SALUTATION_VARIANTS,
     additionalMaterialKeys: Object.freeze([]),
     starterSetMaterialKeys: Object.freeze([]),
     certificateDeliveryMode: CERTIFICATE_DELIVERY_MODES.BLOCKED,

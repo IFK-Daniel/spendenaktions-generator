@@ -124,11 +124,10 @@ test("nur Repräsentant und Botschafter benötigen Geschlecht für die Urkunde (
   }
 });
 
-test("für andere Rollen als Repräsentant ist weiterhin keine FLYER-Vorlage hinterlegt (kein stiller Fallback)", () => {
+test("jede Rolle hat Flyer-Vorlagen (Druckerei + Home)", () => {
   for (const roleKey of ROLE_KEY_LIST) {
-    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
-    assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI), false);
-    assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_HOME), false);
+    assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_DRUCKEREI), true, roleKey);
+    assert.equal(isFlyerTemplateAvailableForRole(roleKey, MATERIAL_TYPE_KEYS.FLYER_HOME), true, roleKey);
   }
 });
 
@@ -183,14 +182,9 @@ test("Starter-Set: keine andere Rolle hat aktuell ein Starter-Set definiert", ()
   }
 });
 
-test("jede andere Rolle hat (noch) keine Ansprache-Varianten hinterlegt (keine Flyer-Vorlage vorhanden)", () => {
+test("jede Rolle hat Du- und Sie-Flyer-Vorlagen", () => {
   for (const roleKey of ROLE_KEY_LIST) {
-    if (roleKey === ROLE_KEYS.REPRESENTATIVE) continue;
-    assert.deepEqual(
-      getFlyerSalutationVariants(roleKey),
-      [],
-      `${roleKey} sollte keine Ansprache-Varianten hinterlegt haben`
-    );
+    assert.deepEqual(getFlyerSalutationVariants(roleKey), ["du", "sie"], roleKey);
   }
 });
 

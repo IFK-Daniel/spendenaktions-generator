@@ -108,11 +108,9 @@ test("keine Flyer-Einträge → keine Aufträge, keine Doppelung", () => {
   assert.deepEqual(jobs, []);
 });
 
-test("Rolle ohne konfigurierte Ansprache-Variante wirft (kein stiller Fallback auf eine Variante) — z. B. Urkunde/QR-only Rollen betrifft das nicht, da dort keine Flyer-Einträge existieren", () => {
-  assert.throws(
-    () => buildFlyerVariantEntries({ entries: [druckereiEntry()], roleKey: ROLE_KEYS.AMBASSADOR }),
-    /keine Flyer-Ansprachevariante hinterlegt/
-  );
+test("Wegbegleiter-Rollen mit Flyer-Vorlagen (z. B. Botschafter) erzeugen ohne Angabe standardmäßig nur die Du-Variante", () => {
+  const jobs = buildFlyerVariantEntries({ entries: [druckereiEntry()], roleKey: ROLE_KEYS.AMBASSADOR });
+  assert.deepEqual(jobs.map((job) => job.salutation), ["du"]);
 });
 
 test("unbekannte Rolle wirft ebenfalls (über getFlyerSalutationVariants -> getRoleConfig)", () => {

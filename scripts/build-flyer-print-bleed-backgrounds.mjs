@@ -43,6 +43,23 @@ const SOURCES = [
   ["templates/flyer-shared-back/background.pdf", "shared-back", "templates/flyer-shared-back-print/background.pdf"],
 ];
 
+// Wegbegleiter-Flyer (Botschafter, Beirat, Fachrat, Kuratorium,
+// Wirtschaftsrat) × Geschlecht × Ansprache — siehe
+// `templates/flyer-companion-fronts/`.
+const COMPANION_ROLES = ["ambassador", "advisory_board", "expert_council", "curator", "economic_council"];
+for (const role of COMPANION_ROLES) {
+  for (const gender of ["female", "male"]) {
+    for (const salutation of ["du", "sie"]) {
+      const name = `${role}_${gender}_${salutation}`;
+      SOURCES.push([
+        `templates/flyer-companion-fronts/home/${name}.pdf`,
+        `companion-${name}`,
+        `templates/flyer-companion-fronts/print/${name}.pdf`,
+      ]);
+    }
+  }
+}
+
 const ROOT = new URL("../", import.meta.url);
 
 async function buildOne(srcRel, name, dstRel) {

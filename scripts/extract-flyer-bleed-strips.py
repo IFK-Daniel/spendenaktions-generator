@@ -38,6 +38,16 @@ SOURCES = [
     ("templates/flyer-shared-back/background.pdf", "shared-back"),
 ]
 
+# Wegbegleiter-Flyer (Botschafter, Beirat, Fachrat, Kuratorium,
+# Wirtschaftsrat) × Geschlecht × Ansprache — siehe
+# `templates/flyer-companion-fronts/`.
+COMPANION_ROLES = ["ambassador", "advisory_board", "expert_council", "curator", "economic_council"]
+for _role in COMPANION_ROLES:
+    for _gender in ("female", "male"):
+        for _sal in ("du", "sie"):
+            _name = f"{_role}_{_gender}_{_sal}"
+            SOURCES.append((f"templates/flyer-companion-fronts/home/{_name}.pdf", f"companion-{_name}"))
+
 
 def extract(src_path: Path, name: str) -> None:
     doc = fitz.open(src_path)

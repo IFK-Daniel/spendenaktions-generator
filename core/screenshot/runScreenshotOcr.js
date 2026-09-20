@@ -1,3 +1,36 @@
+import { repairPaypalUrlLine } from "./repairPaypalUrlLine.js";
+
+const REGION_UPSCALE = 2;
+
+/**
+ * Schneidet einen Bereich des Screenshots aus und vergrößert ihn — die
+ * zweite, gezielte Lesung einer umgebrochenen PayPal-URL
+ * (`repairPaypalUrlLine`) ist auf dem vergrößerten Ausschnitt deutlich
+ * zeichengenauer. Reines Browser-Canvas, keine OffscreenCanvas-
+ * Abhängigkeit (Safari).
+ */
+async function cropAndUpscale(file, rect) {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const left = Math.max(0, Math.round(rect.left));
+    const top = Math.max(0, Math.round(rect.top));
+    const width = Math.max(1, Math.min(Math.round(rect.width), bitmap.width - left));
+    const height = Math.max(1, Math.min(Math.round(rect.height), bitmap.height - top));
+    const canvas = document.createElement("canvas");
+    canvas.width = width * REGION_UPSCALE;
+    canvas.height = height * REGION_UPSCALE;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, left, top, width, height, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Canvas-Export fehlgeschlagen"))), "image/png")
+    );
+  } finally {
+    bitmap.close?.();
+  }
+}
+
 const CORE_PATH = "/tesseract/";
 const WORKER_PATH = "/tesseract/worker.min.js";
 const LANG_PATH = "/tesseract/lang-data";
@@ -53,7 +86,7 @@ const LANG_PATH = "/tesseract/lang-data";
  * @returns {Promise<{ lines: { text: string, confidence: number, words: { text: string, confidence: number, x0: number, y0: number, x1: number, y1: number, symbols: { text: string, confidence: number }[] }[] }[] }>}
  */
 export async function runScreenshotOcr(file) {
-  const { createWorker, OEM } = await import("tesseract.js");
+  const { createWorker, OEM, PSM } = await import("tesseract.js");
 
   const worker = await createWorker("deu", OEM.LSTM_ONLY, {
     workerPath: WORKER_PATH,
@@ -85,7 +118,21 @@ export async function runScreenshotOcr(file) {
       }))
       .filter((line) => line.text);
 
-    return { lines };
+    // Nachbesserung: nur wenn im ersten Durchlauf kein PayPal-Link erkannt
+    // wurde. Jeder Fehler hier lässt das bisherige Ergebnis unverändert.
+    let repairedLines = lines;
+    try {
+      repairedLines = await repairPaypalUrlLine(lines, async (rect) => {
+        const region = await cropAndUpscale(file, rect);
+        await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+        const { data: regionData } = await worker.recognize(region);
+        return { text: regionData.text, confidence: regionData.confidence };
+      });
+    } catch {
+      repairedLines = lines;
+    }
+
+    return { lines: repairedLines };
   } finally {
     await worker.terminate();
   }

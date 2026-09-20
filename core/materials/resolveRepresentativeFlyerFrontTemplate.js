@@ -36,13 +36,13 @@ export function resolveRepresentativeFlyerFrontTemplate(templatesByGenderAndSalu
 
   if (gender !== "male" && gender !== "female") {
     throw new Error(
-      "resolveRepresentativeFlyerFrontTemplate: Der Repräsentanten-Flyer benötigt ein Geschlecht ('male'/'female') zur Auswahl der Vorderseite."
+      "resolveRepresentativeFlyerFrontTemplate: Der Flyer benötigt ein Geschlecht ('male'/'female') zur Auswahl der Vorderseite."
     );
   }
 
   if (salutation !== "du" && salutation !== "sie") {
     throw new Error(
-      "resolveRepresentativeFlyerFrontTemplate: Der Repräsentanten-Flyer benötigt eine Ansprache ('du'/'sie') zur Auswahl der Vorderseite."
+      "resolveRepresentativeFlyerFrontTemplate: Der Flyer benötigt eine Ansprache ('du'/'sie') zur Auswahl der Vorderseite."
     );
   }
 

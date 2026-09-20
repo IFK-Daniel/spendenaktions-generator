@@ -63,3 +63,15 @@ test("leere/ungültige Eingaben → null", () => {
   assert.equal(detectRoleFromOcrLines(undefined), null);
   assert.equal(detectRoleFromOcrLines([{}, { text: 5 }]), null);
 });
+
+test("fehlt die Kopfzeile, genügen 'Status <Typ>' oder die Namenszeile", () => {
+  assert.equal(detectRoleFromOcrLines(lines("Status Botschafter", "Vorname Thommy-Luke")), ROLE_KEYS.AMBASSADOR);
+  assert.equal(detectRoleFromOcrLines(lines("Status: Beirat")), ROLE_KEYS.ADVISORY_BOARD);
+  assert.equal(detectRoleFromOcrLines(lines("Status Mitglied des Kuratoriums")), ROLE_KEYS.CURATOR);
+  assert.equal(detectRoleFromOcrLines(lines("Botschafter Böhlig, Thommy-Luke %", "Vorname Thommy-Luke")), ROLE_KEYS.AMBASSADOR);
+});
+
+test("Status-Zeile ohne Typ oder mit widersprüchlichem Typ → keine Umstellung", () => {
+  assert.equal(detectRoleFromOcrLines(lines("Status aktiv")), null);
+  assert.equal(detectRoleFromOcrLines(lines("Status Botschafter", "Beirat Böhlig, Thommy")), null);
+});

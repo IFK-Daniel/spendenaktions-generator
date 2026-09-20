@@ -1,9 +1,10 @@
 import { ROLE_KEYS } from "../materials/roleConfig.js";
 
 // Erkennt den Wegbegleiter-Typ (Repräsentant, Botschafter, Beirat, …)
-// aus dem Titel des humbee-Vorgangs. Im Screenshot steht der Titel als
-// Kopfzeile "<Typ> / <Nachname>, <Vorname>" und ein zweites Mal als
-// Zeile "<Typ>  <Nachname>, <Vorname>". Bewusst NUR solche Zeilen zählen
+// aus dem Titel des humbee-Vorgangs. Im Screenshot steht der Typ an bis
+// zu drei Stellen: in der Kopfzeile "<Typ> / <Nachname>, <Vorname>", in
+// der Zeile darunter "<Typ>  <Nachname>, <Vorname>" und neben "Status".
+// Fehlt die Kopfzeile im Ausschnitt, genügen die beiden anderen. Bewusst NUR solche Zeilen zählen
 // (Typ am Zeilenanfang UND danach ein Name in der Form "Nachname,
 // Vorname"): Der Hinweis "Mail "Willkommen als Botschafter" verschicken"
 // und die Kategorie-Zeile "Wegbegleiter (Vorstand, Beirat, Kuratoren, …)"
@@ -40,8 +41,20 @@ export function detectRoleFromOcrLines(lines) {
   const found = new Set();
 
   for (const line of Array.isArray(lines) ? lines : []) {
-    const text = stripMembershipPrefix(stripLeadingNoise(typeof line?.text === "string" ? line.text.trim() : ""));
-    if (!text) continue;
+    const rawText = stripLeadingNoise(typeof line?.text === "string" ? line.text.trim() : "");
+    if (!rawText) continue;
+
+    // Dritte Fundstelle: Zeile "Status <Typ>" — dort steht der Typ neben
+    // der Beschriftung "Status", ohne Namen dahinter.
+    const statusMatch = rawText.match(/^status\s*[:\-]?\s+(.+)$/i);
+    if (statusMatch) {
+      const statusText = stripMembershipPrefix(statusMatch[1].trim());
+      const hit = ROLE_PATTERNS.find(([, pattern]) => pattern.test(statusText));
+      if (hit) found.add(hit[0]);
+      continue;
+    }
+
+    const text = stripMembershipPrefix(rawText);
 
     for (const [roleKey, pattern] of ROLE_PATTERNS) {
       const match = text.match(pattern);
